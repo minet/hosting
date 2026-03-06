@@ -1,0 +1,33 @@
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+frontend_test/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+*.env.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# IDE / editor
+.idea/
+.vscode/
+
+# OS files
+.DS_Store

@@ -1,0 +1,11 @@
+fastapi==0.116.1
+alembic==1.14.0
+uvicorn[standard]==0.35.0
+websockets>=13.0
+pytest==8.4.2
+python-keycloak==5.8.1
+pydantic-settings==2.10.1
+psycopg[binary]==3.2.12
+SQLAlchemy==2.0.41
+proxmoxer==2.2.0
+redis==5.2.1
