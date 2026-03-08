@@ -12,7 +12,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.routes.vms import VMListResponse
-from app.api.routes.vms.schemas import ResourcesResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse
+from app.api.routes.vms.schemas import AdminRequestListResponse, AdminRequestResponse, AdminRequestUpdateBody, ResourcesResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse
+from app.db.repositories.request import RequestRepo
 from app.auth import AuthCtx, require_admin
 from app.db.core import get_db
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
@@ -105,6 +106,31 @@ async def create_vm_for_user_admin(
             ssh_public_key=body.resource.ssh_public_key,
         )
     )
+
+
+@router.get("/requests", response_model=AdminRequestListResponse)
+def list_pending_requests(
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AdminRequestListResponse:
+    rows = RequestRepo(db).list_pending()
+    return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
+
+
+@router.patch("/requests/{request_id}", response_model=AdminRequestResponse)
+def update_request_status(
+    request_id: int,
+    body: AdminRequestUpdateBody,
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AdminRequestResponse:
+    if body.status == "pending":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending")
+    row = RequestRepo(db).update_status(request_id=request_id, status=body.status)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+    db.commit()
+    return AdminRequestResponse.from_row(row)
 
 
 @router.get("/cluster/resources")

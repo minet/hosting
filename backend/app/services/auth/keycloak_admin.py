@@ -35,15 +35,14 @@ def _extract_cotise_end_ms(attributes: dict[str, Any], claim_key: str) -> int | 
         return None
 
 
-def fetch_keycloak_user_profile(user_id: str) -> dict[str, Any] | None:
-    """Fetch a user's profile from Keycloak by their Keycloak UUID (``sub``).
+def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
+    """Fetch a user's profile from Keycloak by their username.
 
-    Uses a direct ``GET /admin/realms/{realm}/users/{user_id}`` lookup —
-    no attribute search required.  Returns ``None`` silently on any error
-    (missing config, user not found, network failure).
+    Searches by exact username match, then fetches the full user profile
+    including attributes. Returns ``None`` silently on any error.
 
-    :param user_id: The Keycloak subject UUID (``sub``) of the user.
-    :returns: Dict with ``username``, ``email``, and ``cotise_end_ms``, or ``None``.
+    :param username: The user's Keycloak username (``preferred_username``).
+    :returns: Flattened dict of user fields and attributes, or ``None``.
     :rtype: dict[str, Any] | None
     """
     from keycloak import KeycloakAdmin
@@ -63,7 +62,11 @@ def fetch_keycloak_user_profile(user_id: str) -> dict[str, Any] | None:
             verify=settings.keycloak_verify_tls,
         )
 
-        user = admin.get_user(user_id)
+        users = admin.get_users(query={"username": username, "exact": True})
+        if not isinstance(users, list) or not users:
+            return None
+
+        user = users[0]
         if not isinstance(user, dict):
             return None
 
@@ -75,9 +78,8 @@ def fetch_keycloak_user_profile(user_id: str) -> dict[str, Any] | None:
         return {
             **{k: v for k, v in user.items() if k != "attributes"},
             **flat_attrs,
-            "_raw_attributes": attributes,
             "cotise_end_ms": _extract_cotise_end_ms(attributes, cotise_key),
         }
     except Exception:
-        logger.warning("fetch_keycloak_user_profile failed for user_id=%s", user_id, exc_info=True)
+        logger.exception("fetch_keycloak_user_profile failed for username=%s", username)
         return None

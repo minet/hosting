@@ -1,6 +1,6 @@
 """SQLAlchemy model for per-VM user resources (SSH credentials and provisioning state)."""
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import BigInteger, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models import Base
@@ -16,7 +16,6 @@ class Resource(Base):
     :param vm_id: Foreign key referencing the VM this resource belongs to.
     :param username: System username on the VM.
     :param ssh_public_key: SSH public key for the user.
-    :param needs_reset: Flag indicating whether the resource needs reprovisioning.
     :param vm: Relationship to the associated :class:`VM`.
     """
 
@@ -34,6 +33,5 @@ class Resource(Base):
     )
     username: Mapped[str] = mapped_column(Text, nullable=False)
     ssh_public_key: Mapped[str] = mapped_column(Text, nullable=False)
-    needs_reset: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     vm = relationship("VM", back_populates="resources")

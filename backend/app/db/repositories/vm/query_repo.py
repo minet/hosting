@@ -103,9 +103,12 @@ class VmQueryRepo:
             select(
                 *_vm_columns(),
                 VMAccess.role_owner.label("role_owner"),
+                Resource.username.label("username"),
+                Resource.ssh_public_key.label("ssh_public_key"),
             )
             .join(Template, Template.template_id == VM.template_id)
             .join(VMAccess, VMAccess.vm_id == VM.vm_id)
+            .outerjoin(Resource, Resource.vm_id == VM.vm_id)
             .where(VM.vm_id == vm_id, VMAccess.user_id == user_id)
             .limit(1)
         )
@@ -120,8 +123,13 @@ class VmQueryRepo:
         :rtype: dict[str, Any] or None
         """
         stmt = (
-            select(*_vm_columns())
+            select(
+                *_vm_columns(),
+                Resource.username.label("username"),
+                Resource.ssh_public_key.label("ssh_public_key"),
+            )
             .join(Template, Template.template_id == VM.template_id)
+            .outerjoin(Resource, Resource.vm_id == VM.vm_id)
             .where(VM.vm_id == vm_id)
             .limit(1)
         )

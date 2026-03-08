@@ -1,0 +1,19 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@theme {
+  --font-sans: "Inter Variable", sans-serif;
+  --radius-sm: 3px;
+}
+
+* {
+  font-family: var(--font-sans);
+}
+
+.xterm,
+.xterm * {
+  font-family: courier-new, courier, monospace !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+}
+

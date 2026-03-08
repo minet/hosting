@@ -13,9 +13,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.db.repositories.vm import VmCmdRepo
+from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
+from app.services.dns import DnsService
 from app.services.vm.errors import raise_proxmox_as_http
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 class VmDeleteService:
     """Service for deleting virtual machines from Proxmox and the database."""
 
-    def __init__(self, *, db: Session, cmd_repo: VmCmdRepo, gateway: ProxmoxGateway):
+    def __init__(self, *, db: Session, cmd_repo: VmCmdRepo, query_repo: VmQueryRepo, gateway: ProxmoxGateway, dns: DnsService):
         """
         Initialise the VM deletion service.
 
@@ -34,7 +35,9 @@ class VmDeleteService:
         """
         self.db = db
         self.cmd_repo = cmd_repo
+        self.query_repo = query_repo
         self.gateway = gateway
+        self.dns = dns
 
     def delete(self, *, vm_id: int) -> dict:
         """
@@ -51,6 +54,9 @@ class VmDeleteService:
         :raises HTTPException: On Proxmox errors, database errors, or when the
             VM is not found in the database.
         """
+        vm_row = self.query_repo.get_vm(vm_id)
+        vm_name = vm_row["name"] if vm_row else None
+
         try:
             self.gateway.delete_vm(vm_id=vm_id)
         except ProxmoxError as exc:
@@ -74,5 +80,8 @@ class VmDeleteService:
 
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+
+        if vm_name:
+            self.dns.delete_records(vm_name=vm_name, vm_id=vm_id)
 
         return {"vm_id": vm_id, "action": "delete", "status": "ok"}

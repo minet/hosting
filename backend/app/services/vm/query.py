@@ -82,7 +82,7 @@ class VmQueryService:
         """
         row = self._db_call(lambda: self.repo.get_vm(vm_id))
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         return self._to_detail(row, role="admin")
 
     def get_user_vm(self, *, vm_id: int, user_id: str) -> dict[str, Any]:
@@ -99,7 +99,7 @@ class VmQueryService:
         """
         row = self._db_call(lambda: self.repo.get_user_vm(vm_id, user_id))
         if row is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         return self._to_detail(row, role="owner" if bool(row["role_owner"]) else "shared")
 
     def list_vm_access(self, *, vm_id: int) -> dict[str, Any]:
@@ -196,6 +196,8 @@ class VmQueryService:
             "template": {"template_id": row["template_id"], "name": row["template_name"]},
             "network": {"ipv4": row["ipv4"], "ipv6": row["ipv6"], "mac": row["mac"]},
             "current_user_role": role,
+            "username": row.get("username") if role in ("owner", "admin") else None,
+            "ssh_public_key": row.get("ssh_public_key") if role in ("owner", "admin") else None,
         }
 
     @staticmethod

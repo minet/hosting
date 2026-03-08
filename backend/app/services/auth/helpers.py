@@ -176,6 +176,26 @@ def _post_form_json_with_retry(*, url: str, payload: dict[str, str]) -> dict[str
             ) from exc
 
 
+def refresh_access_token(refresh_token: str) -> dict[str, Any]:
+    """Exchange a refresh token for a new access token.
+
+    :param refresh_token: The OAuth2 refresh token.
+    :returns: Parsed token response as a dictionary.
+    :rtype: dict[str, Any]
+    :raises HTTPException: When the token endpoint is unreachable or returns an error.
+    """
+    settings = get_settings()
+    payload = {
+        "grant_type": "refresh_token",
+        "client_id": settings.keycloak_client_id,
+        "refresh_token": refresh_token,
+    }
+    if settings.keycloak_client_secret:
+        payload["client_secret"] = settings.keycloak_client_secret
+    token_url = f"{keycloak_realm_base()}/protocol/openid-connect/token"
+    return _post_form_json_with_retry(url=token_url, payload=payload)
+
+
 def exchange_code_for_token(code: str, redirect_uri: str, code_verifier: str) -> dict[str, Any]:
     """
     Exchange an OAuth authorization code for tokens.

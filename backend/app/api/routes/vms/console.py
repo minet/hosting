@@ -178,7 +178,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     :param websocket: The incoming client WebSocket connection.
     :returns: None
     """
-    await websocket.accept()
+    await websocket.accept(subprotocol="binary")
 
     ctx = await _ws_auth(websocket)
     if ctx is None:

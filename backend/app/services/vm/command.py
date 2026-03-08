@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
+from app.services.dns import DnsService
 from app.services.vm.create import VmCreateService
 from app.services.vm.delete import VmDeleteService
 from app.services.vm.errors import raise_proxmox_as_http
@@ -323,6 +324,8 @@ class VmCommandService:
             service = VmDeleteService(
                 db=db,
                 cmd_repo=VmCmdRepo(db),
+                query_repo=VmQueryRepo(db),
                 gateway=self._gateway,
+                dns=DnsService(settings=self._settings),
             )
             return service.delete(vm_id=vm_id)

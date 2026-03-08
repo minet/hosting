@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     proxmox_user: str | None = Field(default=None, alias="PROXMOX_USER")
     proxmox_service: str = Field(default="PVE", alias="PROXMOX_SERVICE")
 
+    pdns_api_url: str | None = Field(default=None, alias="PDNS_API_URL")
+    pdns_api_key: str | None = Field(default=None, alias="PDNS_API_KEY")
+    dns_zone: str = Field(default="h.lan", alias="DNS_ZONE")
+
     @staticmethod
     def _is_configured(value: str | None) -> bool:
         """Check whether a configuration value is a non-blank string.

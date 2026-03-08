@@ -62,7 +62,6 @@ def upgrade() -> None:
         sa.Column("vm_id", sa.Integer(), nullable=False),
         sa.Column("username", sa.Text(), nullable=False),
         sa.Column("ssh_public_key", sa.Text(), nullable=False),
-        sa.Column("needs_reset", sa.Boolean(), nullable=False),
         sa.ForeignKeyConstraint(["vm_id"], ["vms.vm_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("vm_id", "username", name="unique_user_per_vm"),

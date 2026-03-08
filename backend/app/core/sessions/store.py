@@ -133,7 +133,44 @@ class SessionStore:
             return None
         return redirect_target, code_verifier
 
-    def create_session(self, *, access_token: str, id_token: str | None = None) -> str:
+    def update_session_tokens(self, session_id: str, *, access_token: str, refresh_token: str | None = None) -> None:
+        """Update access (and optionally refresh) token for an existing session.
+
+        :param session_id: The session identifier.
+        :param access_token: The new access token.
+        :param refresh_token: The new refresh token, if provided.
+        :raises RuntimeError: If Redis is unavailable.
+        """
+        payload = self._session_payload(session_id)
+        if payload is None:
+            return
+        payload["access_token"] = access_token
+        if refresh_token is not None:
+            payload["refresh_token"] = refresh_token
+        try:
+            key = _session_key(session_id, self._settings.auth_session_key_prefix)
+            ttl = self._redis.ttl(key)
+            self._redis.setex(key, ttl if ttl > 0 else self._settings.session_ttl_seconds, json.dumps(payload))
+        except RedisError as exc:
+            raise self._storage_unavailable(exc) from exc
+
+    def get_refresh_token(self, session_id: str) -> str | None:
+        """Retrieve the refresh token for a given session.
+
+        :param session_id: The session identifier.
+        :returns: The refresh token, or ``None`` if not found.
+        :rtype: str | None
+        :raises RuntimeError: If Redis is unavailable.
+        """
+        payload = self._session_payload(session_id)
+        if payload is None:
+            return None
+        token = payload.get("refresh_token")
+        if isinstance(token, str) and token:
+            return token
+        return None
+
+    def create_session(self, *, access_token: str, id_token: str | None = None, refresh_token: str | None = None) -> str:
         """Create a new user session storing the provided tokens.
 
         :param access_token: The OAuth2 access token.
@@ -145,7 +182,7 @@ class SessionStore:
         :raises RuntimeError: If Redis is unavailable.
         """
         session_id = uuid4().hex
-        payload = json.dumps({"access_token": access_token, "id_token": id_token})
+        payload = json.dumps({"access_token": access_token, "id_token": id_token, "refresh_token": refresh_token})
         try:
             self._redis.setex(
                 _session_key(session_id, self._settings.auth_session_key_prefix),

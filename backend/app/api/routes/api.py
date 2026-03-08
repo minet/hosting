@@ -14,8 +14,6 @@ from app.api.routes.health import router as health_router
 from app.api.routes.vms import router as vms_router
 from app.api.routes.vms.schemas import ResourcesResponse, TemplateListResponse
 from app.auth import AuthCtx, require_user
-from app.auth.context import _cotise_end_ms
-from app.core.config import get_settings
 from app.services.vm.deps import get_vm_query_service
 from app.services.vm.query import VmQueryService
 
@@ -54,16 +52,9 @@ def get_my_resources(
     :returns: Resource usage statistics, limits, and remaining capacity.
     :rtype: ResourcesResponse
     """
-    settings = get_settings()
-    profile = {
-        "username": ctx.payload.get("preferred_username"),
-        "email": ctx.payload.get("email"),
-        "cotise_end_ms": _cotise_end_ms(ctx.payload, settings),
-    }
     return ResourcesResponse.model_validate({
         "scope": "me",
         "user_id": ctx.user_id,
-        "profile": profile,
         **query.get_resources(user_id=ctx.user_id),
     })
 

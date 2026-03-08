@@ -104,6 +104,8 @@ class VMDetailResponse(BaseModel):
     template: VMTemplateResponse
     network: VMNetworkResponse
     current_user_role: VMRole
+    username: str | None = None
+    ssh_public_key: str | None = None
 
 
 class VMTaskItemResponse(BaseModel):
@@ -360,3 +362,90 @@ class VMPatchBody(BaseModel):
     cpu_cores: int | None = Field(default=None, ge=1)
     ram_gb: int | None = Field(default=None, ge=1)
     disk_gb: int | None = Field(default=None, ge=1)
+
+
+_DNS_LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,61}([a-z0-9])?$")
+
+
+class VMRequestType(str, Enum):
+    """Enumeration of VM request types."""
+    IPV4 = "ipv4"
+    DNS = "dns"
+
+
+class VMRequestStatus(str, Enum):
+    """Enumeration of VM request statuses."""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class VMRequestCreateBody(BaseModel):
+    """Request body for submitting a VM request."""
+    type: VMRequestType
+    dns_label: str | None = Field(default=None, min_length=1, max_length=63)
+
+    @field_validator("dns_label")
+    @classmethod
+    def validate_dns_label(cls, v: str | None) -> str | None:
+        if v is not None and not _DNS_LABEL_RE.match(v):
+            raise ValueError("dns_label must be a valid DNS label (lowercase alphanumeric and hyphens)")
+        return v
+
+
+class VMRequestResponse(BaseModel):
+    """Response schema for a single VM request."""
+    id: int
+    vm_id: int
+    user_id: str
+    type: VMRequestType
+    dns_label: str | None = None
+    status: VMRequestStatus
+    created_at: str
+
+    @classmethod
+    def from_row(cls, row: dict) -> "VMRequestResponse":
+        return cls(
+            id=row["id"],
+            vm_id=row["vm_id"],
+            user_id=row["user_id"],
+            type=row["type"],
+            dns_label=row.get("dns_label"),
+            status=row["status"],
+            created_at=row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+        )
+
+
+class VMRequestListResponse(BaseModel):
+    """Response schema for a list of VM requests."""
+    items: list[VMRequestResponse]
+    count: int
+
+
+class AdminRequestResponse(VMRequestResponse):
+    """Admin response schema enriched with the VM name."""
+    vm_name: str | None = None
+
+    @classmethod
+    def from_row(cls, row: dict) -> "AdminRequestResponse":  # type: ignore[override]
+        return cls(
+            id=row["id"],
+            vm_id=row["vm_id"],
+            user_id=row["user_id"],
+            type=row["type"],
+            dns_label=row.get("dns_label"),
+            status=row["status"],
+            created_at=row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            vm_name=row.get("vm_name"),
+        )
+
+
+class AdminRequestListResponse(BaseModel):
+    """Response schema for admin listing of pending requests."""
+    items: list[AdminRequestResponse]
+    count: int
+
+
+class AdminRequestUpdateBody(BaseModel):
+    """Request body for approving or rejecting a VM request."""
+    status: VMRequestStatus

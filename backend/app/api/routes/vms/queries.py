@@ -7,17 +7,84 @@ Proxmox task history, and per-VM access lists.
 
 from __future__ import annotations
 
+import asyncio
+import json
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from app.auth import AuthCtx, require_user
+from app.db.core.engine import get_session_factory
+from app.db.repositories.vm import VmQueryRepo
+from app.core.config import get_settings
 from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService, VmQueryService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_query_service
 
-from .schemas import VMAccessListResponse, VMDetailResponse, VMListResponse, VMMetricsResponse, VMStatusResponse, VMTasksResponse
+from app.db.core import get_db
+from app.db.repositories.request import RequestRepo
+from sqlalchemy.orm import Session
+from .schemas import VMAccessListResponse, VMDetailResponse, VMListResponse, VMMetricsResponse, VMRequestListResponse, VMRequestResponse, VMStatusResponse, VMTasksResponse
 
 router = APIRouter()
+
+
+@router.get("/status/stream")
+async def stream_vm_statuses(
+    ctx: AuthCtx = Depends(require_user),
+    cmd: VmCommandService = Depends(get_vm_command_service),
+) -> StreamingResponse:
+    """
+    SSE stream pushing VM status changes for all VMs accessible to the current user.
+
+    Polls Proxmox every 5 seconds and emits a JSON event only when a VM's
+    status changes.  A heartbeat comment is sent every cycle to keep the
+    connection alive.
+
+    A fresh database session is created and released on every poll cycle so
+    that long-lived SSE connections do not hold a connection pool slot open
+    indefinitely.
+
+    :param ctx: Authenticated user context (injected).
+    :param cmd: VM command service (injected).
+    :returns: A text/event-stream response.
+    """
+    settings = get_settings()
+
+    async def generate():
+        last: dict[int, str | None] = {}
+        while True:
+            vm_ids: list[int] = []
+            try:
+                db = get_session_factory()()
+                try:
+                    query = VmQueryService(repo=VmQueryRepo(db), settings=settings)
+                    vms = query.list_vms_for(ctx=ctx)
+                    vm_ids = [v["vm_id"] for v in vms["items"]]
+                finally:
+                    db.close()
+                for vm_id in vm_ids:
+                    try:
+                        data = await run_in_proxmox_executor(cmd.status, vm_id=vm_id)
+                        s = data.get("status")
+                        uptime = data.get("uptime")
+                        if last.get(vm_id) != s:
+                            last[vm_id] = s
+                            yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime})}\n\n"
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            yield f"event: sync\ndata: {json.dumps({'vm_ids': vm_ids})}\n\n"
+            yield ": ping\n\n"
+            await asyncio.sleep(5)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("", response_model=VMListResponse)
@@ -138,6 +205,18 @@ async def get_vm_metrics(
     return VMMetricsResponse.model_validate(
         await run_in_proxmox_executor(cmd.metrics, vm_id=vm_id, timeframe=timeframe, cf=cf)
     )
+
+
+@router.get("/{vm_id}/requests", response_model=VMRequestListResponse)
+def list_vm_requests(
+    vm_id: int,
+    ctx: AuthCtx = Depends(require_user),
+    access: VmAccessService = Depends(get_vm_access_service),
+    db: Session = Depends(get_db),
+) -> VMRequestListResponse:
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    rows = RequestRepo(db).list_for_vm(vm_id)
+    return VMRequestListResponse(items=[VMRequestResponse.from_row(r) for r in rows], count=len(rows))
 
 
 @router.get("/{vm_id}/access", response_model=VMAccessListResponse)

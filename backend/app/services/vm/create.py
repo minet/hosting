@@ -20,6 +20,7 @@ from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.proxmox.allocation import allocate_next_vm_ipv6
 from app.services.proxmox.errors import ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
 from app.services.proxmox.gateway import ProxmoxGateway
+from app.services.dns import DnsService
 from app.services.vm.errors import raise_proxmox_as_http
 from app.services.vm.query import VmQueryService
 from app.services.vm.types import VmCreateCmd
@@ -74,6 +75,7 @@ class VmCreateService:
         self.query_service = query_service
         self.gateway = gateway
         self.settings = settings
+        self.dns = DnsService(settings=settings)
 
     def create(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> dict:
         """
@@ -102,6 +104,12 @@ class VmCreateService:
         self._finalize_db(ctx=ctx, res=reservation)
 
         result = self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
+        self.dns.create_records(
+            vm_name=cmd.name,
+            vm_id=reservation.vm_id,
+            ipv4=result.get("network", {}).get("ipv4"),
+            ipv6=reservation.vm_ipv6,
+        )
         logger.info("vm_create_done user_id=%s vm_id=%s", ctx.user_id, reservation.vm_id)
         return result
 
@@ -184,7 +192,7 @@ class VmCreateService:
             vm_id=vm_id, name=cmd.name, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb,
             disk_gb=cmd.disk_gb, template_id=cmd.template_id, ipv6=vm_ipv6,
             owner_user_id=ctx.user_id, username=cmd.resource.username,
-            ssh_public_key=cmd.resource.ssh_public_key, needs_reset=False,
+            ssh_public_key=cmd.resource.ssh_public_key,
         )
         self.db.commit()
 

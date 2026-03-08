@@ -7,10 +7,12 @@ user information retrieval, and logout.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request as FastAPIRequest
+from fastapi import APIRouter, Depends, HTTPException, Query, Request as FastAPIRequest, Response, status
 from fastapi.responses import RedirectResponse
 
+from app.core.config import get_settings
 from app.core.security.token import TokenPayload, get_token_payload
+from app.core.sessions import get_session_store
 from app.services.auth import (
     AuthMeResponse,
     callback_redirect,
@@ -18,6 +20,7 @@ from app.services.auth import (
     login_redirect,
     logout_redirect,
 )
+from app.services.auth.helpers import refresh_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -76,6 +79,39 @@ def auth_me(payload: TokenPayload = Depends(get_token_payload)) -> AuthMeRespons
     :rtype: AuthMeResponse
     """
     return current_user_claims(payload)
+
+
+@router.post("/refresh")
+def auth_refresh(request: FastAPIRequest, response: Response) -> dict:
+    """Refresh the access token using the stored refresh token.
+
+    :param request: The incoming HTTP request.
+    :param response: The HTTP response used to update the session cookie TTL.
+    :returns: ``{"ok": true}`` on success.
+    :raises HTTPException: 401 if session or refresh token is missing/invalid.
+    """
+    settings = get_settings()
+    session_id = request.cookies.get(settings.session_cookie_name)
+    if not session_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session")
+    store = get_session_store()
+    refresh_token = store.get_refresh_token(session_id)
+    if not refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
+    try:
+        token_response = refresh_access_token(refresh_token)
+    except HTTPException:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh failed")
+    new_access_token = token_response.get("access_token")
+    new_refresh_token = token_response.get("refresh_token")
+    if not isinstance(new_access_token, str):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh failed")
+    store.update_session_tokens(
+        session_id,
+        access_token=new_access_token,
+        refresh_token=new_refresh_token if isinstance(new_refresh_token, str) else None,
+    )
+    return {"ok": True}
 
 
 @router.api_route("/logout", methods=["GET", "POST"])

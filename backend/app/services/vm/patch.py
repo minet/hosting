@@ -150,7 +150,6 @@ class VmPatchService:
             if wants_cloudinit:
                 updated_resource = self.cmd_repo.update_resource(
                     vm_id=vm_id, username=username, ssh_public_key=ssh_public_key,
-                    needs_reset=False if password is not None else None,
                 )
                 if not updated_resource:
                     self.db.rollback()

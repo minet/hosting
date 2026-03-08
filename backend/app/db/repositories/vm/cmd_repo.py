@@ -51,7 +51,6 @@ class VmCmdRepo:
         owner_user_id: str,
         username: str,
         ssh_public_key: str,
-        needs_reset: bool,
     ) -> None:
         """Create a new VM together with its owner access entry and initial resource.
 
@@ -67,8 +66,7 @@ class VmCmdRepo:
         :param owner_user_id: User identifier of the VM owner.
         :param username: System username for the initial resource.
         :param ssh_public_key: SSH public key for the initial resource.
-        :param needs_reset: Whether the resource needs reprovisioning.
-        :returns: None
+:returns: None
         """
         self.db.add(
             VM(
@@ -89,7 +87,6 @@ class VmCmdRepo:
                 vm_id=vm_id,
                 username=username,
                 ssh_public_key=ssh_public_key,
-                needs_reset=needs_reset,
             )
         )
         self.db.flush()
@@ -130,15 +127,12 @@ class VmCmdRepo:
         self.db.flush()
         return True
 
-    def update_resource(self, *, vm_id: int, username: str, ssh_public_key: str | None, needs_reset: bool | None) -> bool:
+    def update_resource(self, *, vm_id: int, username: str, ssh_public_key: str | None) -> bool:
         """Update fields on an existing resource entry.
-
-        Only non-``None`` parameters are applied.
 
         :param vm_id: The VM identifier the resource belongs to.
         :param username: The system username identifying the resource.
         :param ssh_public_key: New SSH public key, or ``None`` to leave unchanged.
-        :param needs_reset: New reset flag, or ``None`` to leave unchanged.
         :returns: ``True`` if the resource was found and updated, ``False`` otherwise.
         :rtype: bool
         """
@@ -149,8 +143,6 @@ class VmCmdRepo:
             return False
         if ssh_public_key is not None:
             resource.ssh_public_key = ssh_public_key
-        if needs_reset is not None:
-            resource.needs_reset = needs_reset
         self.db.add(resource)
         self.db.flush()
         return True

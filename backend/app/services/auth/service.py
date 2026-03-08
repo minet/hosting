@@ -13,10 +13,11 @@ from urllib.parse import urlencode
 from fastapi import HTTPException, Request as FastAPIRequest, status
 from fastapi.responses import RedirectResponse
 
-from app.auth.context import csv_values, _cotise_end_ms, _extract_user_id, _groups
+from app.auth.context import csv_values, _claim_value, _cotise_end_ms, _extract_user_id, _groups
 from app.core.config import get_settings
 from app.core.security.token import TokenPayload
 from app.core.sessions import get_session_store
+from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
 from app.services.auth.helpers import (
     callback_url,
     exchange_code_for_token,
@@ -141,11 +142,14 @@ def callback_redirect(
         )
     id_token = token_response.get("id_token")
     id_token_value = id_token if isinstance(id_token, str) else None
+    refresh_token = token_response.get("refresh_token")
+    refresh_token_value = refresh_token if isinstance(refresh_token, str) else None
 
     with _session_store_op():
         session_id = store.create_session(
             access_token=access_token,
             id_token=id_token_value,
+            refresh_token=refresh_token_value,
         )
     settings = get_settings()
     redirect = RedirectResponse(url=frontend_redirect, status_code=status.HTTP_302_FOUND)
@@ -180,17 +184,37 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     if is_admin and "admin" not in groups_list:
         groups_list.append("admin")
 
+    attrs = payload.get(settings.auth_attributes_namespace, {})
+    attrs = attrs if isinstance(attrs, dict) else {}
+
+    def _get(key: str) -> str | None:
+        return _claim_value(payload, key) or _claim_value(attrs, key)
+
+    username = payload.get("preferred_username")
+    nom = _get("nom")
+    prenom = _get("prenom")
+    departure_date = _get("departureDate")
+    cotise_end = _cotise_end_ms(payload, settings)
+
+    if not nom or not prenom or cotise_end is None:
+        profile = fetch_keycloak_user_profile(username) if username else None
+        if profile:
+            nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
+            prenom = prenom or profile.get("prenom") or profile.get("firstName") or profile.get("first_name")
+            departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
+            cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
+
     return {
         "sub": payload.get("sub"),
         "user_id": user_id,
-        "username": payload.get("preferred_username"),
+        "username": username,
         "email": payload.get("email"),
-        "nom": payload.get("nom"),
-        "prenom": payload.get("prenom"),
-        "departure_date": payload.get("departureDate"),
+        "nom": nom,
+        "prenom": prenom,
+        "departure_date": departure_date,
         "groups": groups_list,
         "is_admin": is_admin,
-        "cotise_end_ms": _cotise_end_ms(payload, settings),
+        "cotise_end_ms": cotise_end,
     }
 
 

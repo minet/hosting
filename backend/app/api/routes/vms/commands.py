@@ -18,6 +18,10 @@ from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_share_service
 from app.services.vm.share import VmShareService
 
+from app.db.core import get_db
+from app.db.repositories.request import RequestRepo
+from sqlalchemy.orm import Session
+from fastapi import HTTPException, status as http_status
 from .schemas import (
     VMAccessMutationResponse,
     VMActionResponse,
@@ -25,6 +29,8 @@ from .schemas import (
     VMDetailResponse,
     VMPatchBody,
     VMPatchResponse,
+    VMRequestCreateBody,
+    VMRequestResponse,
 )
 
 router = APIRouter()
@@ -82,7 +88,7 @@ async def start_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.start, vm_id=vm_id))
 
 
@@ -104,7 +110,7 @@ async def stop_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.stop, vm_id=vm_id))
 
 
@@ -126,7 +132,7 @@ async def restart_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.restart, vm_id=vm_id))
 
 
@@ -166,6 +172,30 @@ async def patch_vm(
             disk_gb=body.disk_gb,
         )
     )
+
+
+@router.post("/{vm_id}/requests", response_model=VMRequestResponse, status_code=201)
+def create_request(
+    vm_id: int,
+    body: VMRequestCreateBody,
+    ctx: AuthCtx = Depends(require_user),
+    access: VmAccessService = Depends(get_vm_access_service),
+    db: Session = Depends(get_db),
+) -> VMRequestResponse:
+    from app.db.repositories.vm import VmQueryRepo
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    if body.type == "dns" and not body.dns_label:
+        raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests")
+    repo = RequestRepo(db)
+    if repo.exists_active(vm_id=vm_id, type=body.type):
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="A request of this type is already pending or approved for this VM")
+    if body.type == "ipv4":
+        vm = VmQueryRepo(db).get_vm(vm_id)
+        if vm and vm.get("ipv4") is not None:
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="This VM already has an IPv4 address")
+    row = repo.create(vm_id=vm_id, user_id=ctx.user_id, type=body.type, dns_label=body.dns_label)
+    db.commit()
+    return VMRequestResponse.from_row(row)
 
 
 @router.put("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
