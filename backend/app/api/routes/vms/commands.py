@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path
 
-from app.auth import AuthCtx, require_cotisant, require_user
+from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
@@ -73,7 +73,7 @@ async def create_vm(
 @router.post("/{vm_id}/start", response_model=VMActionResponse)
 async def start_vm(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMActionResponse:
@@ -95,7 +95,7 @@ async def start_vm(
 @router.post("/{vm_id}/stop", response_model=VMActionResponse)
 async def stop_vm(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMActionResponse:
@@ -117,7 +117,7 @@ async def stop_vm(
 @router.post("/{vm_id}/restart", response_model=VMActionResponse)
 async def restart_vm(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMActionResponse:
@@ -140,7 +140,7 @@ async def restart_vm(
 async def patch_vm(
     body: VMPatchBody,
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMPatchResponse:
@@ -178,7 +178,7 @@ async def patch_vm(
 def create_request(
     vm_id: int,
     body: VMRequestCreateBody,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     db: Session = Depends(get_db),
 ) -> VMRequestResponse:
@@ -202,7 +202,7 @@ def create_request(
 def grant_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     share: VmShareService = Depends(get_vm_share_service),
 ) -> VMAccessMutationResponse:
@@ -228,7 +228,7 @@ def grant_access(
 @router.delete("/{vm_id}", response_model=VMActionResponse)
 async def delete_vm(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMActionResponse:
@@ -254,7 +254,7 @@ async def delete_vm(
 def revoke_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     share: VmShareService = Depends(get_vm_share_service),
 ) -> VMAccessMutationResponse:

@@ -1,22 +1,32 @@
 import { useState } from 'react'
 import { apiFetch } from '../api'
+import { useToast } from '../contexts/ToastContext'
 import { type VMRequest } from '../types/vm'
+import { validateDnsLabel } from '../validation'
 
 export function useVMRequests(vmId: string | undefined) {
+  const { toast } = useToast()
   const [reqModalOpen, setReqModalOpen] = useState(false)
   const [reqType, setReqType] = useState<'ipv4' | 'dns'>('ipv4')
   const [reqDnsLabel, setReqDnsLabel] = useState('')
   const [reqSaving, setReqSaving] = useState(false)
   const [requests, setRequests] = useState<VMRequest[]>([])
+  const [reqDnsError, setReqDnsError] = useState<string | null>(null)
 
   async function loadRequests() {
     if (!vmId) return
-    apiFetch<{ items: VMRequest[] }>(`/api/vms/${vmId}/requests`).then(r => setRequests(r.items)).catch(() => null)
+    apiFetch<{ items: VMRequest[] }>(`/api/vms/${vmId}/requests`)
+      .then(r => setRequests(r.items))
+      .catch(err => toast(err.message ?? 'Impossible de charger les demandes'))
   }
 
   async function doSubmitRequest() {
     if (!vmId || reqSaving) return
-    if (reqType === 'dns' && !reqDnsLabel.trim()) return
+    if (reqType === 'dns') {
+      const err = validateDnsLabel(reqDnsLabel.trim())
+      if (err) { setReqDnsError(err); return }
+    }
+    setReqDnsError(null)
     setReqSaving(true)
     try {
       await apiFetch(`/api/vms/${vmId}/requests`, {
@@ -26,7 +36,10 @@ export function useVMRequests(vmId: string | undefined) {
       })
       await loadRequests()
       setReqDnsLabel('')
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Échec de l'envoi de la demande"
+      toast(msg)
+    }
     setReqSaving(false)
   }
 
@@ -34,7 +47,7 @@ export function useVMRequests(vmId: string | undefined) {
     reqModalOpen, setReqModalOpen,
     reqType, setReqType,
     reqDnsLabel, setReqDnsLabel,
-    reqSaving, requests,
+    reqSaving, requests, reqDnsError,
     loadRequests, doSubmitRequest,
   }
 }

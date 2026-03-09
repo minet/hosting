@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
+    backend_url: str = Field(default="http://localhost:8000", alias="BACKEND_URL")
+
     keycloak_server_url: str = Field(alias="KEYCLOAK_SERVER_URL")
     keycloak_realm: str = Field(alias="KEYCLOAK_REALM")
     keycloak_client_id: str = Field(alias="KEYCLOAK_CLIENT_ID")
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
     keycloak_verify_tls: bool = Field(default=True, alias="KEYCLOAK_VERIFY_TLS")
     keycloak_timeout_seconds: int = Field(default=10, alias="KEYCLOAK_TIMEOUT_SECONDS")
     keycloak_http_retries: int = Field(default=2, alias="KEYCLOAK_HTTP_RETRIES")
+    keycloak_admin_username: str | None = Field(default=None, alias="KEYCLOAK_ADMIN_USERNAME")
+    keycloak_admin_password: str | None = Field(default=None, alias="KEYCLOAK_ADMIN_PASSWORD")
 
     auth_groups_claim: str = Field(default="groups", alias="AUTH_GROUPS_CLAIM")
     auth_attributes_namespace: str = Field(default="attributes", alias="AUTH_ATTRIBUTES_NAMESPACE")
@@ -43,6 +47,7 @@ class Settings(BaseSettings):
     auth_cotise_end_claim: str = Field(default="cotise_end", alias="AUTH_COTISE_END_CLAIM")
     auth_user_groups: str = Field(default="", alias="AUTH_USER_GROUPS")
     auth_admin_groups: str = Field(default="admin", alias="AUTH_ADMIN_GROUPS")
+    auth_restricted_roles: str = Field(default="", alias="AUTH_RESTRICTED_ROLES")
 
     frontend_allowed_origins: str = Field(
         default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:8081,http://127.0.0.1:8081",
@@ -77,6 +82,10 @@ class Settings(BaseSettings):
     proxmox_password: str | None = Field(default=None, alias="PROXMOX_PASSWORD")
     proxmox_user: str | None = Field(default=None, alias="PROXMOX_USER")
     proxmox_service: str = Field(default="PVE", alias="PROXMOX_SERVICE")
+
+    smtp_host: str = Field(default="192.168.102.18", alias="SMTP_HOST")
+    smtp_port: int = Field(default=25, alias="SMTP_PORT")
+    smtp_from: str = Field(default="hosting@minet.net", alias="SMTP_FROM")
 
     pdns_api_url: str | None = Field(default=None, alias="PDNS_API_URL")
     pdns_api_key: str | None = Field(default=None, alias="PDNS_API_KEY")

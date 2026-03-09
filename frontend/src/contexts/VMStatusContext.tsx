@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { apiFetch } from '../api'
+import { useToast } from './ToastContext'
+import { VMListSchema } from '../schemas'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
 
@@ -22,7 +24,7 @@ interface VMStatusCtx {
   vms: VMListItem[]
 }
 
-const VMStatusContext = createContext<VMStatusCtx>({ statuses: new Map(), vms: [] })
+export const VMStatusContext = createContext<VMStatusCtx>({ statuses: new Map(), vms: [] })
 
 export function useVMStatus(vmId: number): VMStatusEntry | undefined {
   return useContext(VMStatusContext).statuses.get(vmId)
@@ -36,13 +38,18 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
   const [statuses, setStatuses] = useState<StatusMap>(new Map())
   const [vms, setVms] = useState<VMListItem[]>([])
   const knownIdsRef = useRef<Set<number>>(new Set())
+  const { toast } = useToast()
 
   async function refreshVMs() {
     try {
-      const data = await apiFetch<{ items: VMListItem[] }>('/api/vms')
-      setVms(data.items)
-      knownIdsRef.current = new Set(data.items.map(v => v.vm_id))
-    } catch { /* ignore */ }
+      const data = await apiFetch('/api/vms', undefined, VMListSchema)
+      const items = data.items as VMListItem[]
+      setVms(items)
+      knownIdsRef.current = new Set(items.map(v => v.vm_id))
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Impossible de rafraîchir la liste des VMs'
+      toast(msg)
+    }
   }
 
   useEffect(() => {

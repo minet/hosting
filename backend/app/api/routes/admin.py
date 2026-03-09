@@ -5,11 +5,14 @@ Provides admin-only routes for inspecting any user's virtual machines,
 resource consumption, and network address assignment.
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.api.routes.vms import VMListResponse
 from app.api.routes.vms.schemas import AdminRequestListResponse, AdminRequestResponse, AdminRequestUpdateBody, ResourcesResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse
@@ -17,7 +20,7 @@ from app.db.repositories.request import RequestRepo
 from app.auth import AuthCtx, require_admin
 from app.db.core import get_db
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id, fetch_keycloak_user_profile
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.executor import run_in_proxmox_executor
@@ -27,6 +30,26 @@ from app.services.vm.deps import get_vm_command_service, get_vm_query_service
 from app.services.vm.query import VmQueryService
 
 router = APIRouter(tags=["admin"])
+
+
+@router.get("/users/{user_id}/identity")
+def get_user_identity(
+    user_id: str,
+    _: AuthCtx = Depends(require_admin),
+) -> dict:
+    """
+    Return the display name and email of a user by their Keycloak UUID (admin only).
+
+    :param user_id: Keycloak subject UUID of the target user.
+    :param _: Authenticated admin context (injected).
+    :returns: Dict with ``username``, ``first_name``, ``last_name``, ``email``.
+    :raises HTTPException 404: If the user is not found in Keycloak.
+    :raises HTTPException 503: If Keycloak is unavailable.
+    """
+    profile = fetch_keycloak_user_by_id(user_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return profile
 
 
 @router.get("/users/{user_id}/vms", response_model=VMListResponse)
@@ -62,7 +85,7 @@ def get_user_resources_admin(
     :returns: Resource usage statistics, limits, and remaining capacity.
     :rtype: ResourcesResponse
     """
-    profile = fetch_keycloak_user_profile(user_id)
+    profile = fetch_keycloak_user_by_id(user_id)
     return ResourcesResponse.model_validate({
         "scope": "user",
         "user_id": user_id,
@@ -108,6 +131,20 @@ async def create_vm_for_user_admin(
     )
 
 
+@router.get("/users/cotise-ended")
+def list_cotise_ended_users(
+    _: AuthCtx = Depends(require_admin),
+) -> list[dict]:
+    """
+    Return all Keycloak users in the ``/cotise_ended`` group (admin only).
+
+    :param _: Authenticated admin context (injected).
+    :returns: List of user dicts with ``id``, ``username``, ``first_name``, ``last_name``, ``email``.
+    :rtype: list[dict]
+    """
+    return fetch_keycloak_group_members("/cotise_ended")
+
+
 @router.get("/requests", response_model=AdminRequestListResponse)
 def list_pending_requests(
     _: AuthCtx = Depends(require_admin),
@@ -126,10 +163,68 @@ def update_request_status(
 ) -> AdminRequestResponse:
     if body.status == "pending":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending")
+
     row = RequestRepo(db).update_status(request_id=request_id, status=body.status)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    db.commit()
+
+    if body.status == "approved" and row["type"] == "ipv4":
+        vm_id = row["vm_id"]
+        query_repo = VmQueryRepo(db)
+        cmd_repo = VmCmdRepo(db)
+
+        vm = query_repo.get_vm(vm_id)
+        if vm is None:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+
+        if vm.get("ipv4") is not None:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
+
+        cmd_repo.lock_ipv4_allocation()
+        used_ipv4 = query_repo.list_used_ipv4()
+        try:
+            ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
+        except ProxmoxConfigError as exc:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        except ProxmoxUnavailableError as exc:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet") from exc
+
+        try:
+            cmd_repo.update_vm_ipv4(vm_id, ipv4)
+        except IntegrityError as exc:
+            db.rollback()
+            logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="IPv4 address conflict, please retry") from exc
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+
+        try:
+            db.commit()
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+
+        gateway = get_proxmox_gateway()
+        try:
+            gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
+        except ProxmoxError as exc:
+            logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}") from exc
+
+        try:
+            gateway.restart_vm(vm_id=vm_id)
+        except ProxmoxError:
+            logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+    else:
+        db.commit()
+
     return AdminRequestResponse.from_row(row)
 
 
@@ -209,12 +304,14 @@ def assign_vm_ipv4(
         cmd_repo.update_vm_ipv4(vm_id, ipv4)
     except IntegrityError as exc:
         db.rollback()
+        logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="IPv4 address conflict, please retry",
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
+        logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database temporarily unavailable",
@@ -224,6 +321,7 @@ def assign_vm_ipv4(
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
+        logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database temporarily unavailable",
@@ -233,6 +331,7 @@ def assign_vm_ipv4(
     try:
         gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
     except ProxmoxError as exc:
+        logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
@@ -243,6 +342,6 @@ def assign_vm_ipv4(
     except ProxmoxError:
         # Config is applied, DB is committed — restart failure is non-fatal.
         # The admin can restart the VM manually for cloud-init to pick up the IPv4.
-        pass
+        logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
 
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)

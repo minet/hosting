@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import api_router
 from app.core.config import get_settings
@@ -65,3 +66,4 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+app.mount("/assets", StaticFiles(directory="/app/assets"), name="assets")

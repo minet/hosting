@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
+import { useToast } from '../contexts/ToastContext'
+import { TemplateListSchema } from '../schemas'
 
 interface Template {
   template_id: number
@@ -8,11 +10,12 @@ interface Template {
 
 export function useTemplates() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const { toast } = useToast()
 
   useEffect(() => {
-    apiFetch<{ items: Template[] }>('/api/templates')
+    apiFetch('/api/templates', undefined, TemplateListSchema)
       .then(r => setTemplates(r.items))
-      .catch(() => null)
+      .catch(err => toast(err.message ?? 'Impossible de charger les templates'))
   }, [])
 
   return templates

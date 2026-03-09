@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from app.auth import AuthCtx, require_user
+from app.auth import AuthCtx, require_charter_signed
 from app.db.core.engine import get_session_factory
 from app.db.repositories.vm import VmQueryRepo
 from app.core.config import get_settings
@@ -27,12 +28,14 @@ from app.db.repositories.request import RequestRepo
 from sqlalchemy.orm import Session
 from .schemas import VMAccessListResponse, VMDetailResponse, VMListResponse, VMMetricsResponse, VMRequestListResponse, VMRequestResponse, VMStatusResponse, VMTasksResponse
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 @router.get("/status/stream")
 async def stream_vm_statuses(
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> StreamingResponse:
     """
@@ -73,9 +76,9 @@ async def stream_vm_statuses(
                             last[vm_id] = s
                             yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime})}\n\n"
                     except Exception:
-                        pass
+                        logger.debug("SSE: failed to fetch status for vm_id=%s", vm_id, exc_info=True)
             except Exception:
-                pass
+                logger.exception("SSE: error during VM list or DB query for user_id=%s", ctx.user_id)
             yield f"event: sync\ndata: {json.dumps({'vm_ids': vm_ids})}\n\n"
             yield ": ping\n\n"
             await asyncio.sleep(5)
@@ -89,7 +92,7 @@ async def stream_vm_statuses(
 
 @router.get("", response_model=VMListResponse)
 def list_vms(
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> VMListResponse:
     """
@@ -106,7 +109,7 @@ def list_vms(
 @router.get("/{vm_id}", response_model=VMDetailResponse)
 def get_vm(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> VMDetailResponse:
     """
@@ -130,7 +133,7 @@ def get_vm(
 @router.get("/{vm_id}/tasks", response_model=VMTasksResponse)
 async def list_vm_tasks(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMTasksResponse:
@@ -154,7 +157,7 @@ async def list_vm_tasks(
 @router.get("/{vm_id}/status", response_model=VMStatusResponse)
 async def get_vm_status(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMStatusResponse:
@@ -180,7 +183,7 @@ async def get_vm_metrics(
     vm_id: int,
     timeframe: str = Query(default="hour", pattern="^(hour|day|week|month|year)$"),
     cf: str = Query(default="AVERAGE", pattern="^(AVERAGE|MAX)$"),
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMMetricsResponse:
@@ -210,7 +213,7 @@ async def get_vm_metrics(
 @router.get("/{vm_id}/requests", response_model=VMRequestListResponse)
 def list_vm_requests(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     db: Session = Depends(get_db),
 ) -> VMRequestListResponse:
@@ -222,7 +225,7 @@ def list_vm_requests(
 @router.get("/{vm_id}/access", response_model=VMAccessListResponse)
 def list_vm_access(
     vm_id: int,
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> VMAccessListResponse:

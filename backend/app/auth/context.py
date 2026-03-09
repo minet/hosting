@@ -226,8 +226,36 @@ def _cotise_end_ms(payload: TokenPayload, settings: Settings) -> int | None:
         return None
 
 
-def require_cotisant(
+def require_charter_signed(
     ctx: AuthCtx = Depends(require_user),
+    settings: Settings = Depends(get_settings),
+) -> AuthCtx:
+    """FastAPI dependency that requires the user to have signed the hosting charter.
+
+    Administrators bypass this check entirely.
+
+    :param ctx: Authentication context injected by FastAPI.
+    :param settings: Application settings injected by FastAPI.
+    :returns: The validated authentication context.
+    :rtype: AuthCtx
+    :raises ~fastapi.HTTPException: ``403`` with detail ``"charter_not_signed"`` if the
+        user has not signed the charter.
+    """
+    if ctx.is_admin:
+        return ctx
+    attrs = ctx.payload.get(settings.auth_attributes_namespace, {})
+    attrs = attrs if isinstance(attrs, dict) else {}
+    date_signed = _claim_value(ctx.payload, "dateSignedHosting") or _claim_value(attrs, "dateSignedHosting")
+    if not date_signed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="charter_not_signed",
+        )
+    return ctx
+
+
+def require_cotisant(
+    ctx: AuthCtx = Depends(require_charter_signed),
     settings: Settings = Depends(get_settings),
 ) -> AuthCtx:
     """FastAPI dependency that requires a valid, non-expired membership.

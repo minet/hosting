@@ -17,6 +17,7 @@ from app.services.auth import (
     AuthMeResponse,
     callback_redirect,
     current_user_claims,
+    local_logout_redirect,
     login_redirect,
     logout_redirect,
 )
@@ -112,6 +113,25 @@ def auth_refresh(request: FastAPIRequest, response: Response) -> dict:
         refresh_token=new_refresh_token if isinstance(new_refresh_token, str) else None,
     )
     return {"ok": True}
+
+
+@router.api_route("/local-logout", methods=["GET", "POST"])
+def auth_local_logout(
+    request: FastAPIRequest,
+    frontend_redirect: str | None = Query(default=None),
+) -> RedirectResponse:
+    """
+    Clear the local session only, without triggering a global Keycloak logout.
+
+    Use this to evict users from this application while keeping their SSO
+    session intact for other clients.
+
+    :param request: The incoming HTTP request.
+    :param frontend_redirect: Optional URL to redirect the user to after the session is cleared.
+    :returns: A redirect response that clears the session cookie.
+    :rtype: RedirectResponse
+    """
+    return local_logout_redirect(request=request, frontend_redirect=frontend_redirect)
 
 
 @router.api_route("/logout", methods=["GET", "POST"])

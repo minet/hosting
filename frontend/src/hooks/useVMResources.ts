@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
+import { useToast } from '../contexts/ToastContext'
 import { type VMDetail } from '../types/vm'
 
 type Resources = { remaining: { cpu_cores: number; ram_mb: number; disk_gb: number } } | null
@@ -10,6 +11,7 @@ export function useVMResources(
   resources: Resources,
   onSaved: (updated: Pick<VMDetail, 'cpu_cores' | 'ram_mb' | 'disk_gb'>) => void,
 ) {
+  const { toast } = useToast()
   const [resModalOpen, setResModalOpen] = useState(false)
   const [newCpu, setNewCpu] = useState(1)
   const [newRam, setNewRam] = useState(1)
@@ -34,7 +36,10 @@ export function useVMResources(
       })
       onSaved({ cpu_cores: newCpu, ram_mb: newRam * 1024, disk_gb: newDisk })
       setResModalOpen(false)
-    } catch { /* ignore */ }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Échec de la modification des ressources'
+      toast(msg)
+    }
     setResSaving(false)
   }
 

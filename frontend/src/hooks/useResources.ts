@@ -1,24 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
-
-interface ResourceLimits {
-  cpu_cores: number
-  ram_mb: number
-  disk_gb: number
-}
-
-interface ResourceUsage {
-  vm_count: number
-  cpu_cores: number
-  ram_mb: number
-  disk_gb: number
-}
-
-interface Resources {
-  usage: ResourceUsage
-  limits: ResourceLimits
-  remaining: ResourceLimits
-}
+import { useToast } from '../contexts/ToastContext'
+import { ResourcesSchema, type Resources } from '../schemas'
 
 const CACHE_KEY = 'resources_cache'
 
@@ -35,11 +18,12 @@ function writeCache(data: Resources) {
 
 export function useResources() {
   const [resources, setResources] = useState<Resources | null>(readCache)
+  const { toast } = useToast()
 
   useEffect(() => {
-    apiFetch<Resources>('/api/users/me/resources')
+    apiFetch('/api/users/me/resources', undefined, ResourcesSchema)
       .then(data => { writeCache(data); setResources(data) })
-      .catch(() => null)
+      .catch(err => toast(err.message ?? 'Impossible de charger les ressources'))
   }, [])
 
   return resources

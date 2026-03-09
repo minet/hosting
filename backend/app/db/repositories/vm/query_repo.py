@@ -75,15 +75,23 @@ class VmQueryRepo:
         """Return all VMs in the database, ordered by VM ID.
 
         The ``role_owner`` field is always ``True`` in the result set, as this
-        method is intended for administrative use.
+        method is intended for administrative use.  An ``owner_id`` subquery
+        resolves the Keycloak user ID of the VM owner.
 
         :returns: A list of row dicts, one per VM.
         :rtype: list[dict[str, Any]]
         """
+        owner_subq = (
+            select(VMAccess.user_id)
+            .where(VMAccess.vm_id == VM.vm_id, VMAccess.role_owner.is_(True))
+            .limit(1)
+            .scalar_subquery()
+        ).label("owner_id")
         stmt = (
             select(
                 *_vm_columns(),
                 literal(True).label("role_owner"),
+                owner_subq,
             )
             .join(Template, Template.template_id == VM.template_id)
             .order_by(VM.vm_id.asc())

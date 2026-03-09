@@ -5,9 +5,11 @@ Provides basic liveness probes and Proxmox connectivity diagnostics
 accessible to administrators.
 """
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
 
 from app.auth import AuthCtx, require_admin
 from app.core.config import Settings, get_settings
@@ -17,6 +19,8 @@ from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.errors import raise_proxmox_as_http
 
 router = APIRouter(tags=["health"])
+
+_CHARTE_PATH = Path("/charte/CHARTE.md")
 
 
 def _require_proxmox(settings: Settings) -> None:
@@ -50,6 +54,20 @@ async def _run_proxmox(fn, *, settings: Settings):
         if settings.app_debug:
             unavailable = f"{unavailable} ({type(exc).__name__}: {exc})"
         raise_proxmox_as_http(exc, unavailable=unavailable)
+
+
+@router.get("/charte", response_class=PlainTextResponse)
+def get_charte() -> str:
+    """
+    Return the hosting charter (CHARTE.md) as plain text.
+
+    :returns: The full content of CHARTE.md.
+    :rtype: str
+    :raises HTTPException: With status 404 if the file is not found.
+    """
+    if not _CHARTE_PATH.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Charte not found")
+    return _CHARTE_PATH.read_text(encoding="utf-8")
 
 
 @router.get("/health")

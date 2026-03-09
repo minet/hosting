@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
+import type { ZodType } from 'zod'
+
+export const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
 
 async function tryRefresh(): Promise<boolean> {
   try {
@@ -7,7 +9,27 @@ async function tryRefresh(): Promise<boolean> {
   } catch { return false }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = await res.json()
+    if (typeof body?.detail === 'string') return body.detail
+    if (Array.isArray(body?.detail)) {
+      return body.detail.map((d: { msg?: string }) => d.msg ?? '').filter(Boolean).join(', ') || res.statusText
+    }
+    if (typeof body?.message === 'string') return body.message
+  } catch { /* not JSON */ }
+  return res.statusText || `Erreur ${res.status}`
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit, schema?: ZodType<T>): Promise<T> {
   let res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...init })
   if (res.status === 401) {
     const refreshed = await tryRefresh()
@@ -15,11 +37,16 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...init })
     } else {
       window.location.href = loginUrl()
-      throw res
+      throw new ApiError(401, 'Session expirée')
     }
   }
-  if (!res.ok) throw res
-  return res.json() as Promise<T>
+  if (!res.ok) {
+    const message = await extractErrorMessage(res)
+    throw new ApiError(res.status, message)
+  }
+  const data = await res.json()
+  if (schema) return schema.parse(data)
+  return data as T
 }
 
 export function loginUrl(): string {

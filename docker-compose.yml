@@ -32,6 +32,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       DB_POOL_MIN_SIZE: 5
       DB_POOL_MAX_SIZE: 20
+    volumes:
+      - ./backend/CHARTE.md:/charte/CHARTE.md:ro
     depends_on:
       postgres:
         condition: service_healthy

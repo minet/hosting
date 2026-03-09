@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
+from app.services.wordgen import vm_dns_label
 
 
 class VmQueryService:
@@ -158,6 +159,7 @@ class VmQueryService:
         :returns: Dictionary with ``items`` list and ``count``.
         :rtype: dict[str, Any]
         """
+        dns_zone = self.settings.dns_zone.rstrip(".")
         items = [
             {
                 "vm_id": row["vm_id"],
@@ -171,6 +173,8 @@ class VmQueryService:
                 "ipv4": row["ipv4"],
                 "ipv6": row["ipv6"],
                 "mac": row["mac"],
+                "owner_id": row.get("owner_id"),
+                "dns": f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
             }
             for row in rows
         ]

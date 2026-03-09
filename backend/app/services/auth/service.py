@@ -39,6 +39,7 @@ class AuthMeResponse(TypedDict):
     groups: list[str]
     is_admin: bool
     cotise_end_ms: int | None
+    date_signed_hosting: str | None
 
 
 @contextmanager
@@ -195,14 +196,16 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     prenom = _get("prenom")
     departure_date = _get("departureDate")
     cotise_end = _cotise_end_ms(payload, settings)
+    date_signed_hosting = _get("dateSignedHosting")
 
-    if not nom or not prenom or cotise_end is None:
+    if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
         profile = fetch_keycloak_user_profile(username) if username else None
         if profile:
             nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
             prenom = prenom or profile.get("prenom") or profile.get("firstName") or profile.get("first_name")
             departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
+            date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
 
     return {
         "sub": payload.get("sub"),
@@ -215,7 +218,35 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "groups": groups_list,
         "is_admin": is_admin,
         "cotise_end_ms": cotise_end,
+        "date_signed_hosting": date_signed_hosting,
     }
+
+
+def local_logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
+    """
+    Revoke the backend session and redirect back to the frontend WITHOUT
+    triggering a global Keycloak SSO logout.
+
+    Use this when the user should be evicted from this application only,
+    while keeping their Keycloak session active for other clients.
+
+    :param request: Incoming FastAPI request.
+    :param frontend_redirect: Optional URL to redirect to after the session is cleared.
+    :returns: A 302 redirect response with the session cookie deleted.
+    :rtype: RedirectResponse
+    :raises HTTPException: If the session store is unavailable.
+    """
+    settings = get_settings()
+    session_id = request.cookies.get(settings.session_cookie_name)
+    store = get_session_store()
+    if session_id:
+        with _session_store_op():
+            store.revoke_session(session_id)
+
+    redirect_target = safe_frontend_redirect(frontend_redirect=frontend_redirect, request=request)
+    response = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
+    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    return response
 
 
 def logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:

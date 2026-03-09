@@ -10,22 +10,24 @@ from fastapi import APIRouter, Depends
 
 from app.api.routes.admin import router as admin_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.charter import router as charter_router
 from app.api.routes.health import router as health_router
 from app.api.routes.vms import router as vms_router
 from app.api.routes.vms.schemas import ResourcesResponse, TemplateListResponse
-from app.auth import AuthCtx, require_user
+from app.auth import AuthCtx, require_charter_signed
 from app.services.vm.deps import get_vm_query_service
 from app.services.vm.query import VmQueryService
 
 router = APIRouter(prefix="/api")
 router.include_router(health_router)
 router.include_router(auth_router)
+router.include_router(charter_router)
 router.include_router(vms_router)
 
 
 @router.get("/templates", tags=["vms"], response_model=TemplateListResponse)
 def list_templates(
-    _: AuthCtx = Depends(require_user),
+    _: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> TemplateListResponse:
     """
@@ -41,7 +43,7 @@ def list_templates(
 
 @router.get("/users/me/resources", tags=["vms"], response_model=ResourcesResponse)
 def get_my_resources(
-    ctx: AuthCtx = Depends(require_user),
+    ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> ResourcesResponse:
     """

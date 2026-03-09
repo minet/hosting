@@ -84,6 +84,8 @@ class VMListItemResponse(BaseModel):
     ipv4: str | None
     ipv6: str | None
     mac: str | None
+    owner_id: str | None = None
+    dns: str | None = None
 
 
 class VMListResponse(BaseModel):

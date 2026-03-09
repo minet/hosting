@@ -8,9 +8,13 @@ internals.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import HTTPException, status
 
 from app.services.proxmox.errors import ProxmoxError, ProxmoxInvalidDiskSize, ProxmoxPermissionError, ProxmoxVMNotFound
+
+logger = logging.getLogger(__name__)
 
 
 def raise_proxmox_as_http(exc: ProxmoxError, *, unavailable: str) -> None:
@@ -30,4 +34,5 @@ def raise_proxmox_as_http(exc: ProxmoxError, *, unavailable: str) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied by Proxmox") from exc
     if isinstance(exc, ProxmoxInvalidDiskSize):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid disk size") from exc
+    logger.exception("Proxmox service unavailable: %s", unavailable)
     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=unavailable) from exc
