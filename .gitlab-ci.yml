@@ -53,7 +53,7 @@ deploy:
     branch: main
     strategy: depend
     inputs:
-      folder_name: hosting.minet.net
+      folder_name: hosting-dev.minet.net
       image_registry: $CI_REGISTRY_IMAGE
   needs:
     - docker_backend
