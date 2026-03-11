@@ -1,90 +1,50 @@
 stages:
-  - build
   - docker
   - deploy
 
 variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: "/certs"
-  DOCKER_BUILDKIT: 1
   IMAGE_REGISTRY_BASE: $CI_REGISTRY_IMAGE
 
-# ── Build stage ──────────────────────────────────────────────────────────────
+# ── Docker stage ──────────────────────────────────────────────────────────────
 
-build_backend:
-  stage: build
-  image: python:3.12-slim
-  script:
-    - pip install --no-cache-dir -r backend/requirements.txt
-    - python -m py_compile backend/app/main.py
-  cache:
-    paths:
-      - .pip-cache/
-  variables:
-    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
-
-build_frontend:
-  stage: build
-  image: node:22-alpine
-  script:
-    - cd frontend
-    - npm ci
-    - npm run build
-  artifacts:
-    paths:
-      - frontend/dist/
-  cache:
-    paths:
-      - frontend/node_modules/
-
-# ── Docker stage ─────────────────────────────────────────────────────────────
+.kaniko_auth: &kaniko_auth
+  before_script:
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_JOB_TOKEN" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
 
 docker_backend:
   stage: docker
-  image: docker:latest
-  services:
-    - docker:dind
-  before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.0-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
   script:
-    - docker pull "$IMAGE_REGISTRY_BASE/backend:latest" || true
-    - >
-      docker build
-      --cache-from "$IMAGE_REGISTRY_BASE/backend:latest"
-      --build-arg BUILDKIT_INLINE_CACHE=1
-      -t "$IMAGE_REGISTRY_BASE/backend:latest"
-      -t "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
-      backend/
-    - docker push "$IMAGE_REGISTRY_BASE/backend:latest"
-    - docker push "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
-  needs:
-    - build_backend
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/backend"
+      --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile"
+      --destination "$IMAGE_REGISTRY_BASE/backend:latest"
+      --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
+      --cache=true
+      --cache-repo "$IMAGE_REGISTRY_BASE/backend/cache"
 
 docker_frontend:
   stage: docker
-  image: docker:latest
-  services:
-    - docker:dind
-  before_script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.0-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
   script:
-    - docker pull "$IMAGE_REGISTRY_BASE/frontend:latest" || true
-    - >
-      docker build
-      --cache-from "$IMAGE_REGISTRY_BASE/frontend:latest"
-      --build-arg BUILDKIT_INLINE_CACHE=1
-      --build-arg VITE_API_URL=${VITE_API_URL:-}
-      --build-arg VITE_DNS_ZONE=${VITE_DNS_ZONE:-h.lan}
-      --build-arg VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:-}
-      -t "$IMAGE_REGISTRY_BASE/frontend:latest"
-      -t "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
-      frontend/
-    - docker push "$IMAGE_REGISTRY_BASE/frontend:latest"
-    - docker push "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
-  needs:
-    - build_frontend
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/frontend"
+      --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:latest"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
+      --build-arg "VITE_API_URL=${VITE_API_URL:-}"
+      --build-arg "VITE_DNS_ZONE=${VITE_DNS_ZONE:-h.lan}"
+      --build-arg "VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:-}"
+      --cache=true
+      --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
 
-# ── Deploy stage ─────────────────────────────────────────────────────────────
+# ── Deploy stage ──────────────────────────────────────────────────────────────
 
 deploy:
   stage: deploy
