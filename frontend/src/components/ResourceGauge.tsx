@@ -45,7 +45,7 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
               formatTextValue: () => `${pct}%`,
               style: { fontSize: '26px', fill: '#1e293b', fontWeight: '700', textShadow: 'none' },
             },
-            tickLabels: { hideMinMax: true, hideTicks: true },
+            tickLabels: { hideMinMax: true },
           }}
           style={{ width: '100%' }}
         />
@@ -80,7 +80,7 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
                 formatTextValue: () => `${pct}%`,
                 style: { fontSize: '36px', fill: '#1e293b', fontWeight: '700', textShadow: 'none' },
               },
-              tickLabels: { hideMinMax: true, hideTicks: true },
+              tickLabels: { hideMinMax: true },
             }}
             style={{ width: '100%' }}
           />
@@ -106,7 +106,6 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
                 width: 0.2,
                 padding: 0.01,
                 cornerRadius: 3,
-                startAngle: -210,
                 endAngle: 30,
                 subArcs: [
                   { limit: used, color: fill, showTick: false },

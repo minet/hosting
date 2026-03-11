@@ -226,7 +226,7 @@ export default function VMPage() {
         doSaveCreds={creds.doSaveCreds}
       />
 
-      <MetricChart vmId={vmId} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
+      <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
 
     </div>
 

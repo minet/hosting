@@ -162,7 +162,7 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
           if (frame.channel === 0) term.write(frame.payload)
         }
       } else {
-        term.write(rxBuffer)
+        term.write(new Uint8Array(rxBuffer))
         rxBuffer = new Uint8Array(0)
       }
     }
