@@ -2,13 +2,11 @@ import { Crown, Pencil, Share2 } from 'lucide-react'
 import Tooltip from './Tooltip'
 import { type VMDetail } from '../types/vm'
 
-function sanitizeDnsLabel(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'vm'
-}
-
-export function vmFqdn(vmName: string, vmId: number): string {
+export function vmFqdn(vm: { dns: string | null; name: string; vm_id: number }): string {
+  if (vm.dns) return vm.dns
   const zone = import.meta.env.VITE_DNS_ZONE || 'h.lan'
-  return `${sanitizeDnsLabel(vmName)}-${vmId}.${zone}`
+  const label = vm.name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'vm'
+  return `${label}-${vm.vm_id}.${zone}`
 }
 
 function formatUptime(seconds: number | null): string {
@@ -58,7 +56,7 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">DNS</p>
             {isOwner && <button onClick={onOpenDnsRequest} className="text-neutral-300 hover:text-neutral-500 cursor-pointer transition-colors"><Pencil size={9} /></button>}
           </div>
-          <p className="text-[11px] font-mono font-semibold text-neutral-800 break-all leading-snug">{vmFqdn(vm.name, vm.vm_id)}</p>
+          <p className="text-[11px] font-mono font-semibold text-neutral-800 break-all leading-snug">{vmFqdn(vm)}</p>
         </div>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Template</p>

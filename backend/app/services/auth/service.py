@@ -40,6 +40,7 @@ class AuthMeResponse(TypedDict):
     is_admin: bool
     cotise_end_ms: int | None
     date_signed_hosting: str | None
+    ldap_login: str | None
 
 
 @contextmanager
@@ -197,8 +198,9 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     departure_date = _get("departureDate")
     cotise_end = _cotise_end_ms(payload, settings)
     date_signed_hosting = _get("dateSignedHosting")
+    ldap_login = _get("ldapLogin")
 
-    if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
+    if not nom or not prenom or cotise_end is None or date_signed_hosting is None or ldap_login is None:
         profile = fetch_keycloak_user_profile(username) if username else None
         if profile:
             nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
@@ -206,6 +208,7 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
             departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
             date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
+            ldap_login = ldap_login or profile.get("ldapLogin")
 
     return {
         "sub": payload.get("sub"),
@@ -219,6 +222,7 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "is_admin": is_admin,
         "cotise_end_ms": cotise_end,
         "date_signed_hosting": date_signed_hosting,
+        "ldap_login": ldap_login,
     }
 
 

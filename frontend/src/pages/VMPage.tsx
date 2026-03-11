@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Play, TerminalSquare } from 'lucide-react'
+import { ArrowLeft, Play, TerminalSquare } from 'lucide-react'
 import { apiFetch } from '../api'
 import VMTerminal from '../components/VMTerminal'
 import MetricChart from '../components/MetricChart'
@@ -36,6 +36,7 @@ export default function VMPage() {
   const [mobileTermOpen, setMobileTermOpen] = useState(false)
   const [overlayHeight, setOverlayHeight] = useState(0)
   const isDesktop = useState(() => window.innerWidth >= 768)[0]
+  const [onboot, setOnboot] = useState<boolean | null>(null)
 
   const running = vmStatusEntry?.status === 'running'
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
@@ -59,6 +60,19 @@ export default function VMPage() {
     if (!vmId) return
     apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`).then(r => setTasks(r.items)).catch(() => null)
   }, [vmId, vmStatusEntry?.status])
+
+  useEffect(() => {
+    if (!vmId) return
+    apiFetch<{ onboot: boolean }>(`/api/vms/${vmId}/onboot`).then(r => setOnboot(r.onboot)).catch(() => null)
+  }, [vmId])
+
+  async function toggleOnboot() {
+    if (!vmId) return
+    try {
+      const r = await apiFetch<{ onboot: boolean }>(`/api/vms/${vmId}/onboot`, { method: 'PUT' })
+      setOnboot(r.onboot)
+    } catch { /* ignore */ }
+  }
 
   useEffect(() => {
     if (!running) setMobileTermOpen(false)
@@ -115,6 +129,16 @@ export default function VMPage() {
       />
     )}
 
+    {me.is_admin && (
+      <button
+        onClick={() => navigate('/admin')}
+        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 transition-colors mb-1 cursor-pointer"
+      >
+        <ArrowLeft size={13} />
+        Retour au tableau admin
+      </button>
+    )}
+
     <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-2 xl:h-full">
 
       {vm ? (
@@ -138,6 +162,8 @@ export default function VMPage() {
         running={running}
         isOwner={isOwner}
         loadingAction={loadingAction}
+        onboot={onboot}
+        onToggleOnboot={toggleOnboot}
         onAction={doAction}
         onOpenDestroyModal={() => setShowDestroyModal(true)}
         onOpenShareModal={() => { share.setShareOpen(true); share.loadShareUsers() }}

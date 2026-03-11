@@ -191,6 +191,7 @@ class VmQueryService:
             ``network`` sub-objects and ``current_user_role``.
         :rtype: dict[str, Any]
         """
+        dns_zone = self.settings.dns_zone.rstrip(".")
         return {
             "vm_id": row["vm_id"],
             "name": row["name"],
@@ -202,6 +203,7 @@ class VmQueryService:
             "current_user_role": role,
             "username": row.get("username") if role in ("owner", "admin") else None,
             "ssh_public_key": row.get("ssh_public_key") if role in ("owner", "admin") else None,
+            "dns": f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
         }
 
     @staticmethod

@@ -19,6 +19,27 @@ def task_node() -> str:
     return get_settings().proxmox_node.strip() or "pve"
 
 
+def _any_online_node(*, client: ProxmoxAPI) -> str | None:
+    """Return the name of any online node in the cluster.
+
+    :param client: Proxmox API client instance.
+    :returns: Name of an online node, or ``None`` if none are available.
+    :rtype: str | None
+    """
+    raw_nodes = client.nodes.get()
+    if not isinstance(raw_nodes, list):
+        return None
+    for item in raw_nodes:
+        if (
+            isinstance(item, dict)
+            and item.get("status") == "online"
+            and isinstance(item.get("node"), str)
+            and item["node"].strip()
+        ):
+            return item["node"].strip()
+    return None
+
+
 def task_timeout_seconds() -> int:
     """Return the task timeout in seconds (at least 10).
 
@@ -61,14 +82,23 @@ def template_node_from_cluster(*, client: ProxmoxAPI, template_vmid: int) -> str
 
 
 def clone_node_for_template(*, client: ProxmoxAPI, template_vmid: int) -> str:
-    """Return the node hosting a template, falling back to the default task node.
+    """Return the node hosting a template, falling back to any online node.
 
     :param client: Proxmox API client instance.
     :param template_vmid: The VMID of the template.
     :returns: The node name to use for cloning.
     :rtype: str
+    :raises ProxmoxError: If no node can be resolved.
     """
-    return template_node_from_cluster(client=client, template_vmid=template_vmid) or task_node()
+    from app.services.proxmox.errors import ProxmoxError
+
+    node = template_node_from_cluster(client=client, template_vmid=template_vmid)
+    if node:
+        return node
+    node = _any_online_node(client=client)
+    if node:
+        return node
+    raise ProxmoxError(f"Cannot resolve node for template {template_vmid}: no online nodes found")
 
 
 def vm_node_from_cluster(*, client: ProxmoxAPI, vm_id: int) -> str | None:
@@ -90,14 +120,23 @@ def vm_node_from_cluster(*, client: ProxmoxAPI, vm_id: int) -> str | None:
 
 
 def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
-    """Return the node hosting a VM, falling back to the default task node.
+    """Return the node hosting a VM, falling back to any online node.
 
     :param client: Proxmox API client instance.
     :param vm_id: The VMID of the virtual machine.
     :returns: The node name to use for VM operations.
     :rtype: str
+    :raises ProxmoxError: If no node can be resolved.
     """
-    return vm_node_from_cluster(client=client, vm_id=vm_id) or task_node()
+    from app.services.proxmox.errors import ProxmoxError
+
+    node = vm_node_from_cluster(client=client, vm_id=vm_id)
+    if node:
+        return node
+    node = _any_online_node(client=client)
+    if node:
+        return node
+    raise ProxmoxError(f"Cannot resolve node for VM {vm_id}: no online nodes found")
 
 
 def least_loaded_node(*, client: ProxmoxAPI) -> str | None:

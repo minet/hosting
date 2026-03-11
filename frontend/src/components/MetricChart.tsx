@@ -64,8 +64,8 @@ const METRICS: MetricDef[] = [
 const TIMEFRAMES = [
   { key: 'hour',  label: '1h' },
   { key: 'day',   label: '1j' },
-  { key: 'week',  label: '1s' },
-  { key: 'month', label: '1m' },
+  { key: 'week',  label: '1sem' },
+  { key: 'month', label: '1mois' },
   { key: 'year',  label: '1an' },
 ]
 

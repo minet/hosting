@@ -86,26 +86,62 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         return []
     try:
         admin = _make_admin()
-        groups = admin.get_groups(query={"search": group_path.lstrip("/")})
+        search_term = group_path.lstrip("/").split("/")[-1]
+        groups = admin.get_groups(query={"search": search_term})
+        if not groups:
+            # Fallback: list all groups to help debug
+            all_top = admin.get_groups()
+            logger.warning("fetch_keycloak_group_members: search '%s' returned nothing. All top-level groups: %s",
+                           search_term, [g.get("name") for g in (all_top if isinstance(all_top, list) else [])])
         if not isinstance(groups, list):
+            logger.warning("fetch_keycloak_group_members: get_groups returned non-list for search=%s", search_term)
             return []
-        group = next((g for g in groups if g.get("path") == group_path), None)
+        # Flatten subgroups: Keycloak may nest the target group inside a parent
+        def _flatten(items: list) -> list:
+            result = []
+            for g in items:
+                if isinstance(g, dict):
+                    result.append(g)
+                    result.extend(_flatten(g.get("subGroups", [])))
+            return result
+        all_groups = _flatten(groups)
+        group = next((g for g in all_groups if g.get("path", "").endswith(group_path)), None)
         if group is None:
+            logger.warning(
+                "fetch_keycloak_group_members: group not found for path=%s, available paths: %s",
+                group_path,
+                [g.get("path") for g in all_groups],
+            )
             return []
         members = admin.get_group_members(group["id"])
         if not isinstance(members, list):
             return []
-        return [
-            {
-                "id": m.get("id"),
+        results = []
+        for m in members:
+            if not isinstance(m, dict):
+                continue
+            keycloak_id = m.get("id")
+            # Try to resolve federated user_id: f:{providerId}:{userId}
+            fed_id = keycloak_id
+            try:
+                full_user = admin.get_user(keycloak_id)
+                if isinstance(full_user, dict):
+                    federations = full_user.get("federatedIdentities", [])
+                    if isinstance(federations, list) and federations:
+                        fi = federations[0]
+                        if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
+                            fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
+            except Exception:
+                pass
+            results.append({
+                "id": fed_id,
+                "keycloak_id": keycloak_id,
                 "username": m.get("username"),
                 "first_name": m.get("firstName"),
                 "last_name": m.get("lastName"),
                 "email": m.get("email"),
-            }
-            for m in members
-            if isinstance(m, dict)
-        ]
+            })
+        return results
     except Exception:
         logger.exception("fetch_keycloak_group_members failed for group_path=%s", group_path)
         return []

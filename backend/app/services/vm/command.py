@@ -209,6 +209,23 @@ class VmCommandService:
             raise_proxmox_as_http(exc, unavailable="Unable to restart VM on Proxmox")
         return {"vm_id": vm_id, "action": "restart", "status": "ok"}
 
+    def get_onboot(self, *, vm_id: int) -> dict[str, Any]:
+        """Return the onboot setting for a VM."""
+        try:
+            onboot = self._gateway.get_onboot(vm_id=vm_id)
+        except ProxmoxError as exc:
+            raise_proxmox_as_http(exc, unavailable="Unable to fetch VM config from Proxmox")
+        return {"vm_id": vm_id, "onboot": onboot}
+
+    def toggle_onboot(self, *, vm_id: int) -> dict[str, Any]:
+        """Toggle the onboot setting for a VM."""
+        try:
+            current = self._gateway.get_onboot(vm_id=vm_id)
+            self._gateway.set_onboot(vm_id=vm_id, onboot=not current)
+        except ProxmoxError as exc:
+            raise_proxmox_as_http(exc, unavailable="Unable to update VM config on Proxmox")
+        return {"vm_id": vm_id, "onboot": not current}
+
     def status(self, *, vm_id: int) -> dict[str, Any]:
         """
         Retrieve the current runtime status of a virtual machine.

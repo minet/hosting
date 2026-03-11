@@ -9,6 +9,7 @@ export interface VMDetail {
   template: { template_id: number; name: string }
   network: { ipv4: string | null; ipv6: string | null; mac: string | null }
   current_user_role: 'owner' | 'shared' | 'admin'
+  dns: string | null
 }
 
 export interface VMTask {

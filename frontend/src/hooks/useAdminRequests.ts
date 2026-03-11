@@ -13,7 +13,7 @@ export interface AdminRequest {
   vm_name: string | null
 }
 
-export function useAdminRequests() {
+export function useAdminRequests(onUpdated?: () => void) {
   const [requests, setRequests] = useState<AdminRequest[]>([])
   const { toast } = useToast()
 
@@ -33,6 +33,7 @@ export function useAdminRequests() {
         body: JSON.stringify({ status }),
       })
       refresh()
+      onUpdated?.()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Échec de la mise à jour de la demande'
       toast(msg)

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.quota_lock import QuotaLock
 from app.db.models.resource import Resource
+from app.db.models.template import Template
 from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
 
@@ -178,6 +179,28 @@ class VmCmdRepo:
             return False
         vm.ipv4 = ipv4
         self.db.add(vm)
+        self.db.flush()
+        return True
+
+    def insert_template(self, *, template_id: int, name: str) -> None:
+        """Insert a new template row.
+
+        :param template_id: Proxmox VMID of the template.
+        :param name: Human-readable name.
+        """
+        self.db.add(Template(template_id=template_id, name=name))
+        self.db.flush()
+
+    def delete_template(self, template_id: int) -> bool:
+        """Delete a template by its ID.
+
+        :param template_id: The template identifier.
+        :returns: ``True`` if deleted, ``False`` if not found.
+        """
+        tpl = self.db.get(Template, template_id)
+        if tpl is None:
+            return False
+        self.db.delete(tpl)
         self.db.flush()
         return True
 

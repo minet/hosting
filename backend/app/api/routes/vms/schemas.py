@@ -108,6 +108,7 @@ class VMDetailResponse(BaseModel):
     current_user_role: VMRole
     username: str | None = None
     ssh_public_key: str | None = None
+    dns: str | None = None
 
 
 class VMTaskItemResponse(BaseModel):
@@ -451,3 +452,15 @@ class AdminRequestListResponse(BaseModel):
 class AdminRequestUpdateBody(BaseModel):
     """Request body for approving or rejecting a VM request."""
     status: VMRequestStatus
+
+
+class VMOnbootResponse(BaseModel):
+    """Response schema for onboot (start at boot) status."""
+    vm_id: int
+    onboot: bool
+
+
+class AdminTemplateCreateBody(BaseModel):
+    """Request body for creating a VM template (admin only)."""
+    template_id: int = Field(ge=1001, le=1999)
+    name: str = Field(min_length=1, max_length=128)

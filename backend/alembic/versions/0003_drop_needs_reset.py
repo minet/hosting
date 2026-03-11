@@ -19,7 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.drop_column("resources", "needs_reset")
+    conn = op.get_bind()
+    has = conn.execute(
+        sa.text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'resources' AND column_name = 'needs_reset'"
+        )
+    ).scalar()
+    if has:
+        op.drop_column("resources", "needs_reset")
 
 
 def downgrade() -> None:

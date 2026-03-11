@@ -15,12 +15,12 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 from app.api.routes.vms import VMListResponse
-from app.api.routes.vms.schemas import AdminRequestListResponse, AdminRequestResponse, AdminRequestUpdateBody, ResourcesResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse
+from app.api.routes.vms.schemas import AdminRequestListResponse, AdminRequestResponse, AdminRequestUpdateBody, AdminTemplateCreateBody, ResourcesResponse, TemplateListResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse, VMTemplateResponse
 from app.db.repositories.request import RequestRepo
 from app.auth import AuthCtx, require_admin
 from app.db.core import get_db
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id, fetch_keycloak_user_profile
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.executor import run_in_proxmox_executor
@@ -30,6 +30,72 @@ from app.services.vm.deps import get_vm_command_service, get_vm_query_service
 from app.services.vm.query import VmQueryService
 
 router = APIRouter(tags=["admin"])
+
+
+def _allocate_and_assign_ipv4(
+    vm_id: int,
+    db: Session,
+    query_repo: VmQueryRepo,
+    cmd_repo: VmCmdRepo,
+) -> str:
+    """Validate, allocate, persist, and configure an IPv4 address for a VM.
+
+    Returns the allocated IPv4 string on success.
+
+    Raises :class:`HTTPException` on every anticipated failure so callers
+    can let exceptions propagate directly.
+    """
+    vm = query_repo.get_vm(vm_id)
+    if vm is None:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+
+    if vm.get("ipv4") is not None:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
+
+    cmd_repo.lock_ipv4_allocation()
+    used_ipv4 = query_repo.list_used_ipv4()
+    try:
+        ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
+    except ProxmoxConfigError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except ProxmoxUnavailableError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet") from exc
+
+    try:
+        cmd_repo.update_vm_ipv4(vm_id, ipv4)
+    except IntegrityError as exc:
+        db.rollback()
+        logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="IPv4 address conflict, please retry") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+
+    gateway = get_proxmox_gateway()
+    try:
+        gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
+    except ProxmoxError as exc:
+        logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}") from exc
+
+    try:
+        gateway.restart_vm(vm_id=vm_id)
+    except ProxmoxError:
+        logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+
+    return ipv4
 
 
 @router.get("/users/{user_id}/identity")
@@ -142,7 +208,15 @@ def list_cotise_ended_users(
     :returns: List of user dicts with ``id``, ``username``, ``first_name``, ``last_name``, ``email``.
     :rtype: list[dict]
     """
-    return fetch_keycloak_group_members("/cotise_ended")
+    return fetch_keycloak_group_members("/hosting_ended")
+
+
+@router.get("/users/hosting-charte")
+def list_hosting_charte_users(
+    _: AuthCtx = Depends(require_admin),
+) -> list[dict]:
+    """Return all Keycloak users in the ``/hosting-charte`` group (admin only)."""
+    return fetch_keycloak_group_members("/hosting-charte")
 
 
 @router.get("/requests", response_model=AdminRequestListResponse)
@@ -169,59 +243,12 @@ def update_request_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
     if body.status == "approved" and row["type"] == "ipv4":
-        vm_id = row["vm_id"]
-        query_repo = VmQueryRepo(db)
-        cmd_repo = VmCmdRepo(db)
-
-        vm = query_repo.get_vm(vm_id)
-        if vm is None:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
-
-        if vm.get("ipv4") is not None:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
-
-        cmd_repo.lock_ipv4_allocation()
-        used_ipv4 = query_repo.list_used_ipv4()
-        try:
-            ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
-        except ProxmoxConfigError as exc:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-        except ProxmoxUnavailableError as exc:
-            db.rollback()
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet") from exc
-
-        try:
-            cmd_repo.update_vm_ipv4(vm_id, ipv4)
-        except IntegrityError as exc:
-            db.rollback()
-            logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="IPv4 address conflict, please retry") from exc
-        except SQLAlchemyError as exc:
-            db.rollback()
-            logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
-
-        try:
-            db.commit()
-        except SQLAlchemyError as exc:
-            db.rollback()
-            logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
-
-        gateway = get_proxmox_gateway()
-        try:
-            gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
-        except ProxmoxError as exc:
-            logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}") from exc
-
-        try:
-            gateway.restart_vm(vm_id=vm_id)
-        except ProxmoxError:
-            logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+        _allocate_and_assign_ipv4(
+            vm_id=row["vm_id"],
+            db=db,
+            query_repo=VmQueryRepo(db),
+            cmd_repo=VmCmdRepo(db),
+        )
     else:
         db.commit()
 
@@ -272,76 +299,71 @@ def assign_vm_ipv4(
     :raises HTTPException 503: If no IPv4 addresses are available in the subnet,
         the subnet is not configured, or a database error occurs.
     """
-    query_repo = VmQueryRepo(db)
-    cmd_repo = VmCmdRepo(db)
-
-    vm = query_repo.get_vm(vm_id)
-    if vm is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
-
-    if vm.get("ipv4") is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="VM already has an IPv4 address assigned",
-        )
-
-    cmd_repo.lock_ipv4_allocation()
-    used_ipv4 = query_repo.list_used_ipv4()
-    try:
-        ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
-    except ProxmoxConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from exc
-    except ProxmoxUnavailableError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No available IPv4 address in configured subnet",
-        ) from exc
-
-    try:
-        cmd_repo.update_vm_ipv4(vm_id, ipv4)
-    except IntegrityError as exc:
-        db.rollback()
-        logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="IPv4 address conflict, please retry",
-        ) from exc
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database temporarily unavailable",
-        ) from exc
-
-    try:
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database temporarily unavailable",
-        ) from exc
-
-    gateway = get_proxmox_gateway()
-    try:
-        gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
-    except ProxmoxError as exc:
-        logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
-        ) from exc
-
-    try:
-        gateway.restart_vm(vm_id=vm_id)
-    except ProxmoxError:
-        # Config is applied, DB is committed — restart failure is non-fatal.
-        # The admin can restart the VM manually for cloud-init to pick up the IPv4.
-        logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+    ipv4 = _allocate_and_assign_ipv4(
+        vm_id=vm_id,
+        db=db,
+        query_repo=VmQueryRepo(db),
+        cmd_repo=VmCmdRepo(db),
+    )
 
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
+
+
+@router.post("/templates", response_model=VMTemplateResponse, status_code=201)
+def create_template(
+    body: AdminTemplateCreateBody,
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> VMTemplateResponse:
+    """Create a new VM template (admin only).
+
+    The template_id must correspond to an existing Proxmox template VMID.
+    """
+    repo = VmCmdRepo(db)
+    try:
+        repo.insert_template(template_id=body.template_id, name=body.name)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Template with this ID or name already exists",
+        ) from exc
+    return VMTemplateResponse(template_id=body.template_id, name=body.name)
+
+
+@router.delete("/templates/{template_id}", status_code=204)
+def delete_template(
+    template_id: int,
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a VM template (admin only).
+
+    Will fail if VMs still reference this template.
+    """
+    repo = VmCmdRepo(db)
+    try:
+        if not repo.delete_template(template_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete template: VMs still reference it",
+        ) from exc
+
+
+@router.post("/purge", status_code=200)
+def trigger_purge(
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Manually trigger the expired-membership VM purge (admin only)."""
+    from app.services.proxmox.gateway import get_proxmox_gateway
+    from app.services.vm.purge import run_purge
+    from app.core.config import get_settings as _gs
+
+    settings = _gs()
+    return run_purge(db=db, gateway=get_proxmox_gateway(), settings=settings)

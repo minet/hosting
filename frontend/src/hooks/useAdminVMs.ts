@@ -24,12 +24,14 @@ export function useAdminVMs() {
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
-  useEffect(() => {
+  function refresh() {
     apiFetch('/api/vms', undefined, VMListSchema)
       .then(data => setVMs(data.items as AdminVM[]))
       .catch(err => toast(err.message ?? 'Impossible de charger les VMs'))
       .finally(() => setLoading(false))
-  }, [])
+  }
 
-  return { vms, loading }
+  useEffect(() => { refresh() }, [])
+
+  return { vms, loading, refresh }
 }

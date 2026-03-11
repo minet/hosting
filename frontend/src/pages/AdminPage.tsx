@@ -1,22 +1,27 @@
-import { useState, useMemo, useContext, useRef, useEffect, useCallback } from 'react'
-import { ChevronUp, ChevronDown, ChevronsUpDown, Cpu, MemoryStick, HardDrive, Eye, Loader, Filter, X, Check, AlertTriangle } from 'lucide-react'
+import { useState, useMemo, useContext, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Cpu, MemoryStick, HardDrive, X } from 'lucide-react'
 import { useAdminVMs, type AdminVM } from '../hooks/useAdminVMs'
-import { useAdminRequests, type AdminRequest } from '../hooks/useAdminRequests'
-import { useAdminCotiseEnded } from '../hooks/useAdminCotiseEnded'
-import { useVMStatus, VMStatusContext } from '../contexts/VMStatusContext'
-import { apiFetch } from '../api'
+import { useAdminRequests } from '../hooks/useAdminRequests'
+import { useAdminGroupMembers } from '../hooks/useAdminGroupMembers'
+import { VMStatusContext } from '../contexts/VMStatusContext'
+import RequestBadge from '../components/admin/RequestBadge'
+import StatusCell from '../components/admin/StatusCell'
+import RevealOwner from '../components/admin/RevealOwner'
+import Th from '../components/admin/Th'
+import TemplatesTab from '../components/admin/TemplatesTab'
 
 type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status'
 type SortDir = 'asc' | 'desc'
 type StatusMap = Map<number, { status: string; uptime: number | null }>
-interface UserIdentity { username: string | null; first_name: string | null; last_name: string | null; email: string | null }
+type Tab = 'vms' | 'templates'
 
-const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id'] as const
+const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
 type ColId = typeof COLS[number]
 
 const DEFAULT_WIDTHS: Record<ColId, number> = {
   vm_id: 60, status: 120, name: 150, template_name: 130,
-  cpu_cores: 220, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340,
+  cpu_cores: 220, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
 }
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
@@ -26,305 +31,40 @@ function getStatusOrder(vmId: number, statuses: StatusMap): number {
   return 2
 }
 
-// ─── Request dialog ───────────────────────────────────────────────────────────
-
-function RequestDialog({ request, onClose, onUpdate }: {
-  request: AdminRequest
-  onClose: () => void
-  onUpdate: (id: number, status: 'approved' | 'rejected') => Promise<void>
-}) {
-  const [loading, setLoading] = useState(false)
-
-  async function handle(status: 'approved' | 'rejected') {
-    setLoading(true)
-    try { await onUpdate(request.id, status) } finally { setLoading(false) }
-    onClose()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl p-6 flex flex-col gap-4 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
-
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-bold text-neutral-800">
-            Requête {request.type === 'ipv4' ? 'IPv4' : 'DNS'}
-          </p>
-          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 cursor-pointer">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 border border-neutral-100 text-xs">
-            <span className="text-neutral-400">VM</span>
-            <span className="font-medium text-neutral-700">{request.vm_name ?? request.vm_id}</span>
-          </div>
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 border border-neutral-100 text-xs">
-            <span className="text-neutral-400">Type</span>
-            <span className="font-mono text-neutral-700">{request.type}</span>
-          </div>
-          {request.dns_label && (
-            <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 border border-neutral-100 text-xs">
-              <span className="text-neutral-400">Label DNS</span>
-              <span className="font-mono text-neutral-700">{request.dns_label}</span>
-            </div>
-          )}
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 border border-neutral-100 text-xs">
-            <span className="text-neutral-400">Soumise le</span>
-            <span className="text-neutral-700">{new Date(request.created_at).toLocaleString('fr-FR')}</span>
-          </div>
-        </div>
-
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={() => handle('approved')}
-            disabled={loading}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
-          >
-            <Check size={14} /> Approuver
-          </button>
-          <button
-            onClick={() => handle('rejected')}
-            disabled={loading}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
-          >
-            <X size={14} /> Rejeter
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function RequestBadge({ request, onUpdate }: {
-  request: AdminRequest
-  onUpdate: (id: number, status: 'approved' | 'rejected') => Promise<void>
-}) {
-  const [open, setOpen] = useState(false)
-  const isIpv4 = request.type === 'ipv4'
-
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className={`flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-md border transition-colors cursor-pointer whitespace-nowrap ${
-          isIpv4
-            ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
-            : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
-        }`}
-      >
-        {!isIpv4 && <AlertTriangle size={11} />}
-        {isIpv4 ? 'Demande IPv4' : `DNS : ${request.dns_label}`}
-      </button>
-      {open && <RequestDialog request={request} onClose={() => setOpen(false)} onUpdate={onUpdate} />}
-    </>
-  )
-}
-
-// ─── Status cell ─────────────────────────────────────────────────────────────
-
-function StatusCell({ vmId }: { vmId: number }) {
-  const entry = useVMStatus(vmId)
-  const status = entry?.status
-  const dot = !status ? 'bg-neutral-300' : status === 'running' ? 'bg-emerald-500' : 'bg-red-400'
-  const label = !status
-    ? <span className="text-neutral-400">—</span>
-    : status === 'running'
-      ? <span className="text-emerald-600 font-medium">running</span>
-      : <span className="text-red-500 font-medium">{status}</span>
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${dot}`} />
-      {label}
-    </div>
-  )
-}
-
-// ─── Reveal owner ─────────────────────────────────────────────────────────────
-
-function RevealOwner({ ownerId }: { ownerId: string }) {
-  const [identity, setIdentity] = useState<UserIdentity | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [revealed, setRevealed] = useState(false)
-
-  async function reveal() {
-    if (revealed) return
-    setLoading(true)
-    try {
-      const data = await apiFetch<UserIdentity>(`/api/users/${encodeURIComponent(ownerId)}/identity`)
-      setIdentity(data)
-    } finally {
-      setLoading(false)
-      setRevealed(true)
-    }
-  }
-
-  if (!revealed) {
-    return (
-      <button onClick={reveal} className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-500 transition-colors" title="Révéler l'identité">
-        {loading ? <Loader size={11} className="animate-spin text-blue-400" /> : <Eye size={11} />}
-        <span className="font-mono">{ownerId}</span>
-      </button>
-    )
-  }
-
-  const name = [identity?.first_name, identity?.last_name].filter(Boolean).join(' ') || identity?.username || null
-  return (
-    <div className="flex flex-col gap-0.5" title={ownerId}>
-      {name
-        ? <span className="text-xs font-medium text-neutral-700">{name}</span>
-        : <span className="font-mono text-xs text-neutral-500">{ownerId}</span>
-      }
-      {identity?.email && <span className="text-xs text-neutral-400">{identity.email}</span>}
-    </div>
-  )
-}
-
-// ─── Column filter popover ────────────────────────────────────────────────────
-
-interface ColFilterProps {
-  active: boolean; type: 'text' | 'select'; value: string
-  onChange: (v: string) => void; options?: { label: string; value: string }[]; placeholder?: string
-}
-
-function ColFilter({ active, type, value, onChange, options, placeholder }: ColFilterProps) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    if (open) document.addEventListener('mousedown', handle)
-    return () => document.removeEventListener('mousedown', handle)
-  }, [open])
-
-  return (
-    <div ref={ref} className="relative inline-block" onClick={e => e.stopPropagation()}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`p-0.5 rounded transition-colors ${active ? 'text-blue-500 bg-blue-50' : 'text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100'}`}
-      >
-        <Filter size={10} />
-      </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-neutral-200 rounded shadow-lg p-2 min-w-[160px]">
-          {type === 'select' ? (
-            <select autoFocus value={value} onChange={e => { onChange(e.target.value); setOpen(false) }}
-              className="w-full text-xs border border-neutral-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400 bg-white">
-              {options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          ) : (
-            <div className="flex items-center gap-1">
-              <input autoFocus type="text" value={value} onChange={e => onChange(e.target.value)}
-                placeholder={placeholder ?? 'Filtrer…'}
-                className="flex-1 text-xs border border-neutral-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400" />
-              {value && (
-                <button onClick={() => { onChange(''); setOpen(false) }} className="text-neutral-400 hover:text-neutral-700">
-                  <X size={11} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Th with sort + filter + resize handle ────────────────────────────────────
-
-interface ThProps {
-  col: ColId; label: string; width: number
-  sortKey: SortKey; sortDir: SortDir; onSort: (col: SortKey) => void
-  onResizeStart: (e: React.MouseEvent, col: ColId) => void
-  filter?: ColFilterProps
-}
-
-function Th({ col, label, width, sortKey, sortDir, onSort, onResizeStart, filter }: ThProps) {
-  const sorted = (col as string) === sortKey
-  return (
-    <th
-      className="group relative px-3 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap bg-neutral-50 border-r border-neutral-200 last:border-r-0 select-none overflow-hidden"
-      style={{ width, minWidth: width }}
-    >
-      <div className="flex items-center gap-1.5 overflow-hidden">
-        <button className="flex items-center gap-1 hover:text-neutral-800 transition-colors overflow-hidden" onClick={() => onSort(col as SortKey)}>
-          <span className="truncate">{label}</span>
-          {sorted
-            ? sortDir === 'asc' ? <ChevronUp size={11} className="text-blue-500 shrink-0" /> : <ChevronDown size={11} className="text-blue-500 shrink-0" />
-            : <ChevronsUpDown size={11} className="text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-          }
-        </button>
-        {filter && <ColFilter {...filter} />}
-      </div>
-      {/* Resize handle */}
-      <div
-        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors opacity-0 group-hover:opacity-100"
-        onMouseDown={e => onResizeStart(e, col)}
-      />
-    </th>
-  )
-}
-
-// ─── Cotise ended tab ─────────────────────────────────────────────────────────
-
-function CotiseEndedTab() {
-  const { users, loading } = useAdminCotiseEnded()
-
-  return (
-    <div className="flex flex-col gap-3 h-full">
-      <div className="flex items-center justify-between shrink-0">
-        <h1 className="text-base font-semibold text-neutral-800">Cotisations expirées</h1>
-        <span className="text-xs text-neutral-400 font-mono">
-          {loading ? 'Chargement…' : `${users.length} membre${users.length !== 1 ? 's' : ''}`}
-        </span>
-      </div>
-      <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 shadow-sm">
-        <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 border-b border-neutral-200 bg-neutral-50">
-            <tr>
-              {['Identifiant', 'Prénom', 'Nom', 'Email'].map(h => (
-                <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 uppercase tracking-wider whitespace-nowrap border-r border-neutral-200 last:border-r-0">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-neutral-100">
-            {loading && (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-neutral-400 text-xs"><Loader size={14} className="animate-spin inline mr-2" />Chargement…</td></tr>
-            )}
-            {!loading && users.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucun membre dans ce groupe</td></tr>
-            )}
-            {users.map(u => (
-              <tr key={u.id ?? u.username} className="hover:bg-neutral-50 transition-colors">
-                <td className="px-3 py-2 font-mono text-xs text-neutral-500 border-r border-neutral-100">{u.username ?? <span className="text-neutral-300">—</span>}</td>
-                <td className="px-3 py-2 text-xs text-neutral-700 border-r border-neutral-100">{u.first_name ?? <span className="text-neutral-300">—</span>}</td>
-                <td className="px-3 py-2 text-xs text-neutral-700 border-r border-neutral-100">{u.last_name ?? <span className="text-neutral-300">—</span>}</td>
-                <td className="px-3 py-2 text-xs text-neutral-500">{u.email ?? <span className="text-neutral-300">—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
-
-type Tab = 'vms' | 'cotise_ended'
-
 interface Filters {
   name: string; template: string; status: string
   ipv4: string; ipv6: string; mac: string; dns: string; owner: string
 }
 const EMPTY_FILTERS: Filters = { name: '', template: '', status: '', ipv4: '', ipv6: '', mac: '', dns: '', owner: '' }
 
+export { type ColId, type SortKey, type SortDir }
+
 export default function AdminPage() {
-  const { vms, loading } = useAdminVMs()
-  const { pendingByVm, updateRequest } = useAdminRequests()
+  const navigate = useNavigate()
+  const { vms, loading, refresh: refreshVMs } = useAdminVMs()
+  const { pendingByVm, updateRequest } = useAdminRequests(refreshVMs)
   const { statuses } = useContext(VMStatusContext)
+  const charte = useAdminGroupMembers('/api/users/hosting-charte')
+  const cotiseEnded = useAdminGroupMembers('/api/users/cotise-ended')
+
+  const userLookup = useMemo(() => {
+    const map = new Map<string, { name: string; email: string | null }>()
+    for (const u of [...charte.users, ...cotiseEnded.users]) {
+      if (!u.id || map.has(u.id)) continue
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || u.id
+      map.set(u.id, { name, email: u.email })
+    }
+    return map
+  }, [charte.users, cotiseEnded.users])
+
+  const expiredOwners = useMemo(() => {
+    const set = new Set<string>()
+    for (const u of cotiseEnded.users) {
+      if (u.id) set.add(u.id)
+    }
+    return set
+  }, [cotiseEnded.users])
+
   const [tab, setTab] = useState<Tab>('vms')
   const [sortKey, setSortKey] = useState<SortKey>('vm_id')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
@@ -335,12 +75,10 @@ export default function AdminPage() {
   const onResizeStart = useCallback((e: React.MouseEvent, col: ColId) => {
     e.preventDefault()
     dragRef.current = { col, startX: e.clientX, startWidth: colWidths[col] }
-
     function onMove(ev: MouseEvent) {
       if (!dragRef.current) return
       const delta = ev.clientX - dragRef.current.startX
-      const newWidth = Math.max(60, dragRef.current.startWidth + delta)
-      setColWidths(prev => ({ ...prev, [dragRef.current!.col]: newWidth }))
+      setColWidths(prev => ({ ...prev, [dragRef.current!.col]: Math.max(60, dragRef.current!.startWidth + delta) }))
     }
     function onUp() {
       dragRef.current = null
@@ -370,7 +108,14 @@ export default function AdminPage() {
     if (filters.ipv6 && !(vm.ipv6 ?? '').includes(filters.ipv6)) return false
     if (filters.mac && !(vm.mac ?? '').toLowerCase().includes(filters.mac.toLowerCase())) return false
     if (filters.dns && !(vm.dns ?? '').toLowerCase().includes(filters.dns.toLowerCase())) return false
-    if (filters.owner && !(vm.owner_id ?? '').toLowerCase().includes(filters.owner.toLowerCase())) return false
+    if (filters.owner) {
+      const ownerFilter = filters.owner.toLowerCase()
+      const known = vm.owner_id ? userLookup.get(vm.owner_id) : undefined
+      const matchId = (vm.owner_id ?? '').toLowerCase().includes(ownerFilter)
+      const matchName = known?.name.toLowerCase().includes(ownerFilter)
+      const matchEmail = known?.email?.toLowerCase().includes(ownerFilter)
+      if (!matchId && !matchName && !matchEmail) return false
+    }
     return true
   }), [vms, filters, statuses])
 
@@ -392,18 +137,23 @@ export default function AdminPage() {
     { label: 'Tous', value: '' }, { label: 'Running', value: 'running' }, { label: 'Stopped', value: 'stopped' },
   ]
 
-  if (tab === 'cotise_ended') {
+  // ─── Tab bar ──────────────────────────────────────────────────────────────
+  const tabBar = (
+    <div className="flex items-center gap-2">
+      {(['vms', 'templates'] as Tab[]).map(t => (
+        <button key={t} onClick={() => setTab(t)}
+          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
+          {t === 'vms' ? 'Machines virtuelles' : 'Templates'}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (tab === 'templates') {
     return (
       <div className="flex flex-col gap-3 h-full">
-        <div className="flex items-center gap-2 shrink-0 border-b border-neutral-200 pb-2">
-          {(['vms', 'cotise_ended'] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
-              {t === 'vms' ? 'Machines virtuelles' : 'Cotisations expirées'}
-            </button>
-          ))}
-        </div>
-        <CotiseEndedTab />
+        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <TemplatesTab />
       </div>
     )
   }
@@ -412,29 +162,22 @@ export default function AdminPage() {
     <div className="flex flex-col gap-3 h-full">
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 border-b border-neutral-200 pb-2 w-full justify-between">
-          <div className="flex items-center gap-2">
-            {(['vms', 'cotise_ended'] as Tab[]).map(t => (
-              <button key={t} onClick={() => setTab(t)}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
-                {t === 'vms' ? 'Machines virtuelles' : 'Cotisations expirées'}
+          {tabBar}
+          <div className="flex items-center gap-3">
+            {hasFilters && (
+              <button onClick={() => setFilters(EMPTY_FILTERS)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors">
+                <X size={11} /> Effacer les filtres
               </button>
-            ))}
+            )}
+            <span className="text-xs text-neutral-400 font-mono">
+              {loading ? 'Chargement…' : `${sorted.length} / ${vms.length}`}
+            </span>
           </div>
-        <div className="flex items-center gap-3">
-          {hasFilters && (
-            <button onClick={() => setFilters(EMPTY_FILTERS)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors">
-              <X size={11} /> Effacer les filtres
-            </button>
-          )}
-          <span className="text-xs text-neutral-400 font-mono">
-            {loading ? 'Chargement…' : `${sorted.length} / ${vms.length}`}
-          </span>
-        </div>
         </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 shadow-sm">
-        <table className="text-sm border-collapse" style={{ tableLayout: 'fixed', width: Object.values(colWidths).reduce((a, b) => a + b, 0) }}>
+        <table className="text-sm border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: Object.values(colWidths).reduce((a, b) => a + b, 0) }}>
           <thead className="sticky top-0 z-10 border-b border-neutral-200">
             <tr>
               <Th col="vm_id"        label="ID"           width={colWidths.vm_id}        {...thProps} />
@@ -454,15 +197,16 @@ export default function AdminPage() {
               <Th col="dns"          label="DNS"          width={colWidths.dns}          {...thProps}
                 filter={{ active: !!filters.dns, type: 'text', value: filters.dns, onChange: v => setFilter('dns', v), placeholder: 'hostname…' }} />
               <Th col="owner_id"     label="Propriétaire" width={colWidths.owner_id}    {...thProps}
-                filter={{ active: !!filters.owner, type: 'text', value: filters.owner, onChange: v => setFilter('owner', v), placeholder: 'UUID…' }} />
+                filter={{ active: !!filters.owner, type: 'text', value: filters.owner, onChange: v => setFilter('owner', v), placeholder: 'Nom…' }} />
+              <Th col="cotise"       label="Cotisation"   width={colWidths.cotise}      {...thProps} />
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-neutral-100">
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucune VM</td></tr>
+              <tr><td colSpan={11} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucune VM</td></tr>
             )}
             {sorted.map(vm => (
-              <tr key={vm.vm_id} className="hover:bg-neutral-50 transition-colors">
+              <tr key={vm.vm_id} onClick={() => navigate(`/vm/${vm.vm_id}`)} className="hover:bg-neutral-50 transition-colors cursor-pointer">
                 <td className="px-3 py-2 font-mono text-xs text-neutral-400 border-r border-neutral-100 overflow-hidden">{vm.vm_id}</td>
                 <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden">
                   <StatusCell vmId={vm.vm_id} />
@@ -492,7 +236,7 @@ export default function AdminPage() {
                     </span>
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden">
+                <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden" onClick={e => e.stopPropagation()}>
                   {(() => {
                     const req = pendingByVm.get(vm.vm_id)?.find(r => r.type === 'ipv4')
                     if (req) return <RequestBadge request={req} onUpdate={updateRequest} />
@@ -505,18 +249,31 @@ export default function AdminPage() {
                 <td className="px-3 py-2 font-mono text-xs text-neutral-400 border-r border-neutral-100 overflow-hidden">
                   <span className="block truncate">{vm.mac ?? <span className="text-neutral-300">—</span>}</span>
                 </td>
-                <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden">
+                <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden" onClick={e => e.stopPropagation()}>
                   {(() => {
                     const req = pendingByVm.get(vm.vm_id)?.find(r => r.type === 'dns')
                     if (req) return <RequestBadge request={req} onUpdate={updateRequest} />
                     return <span className="font-mono text-neutral-500">{vm.dns ?? <span className="text-neutral-300">—</span>}</span>
                   })()}
                 </td>
-                <td className="px-3 py-2 overflow-hidden">
-                  {vm.owner_id
-                    ? <RevealOwner ownerId={vm.owner_id} />
-                    : <span className="text-neutral-300 text-xs">—</span>
-                  }
+                <td className="px-3 py-2 overflow-hidden border-r border-neutral-100" onClick={e => e.stopPropagation()}>
+                  {vm.owner_id ? (() => {
+                    const known = userLookup.get(vm.owner_id)
+                    if (known) return (
+                      <div className="flex flex-col gap-0.5" title={vm.owner_id}>
+                        <span className="text-xs font-medium text-neutral-700">{known.name}</span>
+                        {known.email && <span className="text-xs text-neutral-400">{known.email}</span>}
+                      </div>
+                    )
+                    return <RevealOwner ownerId={vm.owner_id} />
+                  })() : <span className="text-neutral-300 text-xs">—</span>}
+                </td>
+                <td className="px-3 py-2 overflow-hidden text-center">
+                  {vm.owner_id ? (
+                    expiredOwners.has(vm.owner_id)
+                      ? <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-500 border border-red-200">Expiré</span>
+                      : <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">OK</span>
+                  ) : <span className="text-neutral-300 text-xs">—</span>}
                 </td>
               </tr>
             ))}

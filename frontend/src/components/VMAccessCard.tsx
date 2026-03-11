@@ -35,7 +35,7 @@ export default function VMAccessCard({
           <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Accès VM</p>
           {vm && isOwner && (
             <p className="text-[10px] text-neutral-500 font-mono">
-              <span className="font-bold">ssh {vm.username ?? 'username'}@{vmFqdn(vm.name, vm.vm_id)}</span> marche direct !
+              <span className="font-bold">ssh {vm.username ?? 'username'}@{vmFqdn(vm)}</span> marche direct !
             </p>
           )}
         </div>

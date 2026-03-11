@@ -19,11 +19,11 @@ frontend_test/
 # Local environment files
 .env
 .env.*
-!.env.example
-*.env.local
-backend/.env
-backend/.env.*
-!backend/.env.example
+*.env
+*.env.*
+
+# Docker stack / compose with secrets
+stack.yml
 
 # IDE / editor
 .idea/

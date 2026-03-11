@@ -27,6 +27,7 @@ from .schemas import (
     VMActionResponse,
     VMCreateBody,
     VMDetailResponse,
+    VMOnbootResponse,
     VMPatchBody,
     VMPatchResponse,
     VMRequestCreateBody,
@@ -134,6 +135,32 @@ async def restart_vm(
     """
     access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.restart, vm_id=vm_id))
+
+
+@router.get("/{vm_id}/onboot", response_model=VMOnbootResponse)
+async def get_onboot(
+    vm_id: int,
+    ctx: AuthCtx = Depends(require_charter_signed),
+    access: VmAccessService = Depends(get_vm_access_service),
+    cmd: VmCommandService = Depends(get_vm_command_service),
+) -> VMOnbootResponse:
+    """Get the start-at-boot setting for a VM."""
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    result = await run_in_proxmox_executor(cmd.get_onboot, vm_id=vm_id)
+    return VMOnbootResponse.model_validate(result)
+
+
+@router.put("/{vm_id}/onboot", response_model=VMOnbootResponse)
+async def set_onboot(
+    vm_id: int,
+    ctx: AuthCtx = Depends(require_charter_signed),
+    access: VmAccessService = Depends(get_vm_access_service),
+    cmd: VmCommandService = Depends(get_vm_command_service),
+) -> VMOnbootResponse:
+    """Toggle start-at-boot for a VM (flips current value)."""
+    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    result = await run_in_proxmox_executor(cmd.toggle_onboot, vm_id=vm_id)
+    return VMOnbootResponse.model_validate(result)
 
 
 @router.patch("/{vm_id}", response_model=VMPatchResponse)

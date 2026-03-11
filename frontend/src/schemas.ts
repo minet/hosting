@@ -21,6 +21,7 @@ export const MeSchema = z.object({
   is_admin: z.boolean(),
   cotise_end_ms: z.number().nullable(),
   date_signed_hosting: z.string().nullable(),
+  ldap_login: z.string().nullable().optional(),
 })
 
 export type Me = z.infer<typeof MeSchema>

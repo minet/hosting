@@ -38,6 +38,7 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
   const [statuses, setStatuses] = useState<StatusMap>(new Map())
   const [vms, setVms] = useState<VMListItem[]>([])
   const knownIdsRef = useRef<Set<number>>(new Set())
+  const esRef = useRef<EventSource | null>(null)
   const { toast } = useToast()
 
   async function refreshVMs() {
@@ -46,16 +47,18 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
       const items = data.items as VMListItem[]
       setVms(items)
       knownIdsRef.current = new Set(items.map(v => v.vm_id))
+      return true
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Impossible de rafraîchir la liste des VMs'
       toast(msg)
+      return false
     }
   }
 
-  useEffect(() => {
-    refreshVMs()
-
+  function openStream() {
+    if (esRef.current) return
     const es = new EventSource(`${API_BASE}/api/vms/status/stream`, { withCredentials: true })
+    esRef.current = es
 
     es.onmessage = (e) => {
       try {
@@ -81,7 +84,22 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
       } catch { /* ignore */ }
     })
 
-    return () => es.close()
+    es.onerror = () => {
+      // On error, close and retry after a delay (handles 401 on direct navigation)
+      es.close()
+      esRef.current = null
+      setTimeout(() => {
+        refreshVMs().then(ok => { if (ok) openStream() })
+      }, 3000)
+    }
+  }
+
+  useEffect(() => {
+    refreshVMs().then(ok => { if (ok) openStream() })
+    return () => {
+      esRef.current?.close()
+      esRef.current = null
+    }
   }, [])
 
   return (

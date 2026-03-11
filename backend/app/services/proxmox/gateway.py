@@ -587,6 +587,33 @@ class ProxmoxGateway:
                 timeout_seconds=timeout,
             )
 
+    def set_onboot(self, *, vm_id: int, onboot: bool) -> None:
+        """Enable or disable start-at-boot for a VM.
+
+        :param vm_id: VMID of the target VM.
+        :param onboot: ``True`` to start on boot, ``False`` to disable.
+        :raises ProxmoxError: On API failures.
+        """
+        self._guard(lambda: self._set_onboot(vm_id=vm_id, onboot=onboot))
+
+    def _set_onboot(self, *, vm_id: int, onboot: bool) -> None:
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        self._client.nodes(node).qemu(vm_id).config.post(onboot=int(onboot))
+
+    def get_onboot(self, *, vm_id: int) -> bool:
+        """Return whether a VM is configured to start at boot.
+
+        :param vm_id: VMID of the target VM.
+        :returns: ``True`` if onboot is enabled.
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._get_onboot(vm_id=vm_id))
+
+    def _get_onboot(self, *, vm_id: int) -> bool:
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        config = self._get_config(node=node, vm_id=vm_id)
+        return bool(config.get("onboot", 0))
+
     def get_pve_auth_ticket(self) -> str:
         """Return the current PVEAuthCookie value from the proxmoxer session."""
         return self._client._backend.auth.pve_auth_ticket
