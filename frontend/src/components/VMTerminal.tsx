@@ -155,7 +155,7 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
       rxBuffer = merged
 
       const { frames, rest } = decodeMuxFrames(rxBuffer)
-      rxBuffer = rest
+      rxBuffer = new Uint8Array(rest)
 
       if (frames.length > 0) {
         for (const frame of frames) {

@@ -29,7 +29,7 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
           maxValue={total || 1}
           type="semicircle"
           fadeInAnimation={false}
-          animateDuration={0}
+
           arc={{
             width: 0.35,
             padding: 0.01,
@@ -64,7 +64,7 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
             maxValue={total || 1}
             type="semicircle"
             fadeInAnimation={false}
-            animateDuration={0}
+  
             arc={{
               width: 0.38,
               padding: 0.01,
@@ -101,12 +101,11 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
               maxValue={total || 1}
               type="radial"
               fadeInAnimation={false}
-              animateDuration={0}
+    
               arc={{
                 width: 0.2,
                 padding: 0.01,
                 cornerRadius: 3,
-                endAngle: 30,
                 subArcs: [
                   { limit: used, color: fill, showTick: false },
                   { limit: total || 1, color: '#e2e8f0', showTick: false },
