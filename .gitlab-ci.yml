@@ -25,6 +25,11 @@ docker_backend:
       --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/backend/cache"
+      --snapshot-mode=redo
+      --use-new-run
+  rules:
+    - changes:
+        - backend/**/*
 
 docker_frontend:
   stage: docker
@@ -43,6 +48,11 @@ docker_frontend:
       --build-arg "VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:/adh6_admin,/cluster-dev}"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
+      --snapshot-mode=redo
+      --use-new-run
+  rules:
+    - changes:
+        - frontend/**/*
 
 # ── Deploy stage ──────────────────────────────────────────────────────────────
 
@@ -56,5 +66,7 @@ deploy:
       folder_name: hosting-dev.minet.net
       image_registry: $CI_REGISTRY_IMAGE
   needs:
-    - docker_backend
-    - docker_frontend
+    - job: docker_backend
+      optional: true
+    - job: docker_frontend
+      optional: true
