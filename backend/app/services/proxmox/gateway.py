@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import threading
+import time
 from functools import lru_cache
 from typing import Any
 
@@ -760,14 +763,48 @@ class ProxmoxGateway:
             raise_mapped_proxmox_error(exc)
 
 
-@lru_cache(maxsize=1)
-def get_proxmox_gateway() -> ProxmoxGateway:
-    """Return a shared, cached :class:`ProxmoxGateway` instance.
+_gateway_lock = threading.Lock()
+_gateway_instance: ProxmoxGateway | None = None
+_gateway_last_failure: float = 0.0
+_GATEWAY_RETRY_COOLDOWN = 30.0  # seconds between retry attempts
 
-    The gateway is constructed once from the current application settings and
-    reused for the lifetime of the process.
+_logger = logging.getLogger(__name__)
+
+
+def get_proxmox_gateway() -> ProxmoxGateway:
+    """Return a shared :class:`ProxmoxGateway` instance with retry cooldown.
+
+    If the connection to Proxmox fails, subsequent calls within the cooldown
+    period raise immediately instead of hammering the Proxmox auth endpoint.
 
     :returns: Singleton :class:`ProxmoxGateway` instance.
     :rtype: ProxmoxGateway
+    :raises ProxmoxError: If Proxmox is unreachable.
     """
-    return ProxmoxGateway(get_settings())
+    global _gateway_instance, _gateway_last_failure
+
+    if _gateway_instance is not None:
+        return _gateway_instance
+
+    with _gateway_lock:
+        # Double-check after acquiring lock
+        if _gateway_instance is not None:
+            return _gateway_instance
+
+        elapsed = time.monotonic() - _gateway_last_failure
+        if _gateway_last_failure and elapsed < _GATEWAY_RETRY_COOLDOWN:
+            raise ProxmoxError(
+                f"Proxmox connection unavailable (retry in {_GATEWAY_RETRY_COOLDOWN - elapsed:.0f}s)"
+            )
+
+        try:
+            _gateway_instance = ProxmoxGateway(get_settings())
+            return _gateway_instance
+        except Exception:
+            _gateway_last_failure = time.monotonic()
+            _logger.warning(
+                "Failed to connect to Proxmox, will retry in %.0fs",
+                _GATEWAY_RETRY_COOLDOWN,
+                exc_info=True,
+            )
+            raise ProxmoxError("Proxmox connection failed") from None
