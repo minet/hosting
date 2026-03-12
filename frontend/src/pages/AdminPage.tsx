@@ -10,11 +10,12 @@ import StatusCell from '../components/admin/StatusCell'
 import RevealOwner from '../components/admin/RevealOwner'
 import Th from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
+import ProxmoxTab from '../components/admin/ProxmoxTab'
 
 type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status'
 type SortDir = 'asc' | 'desc'
 type StatusMap = Map<number, { status: string; uptime: number | null }>
-type Tab = 'vms' | 'templates'
+type Tab = 'vms' | 'templates' | 'proxmox'
 
 const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
 type ColId = typeof COLS[number]
@@ -140,10 +141,10 @@ export default function AdminPage() {
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
     <div className="flex items-center gap-2">
-      {(['vms', 'templates'] as Tab[]).map(t => (
+      {(['vms', 'templates', 'proxmox'] as Tab[]).map(t => (
         <button key={t} onClick={() => setTab(t)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
-          {t === 'vms' ? 'Machines virtuelles' : 'Templates'}
+          {t === 'vms' ? 'Machines virtuelles' : t === 'templates' ? 'Templates' : 'Proxmox'}
         </button>
       ))}
     </div>
@@ -154,6 +155,15 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
         <TemplatesTab />
+      </div>
+    )
+  }
+
+  if (tab === 'proxmox') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <ProxmoxTab />
       </div>
     )
   }

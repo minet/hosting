@@ -277,6 +277,25 @@ async def get_cluster_resources(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
 
+@router.get("/cluster/status")
+async def get_cluster_status(
+    _: AuthCtx = Depends(require_admin),
+) -> dict[str, Any]:
+    """Return an aggregated Proxmox cluster status (admin only).
+
+    Combines node resources, storage resources, and Proxmox version
+    into a single response.
+    """
+    gw = get_proxmox_gateway()
+    try:
+        nodes = await run_in_proxmox_executor(gw.cluster_resources, type="node")
+        storages = await run_in_proxmox_executor(gw.cluster_resources, type="storage")
+        version = await run_in_proxmox_executor(gw.version)
+    except ProxmoxError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    return {"nodes": nodes, "storages": storages, "version": version}
+
+
 @router.post("/vms/{vm_id}/ipv4", response_model=VMAssignIPv4Response, status_code=201)
 def assign_vm_ipv4(
     vm_id: int,
