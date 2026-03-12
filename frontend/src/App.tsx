@@ -19,7 +19,7 @@ import ToastContainer from './components/ToastContainer'
 //   VITE_RESTRICTED_ROLES=/declic-admin,/adh6-admin
 const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
   .split(',')
-  .map((r: string) => r.trim())
+  .map((r: string) => r.trim().replace(/^\//, ''))
   .filter(Boolean)
 
 const DEV_MODE = import.meta.env.DEV

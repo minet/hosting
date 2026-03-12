@@ -40,7 +40,7 @@ docker_frontend:
       --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
       --build-arg "VITE_API_URL=${VITE_API_URL:https://hosting-dev.minet.net}"
       --build-arg "VITE_DNS_ZONE=${VITE_DNS_ZONE:hdev.minet.net}"
-      --build-arg "VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:/adh6-admin,/cluster-dev}"
+      --build-arg "VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:/adh6_admin,/cluster-dev}"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
 
