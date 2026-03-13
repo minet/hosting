@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import secrets
 import ssl
 import time
@@ -22,6 +23,8 @@ from fastapi import HTTPException, status
 from fastapi import Request as FastAPIRequest
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _RETRYABLE_HTTP_STATUS_CODES = {429, 502, 503, 504}
 
@@ -143,6 +146,12 @@ def _post_form_json_with_retry(*, url: str, payload: dict[str, str]) -> dict[str
                 )
             return parsed
         except HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            logger.warning("token endpoint returned HTTP %s: %s", exc.code, body)
             if exc.code in _RETRYABLE_HTTP_STATUS_CODES and attempt < max_retries:
                 time.sleep(retry_delay_seconds * (attempt + 1))
                 continue
