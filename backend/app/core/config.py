@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     proxmox_node: str = Field(default="pve", alias="PROXMOX_NODE")
     proxmox_password: str | None = Field(default=None, alias="PROXMOX_PASSWORD")
     proxmox_user: str | None = Field(default=None, alias="PROXMOX_USER")
+    proxmox_token_id: str | None = Field(default=None, alias="PROXMOX_TOKEN_ID")
+    proxmox_token_secret: str | None = Field(default=None, alias="PROXMOX_TOKEN_SECRET")
     proxmox_service: str = Field(default="PVE", alias="PROXMOX_SERVICE")
 
     smtp_host: str = Field(default="192.168.102.18", alias="SMTP_HOST")

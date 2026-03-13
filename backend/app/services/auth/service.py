@@ -133,6 +133,13 @@ def callback_redirect(
     refresh_token = token_response.get("refresh_token")
     refresh_token_value = refresh_token if isinstance(refresh_token, str) else None
 
+    logger.info(
+        "callback: token sizes — access=%d, id=%s, refresh=%s",
+        len(access_token),
+        len(id_token_value) if id_token_value else "none",
+        len(refresh_token_value) if refresh_token_value else "none",
+    )
+
     redirect = RedirectResponse(url=frontend_redirect, status_code=status.HTTP_302_FOUND)
     set_token_cookies(
         redirect,

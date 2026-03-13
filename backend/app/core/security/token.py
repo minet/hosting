@@ -16,8 +16,12 @@ from jwcrypto.common import JWException
 from keycloak import KeycloakOpenID
 from keycloak.exceptions import KeycloakError
 
+import logging
+
 from app.core.config import Settings, get_settings
 from app.core.sessions import get_access_token
+
+logger = logging.getLogger(__name__)
 
 TokenPayload = dict[str, Any]
 http_bearer = HTTPBearer(auto_error=False)
@@ -66,8 +70,11 @@ class TokenService:
 
         access_token = get_access_token(request)
         if access_token:
+            logger.info("from_request: cookie found (%d chars)", len(access_token))
             return self.decode(access_token)
 
+        cookie_names = list(request.cookies.keys())
+        logger.warning("from_request: no access token. cookies present: %s", cookie_names)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Bearer token or access token cookie",

@@ -65,8 +65,3 @@ deploy:
     inputs:
       folder_name: hosting-dev.minet.net
       image_registry: $CI_REGISTRY_IMAGE
-  needs:
-    - job: docker_backend
-      optional: true
-    - job: docker_frontend
-      optional: true

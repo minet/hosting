@@ -46,15 +46,27 @@ class ProxmoxGateway:
         :raises ProxmoxError: If the base URL, user, or password are not configured.
         """
         self._settings = settings
-        self._client = ProxmoxAPI(
-            host=self._host,
-            user=self._user,
-            password=self._password,
-            verify_ssl=settings.proxmox_verify_tls,
-            timeout=settings.proxmox_timeout_seconds,
-            port=self._port,
-            service=settings.proxmox_service,
-        )
+        if settings.proxmox_token_id and settings.proxmox_token_secret:
+            self._client = ProxmoxAPI(
+                host=self._host,
+                user=self._user,
+                token_name=settings.proxmox_token_id,
+                token_value=settings.proxmox_token_secret,
+                verify_ssl=settings.proxmox_verify_tls,
+                timeout=settings.proxmox_timeout_seconds,
+                port=self._port,
+                service=settings.proxmox_service,
+            )
+        else:
+            self._client = ProxmoxAPI(
+                host=self._host,
+                user=self._user,
+                password=self._password,
+                verify_ssl=settings.proxmox_verify_tls,
+                timeout=settings.proxmox_timeout_seconds,
+                port=self._port,
+                service=settings.proxmox_service,
+            )
         self._tasks = TaskService(client=self._client)
         self._cloudinit = CloudInitService(client=self._client, task_service=self._tasks)
 
