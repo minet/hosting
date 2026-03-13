@@ -7,12 +7,15 @@ of Keycloak with stateless cookie-based token storage.
 
 from __future__ import annotations
 
+import logging
 from typing import TypedDict
 from urllib.parse import urlencode
 
 from fastapi import HTTPException, status
 from fastapi import Request as FastAPIRequest
 from fastapi.responses import RedirectResponse
+
+logger = logging.getLogger(__name__)
 
 from app.auth.context import _claim_value, _cotise_end_ms, _extract_user_id, _groups, csv_values
 from app.core.config import get_settings
@@ -103,16 +106,24 @@ def callback_redirect(
         ttl=settings.auth_state_ttl_seconds,
     )
     if not state_data:
+        logger.warning("callback: invalid or expired auth state")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired auth state")
     frontend_redirect, code_verifier = state_data
 
-    token_response = exchange_code_for_token(
-        code=code,
-        redirect_uri=callback_url(request),
-        code_verifier=code_verifier,
-    )
+    resolved_callback = callback_url(request)
+    logger.info("callback: exchanging code, redirect_uri=%s", resolved_callback)
+    try:
+        token_response = exchange_code_for_token(
+            code=code,
+            redirect_uri=resolved_callback,
+            code_verifier=code_verifier,
+        )
+    except HTTPException:
+        logger.exception("callback: code exchange failed (redirect_uri=%s)", resolved_callback)
+        raise
     access_token = token_response.get("access_token")
     if not isinstance(access_token, str) or not access_token:
+        logger.warning("callback: no access_token in token response")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed",
