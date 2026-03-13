@@ -655,11 +655,15 @@ class ProxmoxGateway:
         ticket via user+password to guarantee validity.
         """
         service = self._settings.proxmox_service or "PVE"
-        ticket = self._get_pve_ticket()
+        ticket, _ = self._get_pve_ticket()
         return {"Cookie": f"{service}AuthCookie={ticket}"}
 
-    def _get_pve_ticket(self) -> str:
-        """Obtain a PVE auth ticket by authenticating with user+password."""
+    def _get_pve_ticket(self) -> tuple[str, str]:
+        """Obtain a PVE auth ticket and CSRF token by authenticating with user+password.
+
+        :returns: Tuple of (ticket, csrf_prevention_token).
+        :rtype: tuple[str, str]
+        """
         import json
         import ssl
         import urllib.parse
@@ -675,7 +679,8 @@ class ProxmoxGateway:
             ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=self._settings.proxmox_timeout_seconds, context=ctx) as resp:
-            return json.loads(resp.read())["data"]["ticket"]
+            resp_data = json.loads(resp.read())["data"]
+            return resp_data["ticket"], resp_data["CSRFPreventionToken"]
 
     def termproxy(self, *, vm_id: int) -> dict[str, Any]:
         """Create a terminal proxy session for a VM.
@@ -707,6 +712,60 @@ class ProxmoxGateway:
             "ticket": str(result["ticket"]),
             "upid": result.get("upid"),
             "username": self._user,
+        }
+
+    def termproxy_with_ticket(self, *, vm_id: int) -> dict[str, Any]:
+        """Create a terminal proxy session using a fresh PVE ticket.
+
+        Unlike :meth:`termproxy`, this obtains a PVE ticket via user+password
+        and uses it to call the termproxy API so that the returned PVEVNC
+        ticket is cryptographically bound to the same PVE auth context.  The
+        PVE ticket is included in the result under the ``pve_ticket`` key so
+        the caller can use it for the WebSocket auth cookie.
+
+        :param vm_id: VMID of the target VM.
+        :returns: Dictionary with ``node``, ``port``, ``ticket``, ``upid``,
+            ``username``, and ``pve_ticket``.
+        :rtype: dict[str, Any]
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._termproxy_with_ticket(vm_id=vm_id))
+
+    def _termproxy_with_ticket(self, *, vm_id: int) -> dict[str, Any]:
+        """Internal: call termproxy using a fresh PVE ticket for consistent auth."""
+        import json
+        import ssl
+        import urllib.parse
+        import urllib.request
+
+        from app.services.proxmox.utils import node_for_vm
+
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        pve_ticket, csrf_token = self._get_pve_ticket()
+
+        base_url = self._settings.proxmox_base_url.rstrip("/")
+        url = f"{base_url}/api2/json/nodes/{node}/qemu/{vm_id}/termproxy"
+        service = self._settings.proxmox_service or "PVE"
+
+        ctx = None
+        if not self._settings.proxmox_verify_tls:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
+        req = urllib.request.Request(url, data=b"", method="POST")
+        req.add_header("Cookie", f"{service}AuthCookie={pve_ticket}")
+        req.add_header("CSRFPreventionToken", csrf_token)
+        with urllib.request.urlopen(req, timeout=self._settings.proxmox_timeout_seconds, context=ctx) as resp:
+            result = json.loads(resp.read())["data"]
+
+        return {
+            "node": node,
+            "port": int(result["port"]),
+            "ticket": str(result["ticket"]),
+            "upid": result.get("upid"),
+            "username": self._user,
+            "pve_ticket": pve_ticket,
         }
 
     def delete_vm(self, *, vm_id: int) -> None:

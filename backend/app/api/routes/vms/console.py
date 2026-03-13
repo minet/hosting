@@ -190,7 +190,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     gateway = get_proxmox_gateway()
 
     try:
-        info = await run_in_proxmox_executor(gateway.termproxy, vm_id=vm_id)
+        info = await run_in_proxmox_executor(gateway.termproxy_with_ticket, vm_id=vm_id)
     except ProxmoxError as exc:
         await websocket.close(code=4503, reason=str(exc))
         return
@@ -199,6 +199,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     port = info["port"]
     ticket = info["ticket"]
     username = info["username"]
+    pve_ticket = info["pve_ticket"]
 
     encoded_ticket = quote(ticket, safe="")
     parsed = urlparse(settings.proxmox_base_url)
@@ -210,7 +211,8 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
 
     ssl_ctx = _proxmox_ssl_context(settings.proxmox_verify_tls)
 
-    ws_auth_headers = gateway.get_ws_auth_headers()
+    service = settings.proxmox_service or "PVE"
+    ws_auth_headers = {"Cookie": f"{service}AuthCookie={pve_ticket}"}
 
     logger.info("terminal_ws vm=%s proxmox_node=%s port=%s", vm_id, node, port)
 
