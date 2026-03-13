@@ -22,6 +22,7 @@ import VMResourcesCard from '../components/VMResourcesCard'
 import VMHistoryCard from '../components/VMHistoryCard'
 import VMAccessCard from '../components/VMAccessCard'
 import VMTerminalOverlay from '../components/VMTerminalOverlay'
+import { CardSkeleton } from '../components/Skeleton'
 import { type VMDetail, type VMTask } from '../types/vm'
 
 export default function VMPage() {
@@ -157,9 +158,7 @@ export default function VMPage() {
           onOpenIpRequest={() => { req.setReqType('ipv4'); req.loadRequests(); req.setReqModalOpen(true) }}
         />
       ) : (
-        <div className="md:col-span-2 xl:col-span-2 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex items-center justify-center text-neutral-300 text-sm h-auto md:h-48 xl:h-auto">
-          Chargement...
-        </div>
+        <CardSkeleton className="md:col-span-2 xl:col-span-2 h-auto md:h-48 xl:h-auto" />
       )}
 
       <VMActionsCard

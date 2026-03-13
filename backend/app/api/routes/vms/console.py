@@ -210,9 +210,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
 
     ssl_ctx = _proxmox_ssl_context(settings.proxmox_verify_tls)
 
-    pve_ticket = gateway.get_pve_auth_ticket()
-    pve_service = settings.proxmox_service or "PVE"
-    cookie_header = f"{pve_service}AuthCookie={pve_ticket}"
+    ws_auth_headers = gateway.get_ws_auth_headers()
 
     logger.info("terminal_ws vm=%s proxmox_node=%s port=%s", vm_id, node, port)
 
@@ -220,7 +218,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
         async with websockets.connect(
             wss_url,
             ssl=ssl_ctx,
-            additional_headers={"Cookie": cookie_header},
+            additional_headers=ws_auth_headers,
             subprotocols=["binary"],
         ) as prox_ws:
             logger.info("terminal_ws vm=%s connected to proxmox, sending auth", vm_id)

@@ -642,9 +642,42 @@ class ProxmoxGateway:
         config = self._get_config(node=node, vm_id=vm_id)
         return bool(config.get("onboot", 0))
 
-    def get_pve_auth_ticket(self) -> str:
-        """Return the current PVEAuthCookie value from the proxmoxer session."""
-        return self._client._backend.auth.pve_auth_ticket
+    @property
+    def _uses_api_token(self) -> bool:
+        return bool(self._settings.proxmox_token_id and self._settings.proxmox_token_secret)
+
+    def get_ws_auth_headers(self) -> dict[str, str]:
+        """Return authentication headers for Proxmox WebSocket connections.
+
+        Proxmox VNC/terminal WebSockets require ticket-based auth, so we
+        always obtain a PVE ticket via user+password (even when the main
+        client uses an API token).
+        """
+        service = self._settings.proxmox_service or "PVE"
+        if self._uses_api_token:
+            ticket = self._get_pve_ticket()
+        else:
+            ticket = self._client._backend.auth.pve_auth_ticket
+        return {"Cookie": f"{service}AuthCookie={ticket}"}
+
+    def _get_pve_ticket(self) -> str:
+        """Obtain a PVE auth ticket by authenticating with user+password."""
+        import json
+        import ssl
+        import urllib.parse
+        import urllib.request
+
+        base_url = self._settings.proxmox_base_url.rstrip("/")
+        url = f"{base_url}/api2/json/access/ticket"
+        data = urllib.parse.urlencode({"username": self._user, "password": self._password}).encode()
+        ctx = None
+        if not self._settings.proxmox_verify_tls:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=self._settings.proxmox_timeout_seconds, context=ctx) as resp:
+            return json.loads(resp.read())["data"]["ticket"]
 
     def termproxy(self, *, vm_id: int) -> dict[str, Any]:
         """Create a terminal proxy session for a VM.

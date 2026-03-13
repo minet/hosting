@@ -1,12 +1,13 @@
 import ResourceGauge from '../components/ResourceGauge'
 import WelcomeCard from '../components/WelcomeCard'
 import VMOverviewChart from '../components/VMOverviewChart'
+import { ChartCardSkeleton } from '../components/Skeleton'
 import { useResources } from '../hooks/useResources'
 import { useVMs } from '../hooks/useVMs'
 
 export default function Dashboard() {
   const resources = useResources()
-  const vms = useVMs()
+  const { vms, loading: vmsLoading } = useVMs()
   const ownerVMs = vms.filter(v => v.role === 'owner')
   const { usage, limits } = resources ?? {}
 
@@ -33,7 +34,7 @@ export default function Dashboard() {
       <div className="border border-neutral-100 shadow-md rounded-sm bg-white h-32 xl:h-auto grid grid-cols-3 md:hidden p-2">
         {gaugeConfig ? gaugeConfig.map(g => (
           <ResourceGauge key={g.label} label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} />
-        )) : <div className="col-span-3" />}
+        )) : <div className="col-span-3 flex items-center justify-center"><div className="h-16 w-16 rounded-full bg-neutral-100 animate-pulse" /></div>}
       </div>
 
       {/* Gauges — sur md+ : une par cellule */}
@@ -43,9 +44,17 @@ export default function Dashboard() {
         </div>
       ))}
 
-      {ownerVMs.map(vm => (
-        <VMOverviewChart key={vm.vm_id} vmId={vm.vm_id} name={vm.name} />
-      ))}
+      {vmsLoading ? (
+        <>
+          <ChartCardSkeleton className="md:col-span-3 xl:col-span-2 h-32 xl:h-auto" />
+          <ChartCardSkeleton className="md:col-span-3 xl:col-span-2 h-32 xl:h-auto" />
+          <ChartCardSkeleton className="md:col-span-3 xl:col-span-2 h-32 xl:h-auto" />
+        </>
+      ) : (
+        ownerVMs.map(vm => (
+          <VMOverviewChart key={vm.vm_id} vmId={vm.vm_id} name={vm.name} />
+        ))
+      )}
     </div>
   )
 }
