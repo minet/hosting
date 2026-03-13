@@ -6,6 +6,7 @@ Uses admin username/password when configured (KEYCLOAK_ADMIN_USERNAME /
 KEYCLOAK_ADMIN_PASSWORD), which grants full rights to update user attributes
 regardless of federation restrictions. Falls back to client credentials.
 """
+
 from __future__ import annotations
 
 import logging
@@ -91,11 +92,15 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         if not groups:
             # Fallback: list all groups to help debug
             all_top = admin.get_groups()
-            logger.warning("fetch_keycloak_group_members: search '%s' returned nothing. All top-level groups: %s",
-                           search_term, [g.get("name") for g in (all_top if isinstance(all_top, list) else [])])
+            logger.warning(
+                "fetch_keycloak_group_members: search '%s' returned nothing. All top-level groups: %s",
+                search_term,
+                [g.get("name") for g in (all_top if isinstance(all_top, list) else [])],
+            )
         if not isinstance(groups, list):
             logger.warning("fetch_keycloak_group_members: get_groups returned non-list for search=%s", search_term)
             return []
+
         # Flatten subgroups: Keycloak may nest the target group inside a parent
         def _flatten(items: list) -> list:
             result = []
@@ -104,6 +109,7 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
                     result.append(g)
                     result.extend(_flatten(g.get("subGroups", [])))
             return result
+
         all_groups = _flatten(groups)
         group = next((g for g in all_groups if g.get("path", "").endswith(group_path)), None)
         if group is None:
@@ -133,14 +139,16 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
                             fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
             except Exception:
                 pass
-            results.append({
-                "id": fed_id,
-                "keycloak_id": keycloak_id,
-                "username": m.get("username"),
-                "first_name": m.get("firstName"),
-                "last_name": m.get("lastName"),
-                "email": m.get("email"),
-            })
+            results.append(
+                {
+                    "id": fed_id,
+                    "keycloak_id": keycloak_id,
+                    "username": m.get("username"),
+                    "first_name": m.get("firstName"),
+                    "last_name": m.get("lastName"),
+                    "email": m.get("email"),
+                }
+            )
         return results
     except Exception:
         logger.exception("fetch_keycloak_group_members failed for group_path=%s", group_path)

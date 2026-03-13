@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 from app.core.config import get_settings
 
@@ -54,4 +55,3 @@ def close_proxmox_executor() -> None:
     executor = get_proxmox_executor()
     get_proxmox_executor.cache_clear()
     executor.shutdown(wait=False)
-

@@ -5,6 +5,7 @@ Deletes a virtual machine from both Proxmox and the database. Logs a
 critical error when the Proxmox deletion succeeds but the subsequent
 database removal fails, as that requires manual intervention.
 """
+
 from __future__ import annotations
 
 import logging
@@ -14,9 +15,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
+from app.services.dns import DnsService
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
-from app.services.dns import DnsService
 from app.services.vm.errors import raise_proxmox_as_http
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,9 @@ logger = logging.getLogger(__name__)
 class VmDeleteService:
     """Service for deleting virtual machines from Proxmox and the database."""
 
-    def __init__(self, *, db: Session, cmd_repo: VmCmdRepo, query_repo: VmQueryRepo, gateway: ProxmoxGateway, dns: DnsService):
+    def __init__(
+        self, *, db: Session, cmd_repo: VmCmdRepo, query_repo: VmQueryRepo, gateway: ProxmoxGateway, dns: DnsService
+    ):
         """
         Initialise the VM deletion service.
 

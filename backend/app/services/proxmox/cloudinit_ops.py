@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from ipaddress import IPv4Address, IPv6Address
 from typing import Any
 from urllib.parse import quote
@@ -11,8 +12,7 @@ from proxmoxer import ProxmoxAPI
 from app.services.proxmox.errors import (
     ProxmoxInvalidRequest,
     ProxmoxInvalidResponse,
-    ResourceException,
-    resource_exception_status_code,
+    ResourceException,  # pyright: ignore[reportAttributeAccessIssue]
 )
 from app.services.proxmox.models import CloudInitPatchSpec
 from app.services.proxmox.tasks import TaskService
@@ -61,7 +61,7 @@ class CloudInitService:
             "memory": ram_mb,
             "ciuser": ci_username,
             "sshkeys": self._encode_cloudinit_ssh_keys(ci_ssh_public_key),
-            "ipconfig0": f"ip6={vm_ipv6}/{ipv6_prefix},gw6={str(ipv6_gateway)}",
+            "ipconfig0": f"ip6={vm_ipv6}/{ipv6_prefix},gw6={ipv6_gateway!s}",
         }
         if ci_password:
             payload["cipassword"] = ci_password
@@ -151,10 +151,8 @@ class CloudInitService:
         """
         ipset_name = "hosting"
         vm_cidr = f"{vm_ipv6}/128"
-        try:
+        with contextlib.suppress(ResourceException):
             firewall.ipset(ipset_name).delete()
-        except ResourceException:
-            pass  # ipset doesn't exist yet, that's fine
         firewall.ipset.post(name=ipset_name)
         firewall.ipset(ipset_name).post(cidr=vm_cidr)
 
@@ -259,10 +257,8 @@ class CloudInitService:
         """
         ipset_name = "hosting"
         vm_cidr = f"{vm_ipv4}/32"
-        try:
+        with contextlib.suppress(ResourceException):
             firewall.ipset(ipset_name).post(cidr=vm_cidr)
-        except ResourceException:
-            pass  # ipset doesn't exist or entry already present
 
     def _encode_cloudinit_ssh_keys(self, raw_key: str) -> str:
         """Normalise and URL-encode an SSH public key for the Proxmox API.

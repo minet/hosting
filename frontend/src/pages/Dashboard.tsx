@@ -31,15 +31,15 @@ export default function Dashboard() {
 
       {/* Gauges — sur mobile : 3 en une ligne */}
       <div className="border border-neutral-100 shadow-md rounded-sm bg-white h-32 xl:h-auto grid grid-cols-3 md:hidden p-2">
-        {gaugeConfig && gaugeConfig.map(g => (
+        {gaugeConfig ? gaugeConfig.map(g => (
           <ResourceGauge key={g.label} label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} />
-        ))}
+        )) : <div className="col-span-3" />}
       </div>
 
       {/* Gauges — sur md+ : une par cellule */}
-      {gaugeConfig && gaugeConfig.map(g => (
+      {(gaugeConfig ?? [{ label: 'RAM' }, { label: 'Disque' }, { label: 'CPU' }]).map(g => (
         <div key={g.label} className="hidden md:flex border border-neutral-100 shadow-md rounded-sm bg-white h-32 xl:h-auto items-center justify-center p-2">
-          <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} />
+          {'used' in g ? <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} /> : null}
         </div>
       ))}
 

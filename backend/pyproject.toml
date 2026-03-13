@@ -1,0 +1,40 @@
+[project]
+name = "hosting-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "RUF",   # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "E402",  # module level import not at top (logger before imports is common)
+    "B008",  # Depends() in default args is idiomatic FastAPI
+    "TCH",   # type-checking imports are optimizations, not errors
+    "RUF002", # ambiguous chars in docstrings (en-dash etc) are intentional
+    "RUF003", # ambiguous chars in comments are intentional
+    "UP047",  # generic type params syntax is less readable for simple cases
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+reportMissingImports = false
+reportMissingTypeStubs = false
+exclude = ["alembic"]

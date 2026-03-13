@@ -302,13 +302,13 @@ def _as_int(value: Any) -> int | None:
 
 
 __all__ = [
-    "task_node",
-    "task_timeout_seconds",
     "clone_node_for_template",
+    "disk_size_gb",
     "least_loaded_node",
     "node_for_vm",
-    "used_vm_ids",
-    "root_disk_key",
-    "disk_size_gb",
     "resolve_vm_mac",
+    "root_disk_key",
+    "task_node",
+    "task_timeout_seconds",
+    "used_vm_ids",
 ]

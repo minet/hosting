@@ -55,19 +55,19 @@ class VmCmdRepo:
     ) -> None:
         """Create a new VM together with its owner access entry and initial resource.
 
-        All three rows (VM, VMAccess, Resource) are inserted and flushed atomically.
+                All three rows (VM, VMAccess, Resource) are inserted and flushed atomically.
 
-        :param vm_id: Proxmox VM identifier.
-        :param name: Display name for the VM.
-        :param cpu_cores: Number of CPU cores.
-        :param ram_mb: RAM in megabytes.
-        :param disk_gb: Disk space in gigabytes.
-        :param template_id: Foreign key to the template used.
-        :param ipv6: IPv6 address assigned to the VM.
-        :param owner_user_id: User identifier of the VM owner.
-        :param username: System username for the initial resource.
-        :param ssh_public_key: SSH public key for the initial resource.
-:returns: None
+                :param vm_id: Proxmox VM identifier.
+                :param name: Display name for the VM.
+                :param cpu_cores: Number of CPU cores.
+                :param ram_mb: RAM in megabytes.
+                :param disk_gb: Disk space in gigabytes.
+                :param template_id: Foreign key to the template used.
+                :param ipv6: IPv6 address assigned to the VM.
+                :param owner_user_id: User identifier of the VM owner.
+                :param username: System username for the initial resource.
+                :param ssh_public_key: SSH public key for the initial resource.
+        :returns: None
         """
         self.db.add(
             VM(
@@ -131,17 +131,19 @@ class VmCmdRepo:
     def update_resource(self, *, vm_id: int, username: str, ssh_public_key: str | None) -> bool:
         """Update fields on an existing resource entry.
 
+        Looks up the resource by ``vm_id`` alone so that username changes are
+        applied correctly (the old username in the DB may differ from the new one).
+
         :param vm_id: The VM identifier the resource belongs to.
-        :param username: The system username identifying the resource.
+        :param username: The new system username to set.
         :param ssh_public_key: New SSH public key, or ``None`` to leave unchanged.
         :returns: ``True`` if the resource was found and updated, ``False`` otherwise.
         :rtype: bool
         """
-        resource = self.db.scalars(
-            select(Resource).where(Resource.vm_id == vm_id, Resource.username == username)
-        ).first()
+        resource = self.db.scalars(select(Resource).where(Resource.vm_id == vm_id)).first()
         if resource is None:
             return False
+        resource.username = username
         if ssh_public_key is not None:
             resource.ssh_public_key = ssh_public_key
         self.db.add(resource)

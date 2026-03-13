@@ -15,10 +15,20 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 from app.api.routes.vms import VMListResponse
-from app.api.routes.vms.schemas import AdminRequestListResponse, AdminRequestResponse, AdminRequestUpdateBody, AdminTemplateCreateBody, ResourcesResponse, TemplateListResponse, VMAssignIPv4Response, VMCreateBody, VMDetailResponse, VMTemplateResponse
-from app.db.repositories.request import RequestRepo
+from app.api.routes.vms.schemas import (
+    AdminRequestListResponse,
+    AdminRequestResponse,
+    AdminRequestUpdateBody,
+    AdminTemplateCreateBody,
+    ResourcesResponse,
+    VMAssignIPv4Response,
+    VMCreateBody,
+    VMDetailResponse,
+    VMTemplateResponse,
+)
 from app.auth import AuthCtx, require_admin
 from app.db.core import get_db
+from app.db.repositories.request import RequestRepo
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
@@ -63,7 +73,9 @@ def _allocate_and_assign_ipv4(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except ProxmoxUnavailableError as exc:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet"
+        ) from exc
 
     try:
         cmd_repo.update_vm_ipv4(vm_id, ipv4)
@@ -74,21 +86,28 @@ def _allocate_and_assign_ipv4(
     except SQLAlchemyError as exc:
         db.rollback()
         logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+        ) from exc
 
     try:
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
         logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+        ) from exc
 
     gateway = get_proxmox_gateway()
     try:
         gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
     except ProxmoxError as exc:
         logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}") from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
+        ) from exc
 
     try:
         gateway.restart_vm(vm_id=vm_id)
@@ -96,6 +115,22 @@ def _allocate_and_assign_ipv4(
         logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
 
     return ipv4
+
+
+def _create_custom_dns(vm_id: int, dns_label: str | None, db: Session) -> None:
+    """Create a custom DNS CNAME record for an approved DNS request."""
+    if not dns_label:
+        logger.warning("dns_approval_missing_label vm_id=%s", vm_id)
+        return
+    vm = VmQueryRepo(db).get_vm(vm_id)
+    if vm is None:
+        logger.warning("dns_approval_vm_not_found vm_id=%s", vm_id)
+        return
+    from app.core.config import get_settings
+    from app.services.dns import DnsService
+
+    dns_svc = DnsService(settings=get_settings())
+    dns_svc.create_custom_label(dns_label=dns_label, vm_name=vm["name"], vm_id=vm_id)
 
 
 @router.get("/users/{user_id}/identity")
@@ -152,12 +187,14 @@ def get_user_resources_admin(
     :rtype: ResourcesResponse
     """
     profile = fetch_keycloak_user_by_id(user_id)
-    return ResourcesResponse.model_validate({
-        "scope": "user",
-        "user_id": user_id,
-        "profile": profile,
-        **query.get_resources(user_id=user_id),
-    })
+    return ResourcesResponse.model_validate(
+        {
+            "scope": "user",
+            "user_id": user_id,
+            "profile": profile,
+            **query.get_resources(user_id=user_id),
+        }
+    )
 
 
 @router.post("/users/{user_id}/vms", response_model=VMDetailResponse, status_code=201)
@@ -236,7 +273,9 @@ def update_request_status(
     db: Session = Depends(get_db),
 ) -> AdminRequestResponse:
     if body.status == "pending":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending"
+        )
 
     row = RequestRepo(db).update_status(request_id=request_id, status=body.status)
     if row is None:
@@ -249,6 +288,9 @@ def update_request_status(
             query_repo=VmQueryRepo(db),
             cmd_repo=VmCmdRepo(db),
         )
+    elif body.status == "approved" and row["type"] == "dns":
+        db.commit()
+        _create_custom_dns(vm_id=row["vm_id"], dns_label=row.get("dns_label"), db=db)
     else:
         db.commit()
 
@@ -380,9 +422,9 @@ def trigger_purge(
     db: Session = Depends(get_db),
 ) -> dict:
     """Manually trigger the expired-membership VM purge (admin only)."""
+    from app.core.config import get_settings as _gs
     from app.services.proxmox.gateway import get_proxmox_gateway
     from app.services.vm.purge import run_purge
-    from app.core.config import get_settings as _gs
 
     settings = _gs()
     return run_purge(db=db, gateway=get_proxmox_gateway(), settings=settings)

@@ -5,6 +5,7 @@ Provides read-only operations over the virtual-machine database, including
 listing, detail retrieval, access listing, template listing, and resource
 quota/usage queries.  All database errors are translated to HTTP 503.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -149,7 +150,12 @@ class VmQueryService:
             "ram_mb": max(limits["ram_mb"] - usage["ram_mb"], 0),
             "disk_gb": max(limits["disk_gb"] - usage["disk_gb"], 0),
         }
-        return {"usage": usage, "limits": limits, "remaining": remaining}
+        minimums = {
+            "cpu_cores": self.settings.vm_min_cpu_cores,
+            "ram_mb": self.settings.vm_min_ram_gb * 1024,
+            "disk_gb": self.settings.vm_min_disk_gb,
+        }
+        return {"usage": usage, "limits": limits, "remaining": remaining, "minimums": minimums}
 
     def _rows_to_list(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """
@@ -220,4 +226,6 @@ class VmQueryService:
         try:
             return fn()
         except SQLAlchemyError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc

@@ -7,10 +7,8 @@ validators used across the VM endpoints.
 
 from __future__ import annotations
 
-from enum import Enum
-
 import re
-
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -20,7 +18,7 @@ _USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
 _SSH_KEY_RE = re.compile(r"^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)) ")
 
 
-class VMRole(str, Enum):
+class VMRole(StrEnum):
     """Enumeration of roles a user can hold on a virtual machine."""
 
     OWNER = "owner"
@@ -28,7 +26,7 @@ class VMRole(str, Enum):
     ADMIN = "admin"
 
 
-class VMAction(str, Enum):
+class VMAction(StrEnum):
     """Enumeration of actions that can be performed on a virtual machine."""
 
     START = "start"
@@ -40,13 +38,13 @@ class VMAction(str, Enum):
     DELETE = "delete"
 
 
-class VMActionStatus(str, Enum):
+class VMActionStatus(StrEnum):
     """Enumeration of possible action outcome statuses."""
 
     OK = "ok"
 
 
-class VMAccessMutationResult(str, Enum):
+class VMAccessMutationResult(StrEnum):
     """Enumeration of possible results when granting or revoking VM access."""
 
     CREATED = "created"
@@ -250,6 +248,7 @@ class ResourcesResponse(BaseModel):
     usage: ResourceUsageStats
     limits: ResourceLimits
     remaining: ResourceLimits
+    minimums: ResourceLimits | None = None
     profile: dict[str, Any] | None = None
 
 
@@ -311,7 +310,9 @@ class VMCreateBody(BaseModel):
         :raises ValueError: If the name contains disallowed characters or has an invalid prefix.
         """
         if not _VM_NAME_RE.match(v):
-            raise ValueError("name must start with alphanumeric and contain only alphanumeric, dots, hyphens, underscores")
+            raise ValueError(
+                "name must start with alphanumeric and contain only alphanumeric, dots, hyphens, underscores"
+            )
         return v
 
 
@@ -370,14 +371,16 @@ class VMPatchBody(BaseModel):
 _DNS_LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,61}([a-z0-9])?$")
 
 
-class VMRequestType(str, Enum):
+class VMRequestType(StrEnum):
     """Enumeration of VM request types."""
+
     IPV4 = "ipv4"
     DNS = "dns"
 
 
-class VMRequestStatus(str, Enum):
+class VMRequestStatus(StrEnum):
     """Enumeration of VM request statuses."""
+
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -385,6 +388,7 @@ class VMRequestStatus(str, Enum):
 
 class VMRequestCreateBody(BaseModel):
     """Request body for submitting a VM request."""
+
     type: VMRequestType
     dns_label: str | None = Field(default=None, min_length=1, max_length=63)
 
@@ -398,6 +402,7 @@ class VMRequestCreateBody(BaseModel):
 
 class VMRequestResponse(BaseModel):
     """Response schema for a single VM request."""
+
     id: int
     vm_id: int
     user_id: str
@@ -407,7 +412,7 @@ class VMRequestResponse(BaseModel):
     created_at: str
 
     @classmethod
-    def from_row(cls, row: dict) -> "VMRequestResponse":
+    def from_row(cls, row: dict) -> VMRequestResponse:
         return cls(
             id=row["id"],
             vm_id=row["vm_id"],
@@ -415,22 +420,26 @@ class VMRequestResponse(BaseModel):
             type=row["type"],
             dns_label=row.get("dns_label"),
             status=row["status"],
-            created_at=row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            created_at=row["created_at"].isoformat()
+            if hasattr(row["created_at"], "isoformat")
+            else str(row["created_at"]),
         )
 
 
 class VMRequestListResponse(BaseModel):
     """Response schema for a list of VM requests."""
+
     items: list[VMRequestResponse]
     count: int
 
 
 class AdminRequestResponse(VMRequestResponse):
     """Admin response schema enriched with the VM name."""
+
     vm_name: str | None = None
 
     @classmethod
-    def from_row(cls, row: dict) -> "AdminRequestResponse":  # type: ignore[override]
+    def from_row(cls, row: dict) -> AdminRequestResponse:  # type: ignore[override]
         return cls(
             id=row["id"],
             vm_id=row["vm_id"],
@@ -438,29 +447,35 @@ class AdminRequestResponse(VMRequestResponse):
             type=row["type"],
             dns_label=row.get("dns_label"),
             status=row["status"],
-            created_at=row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
+            created_at=row["created_at"].isoformat()
+            if hasattr(row["created_at"], "isoformat")
+            else str(row["created_at"]),
             vm_name=row.get("vm_name"),
         )
 
 
 class AdminRequestListResponse(BaseModel):
     """Response schema for admin listing of pending requests."""
+
     items: list[AdminRequestResponse]
     count: int
 
 
 class AdminRequestUpdateBody(BaseModel):
     """Request body for approving or rejecting a VM request."""
+
     status: VMRequestStatus
 
 
 class VMOnbootResponse(BaseModel):
     """Response schema for onboot (start at boot) status."""
+
     vm_id: int
     onboot: bool
 
 
 class AdminTemplateCreateBody(BaseModel):
     """Request body for creating a VM template (admin only)."""
+
     template_id: int = Field(ge=1001, le=1999)
     name: str = Field(min_length=1, max_length=128)

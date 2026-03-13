@@ -8,6 +8,7 @@ pointing to its IPv4 and/or IPv6 address.
 All errors are logged and swallowed — DNS is best-effort and must never
 block VM creation or deletion.
 """
+
 from __future__ import annotations
 
 import logging
@@ -57,7 +58,7 @@ class DnsService:
         return f"{label}.{self._zone}."
 
     def _headers(self) -> dict[str, str]:
-        return {"X-API-Key": self._api_key, "Content-Type": "application/json"}
+        return {"X-API-Key": self._api_key or "", "Content-Type": "application/json"}
 
     def _zone_url(self) -> str:
         return f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}."
@@ -110,6 +111,33 @@ class DnsService:
         except Exception:
             logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
 
+    def create_custom_label(
+        self,
+        *,
+        dns_label: str,
+        vm_name: str,
+        vm_id: int,
+    ) -> None:
+        """Create a CNAME record pointing a custom label to the default VM FQDN.
+
+        :param dns_label: Custom DNS label chosen by the user (e.g. ``myapp``).
+        :param vm_name: Human-readable VM name (used to build the canonical FQDN).
+        :param vm_id: Numeric VM identifier.
+        """
+        if not self._enabled:
+            return
+        custom_fqdn = f"{dns_label}.{self._zone}."
+        target_fqdn = self._fqdn(vm_name, vm_id)
+        rrsets = [_rrset(custom_fqdn, "CNAME", target_fqdn)]
+        try:
+            with _client(self._headers()) as c:
+                self._ensure_zone(c)
+                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
+                resp.raise_for_status()
+            logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
+        except Exception:
+            logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
+
     def delete_records(self, *, vm_name: str, vm_id: int) -> None:
         """Remove all DNS records for a VM.
 
@@ -120,7 +148,7 @@ class DnsService:
             return
         fqdn = self._fqdn(vm_name, vm_id)
         rrsets = [
-            {"name": fqdn, "type": "A",    "changetype": "DELETE"},
+            {"name": fqdn, "type": "A", "changetype": "DELETE"},
             {"name": fqdn, "type": "AAAA", "changetype": "DELETE"},
         ]
         try:

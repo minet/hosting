@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from functools import lru_cache
 from typing import Any
 
 from proxmoxer import ProxmoxAPI
@@ -13,7 +12,12 @@ from proxmoxer import ProxmoxAPI
 from app.core.config import Settings, get_settings
 from app.services.proxmox.allocation import allocate_vm_id
 from app.services.proxmox.cloudinit_ops import CloudInitService
-from app.services.proxmox.errors import ProxmoxError, ProxmoxInvalidDiskSize, ProxmoxInvalidResponse, raise_mapped_proxmox_error
+from app.services.proxmox.errors import (
+    ProxmoxError,
+    ProxmoxInvalidDiskSize,
+    ProxmoxInvalidResponse,
+    raise_mapped_proxmox_error,
+)
 from app.services.proxmox.models import CloudInitPatchSpec
 from app.services.proxmox.tasks import TaskService, clamp_task_limit, ensure_upid, normalize_vm_tasks
 from app.services.proxmox.utils import (
@@ -427,8 +431,9 @@ class ProxmoxGateway:
         node = node_for_vm(client=self._client, vm_id=vm_id)
         payload = self._client.nodes(node).qemu(vm_id).status.current.get()
         if isinstance(payload, dict):
+            payload["node"] = node
             return payload
-        return {"raw": payload}
+        return {"raw": payload, "node": node}
 
     def _mac(self, *, vm_id: int) -> str | None:
         """Internal implementation of MAC address lookup.
@@ -793,9 +798,7 @@ def get_proxmox_gateway() -> ProxmoxGateway:
 
         elapsed = time.monotonic() - _gateway_last_failure
         if _gateway_last_failure and elapsed < _GATEWAY_RETRY_COOLDOWN:
-            raise ProxmoxError(
-                f"Proxmox connection unavailable (retry in {_GATEWAY_RETRY_COOLDOWN - elapsed:.0f}s)"
-            )
+            raise ProxmoxError(f"Proxmox connection unavailable (retry in {_GATEWAY_RETRY_COOLDOWN - elapsed:.0f}s)")
 
         try:
             _gateway_instance = ProxmoxGateway(get_settings())

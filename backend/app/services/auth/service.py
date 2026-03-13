@@ -2,22 +2,28 @@
 Authentication service layer.
 
 Implements the OIDC login, callback, logout and user-claims flows on top
-of Keycloak and a server-side session store.
+of Keycloak with stateless cookie-based token storage.
 """
+
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Generator, TypedDict
+from typing import TypedDict
 from urllib.parse import urlencode
 
-from fastapi import HTTPException, Request as FastAPIRequest, status
+from fastapi import HTTPException, status
+from fastapi import Request as FastAPIRequest
 from fastapi.responses import RedirectResponse
 
-from app.auth.context import csv_values, _claim_value, _cotise_end_ms, _extract_user_id, _groups
+from app.auth.context import _claim_value, _cotise_end_ms, _extract_user_id, _groups, csv_values
 from app.core.config import get_settings
 from app.core.security.token import TokenPayload
-from app.core.sessions import get_session_store
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
+from app.core.sessions import (
+    create_signed_state,
+    delete_token_cookies,
+    get_id_token,
+    set_token_cookies,
+    verify_signed_state,
+)
 from app.services.auth.helpers import (
     callback_url,
     exchange_code_for_token,
@@ -25,6 +31,8 @@ from app.services.auth.helpers import (
     keycloak_realm_base,
     safe_frontend_redirect,
 )
+from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
+
 
 class AuthMeResponse(TypedDict):
     """Typed dictionary representing the authenticated user's identity claims."""
@@ -43,42 +51,19 @@ class AuthMeResponse(TypedDict):
     ldap_login: str | None
 
 
-@contextmanager
-def _session_store_op() -> Generator[None, None, None]:
-    """
-    Wrap a session-store call, mapping :class:`RuntimeError` to HTTP 503.
-
-    :returns: A context-manager that yields nothing.
-    :rtype: Generator[None, None, None]
-    :raises HTTPException: With status 503 when the session store raises
-        :class:`RuntimeError`.
-    """
-    try:
-        yield
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication session storage unavailable",
-        ) from exc
-
-
 def login_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
-    """
-    Start the login flow and redirect the browser to the Keycloak
-    authorization endpoint.
-
-    :param request: Incoming FastAPI request.
-    :param frontend_redirect: Optional URL to redirect to after login completes.
-    :returns: A 302 redirect response pointing to Keycloak.
-    :rtype: RedirectResponse
-    :raises HTTPException: If the session store is unavailable.
-    """
+    """Start the OIDC login flow and redirect the browser to Keycloak."""
     settings = get_settings()
     callback = callback_url(request)
     redirect_target = safe_frontend_redirect(frontend_redirect=frontend_redirect, request=request)
     verifier, challenge = generate_pkce_pair()
-    with _session_store_op():
-        state = get_session_store().create_auth_state(redirect_target, verifier)
+
+    state = create_signed_state(
+        redirect_target,
+        verifier,
+        secret=settings.session_secret,
+        ttl=settings.auth_state_ttl_seconds,
+    )
 
     query = urlencode(
         {
@@ -102,20 +87,7 @@ def callback_redirect(
     error: str | None,
     error_description: str | None,
 ) -> RedirectResponse:
-    """
-    Handle the OIDC callback, create a backend session and redirect to the
-    frontend.
-
-    :param request: Incoming FastAPI request.
-    :param code: Authorization code returned by the identity provider.
-    :param state: Opaque state token used for CSRF protection.
-    :param error: Error code returned by the identity provider, if any.
-    :param error_description: Human-readable error description, if any.
-    :returns: A 302 redirect response with a session cookie set.
-    :rtype: RedirectResponse
-    :raises HTTPException: On missing parameters, invalid state, or
-        authentication failure.
-    """
+    """Handle the OIDC callback and set token cookies."""
     if error or error_description:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -124,9 +96,12 @@ def callback_redirect(
     if not code or not state:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing code/state in callback")
 
-    store = get_session_store()
-    with _session_store_op():
-        state_data = store.consume_auth_state(state)
+    settings = get_settings()
+    state_data = verify_signed_state(
+        state,
+        secret=settings.session_secret,
+        ttl=settings.auth_state_ttl_seconds,
+    )
     if not state_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired auth state")
     frontend_redirect, code_verifier = state_data
@@ -147,34 +122,19 @@ def callback_redirect(
     refresh_token = token_response.get("refresh_token")
     refresh_token_value = refresh_token if isinstance(refresh_token, str) else None
 
-    with _session_store_op():
-        session_id = store.create_session(
-            access_token=access_token,
-            id_token=id_token_value,
-            refresh_token=refresh_token_value,
-        )
-    settings = get_settings()
     redirect = RedirectResponse(url=frontend_redirect, status_code=status.HTTP_302_FOUND)
-    redirect.set_cookie(
-        key=settings.session_cookie_name,
-        value=session_id,
-        httponly=True,
-        secure=settings.resolved_session_cookie_secure,
-        samesite="lax",
-        path="/",
-        max_age=settings.session_ttl_seconds,
+    set_token_cookies(
+        redirect,
+        access_token=access_token,
+        id_token=id_token_value,
+        refresh_token=refresh_token_value,
+        settings=settings,
     )
     return redirect
 
 
 def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
-    """
-    Return authenticated user claims from a decoded token payload.
-
-    :param payload: Decoded JWT token payload.
-    :returns: Dictionary of user identity claims.
-    :rtype: AuthMeResponse
-    """
+    """Return authenticated user claims from a decoded token payload."""
     settings = get_settings()
 
     user_id = _extract_user_id(payload, settings)
@@ -227,54 +187,20 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
 
 
 def local_logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
-    """
-    Revoke the backend session and redirect back to the frontend WITHOUT
-    triggering a global Keycloak SSO logout.
-
-    Use this when the user should be evicted from this application only,
-    while keeping their Keycloak session active for other clients.
-
-    :param request: Incoming FastAPI request.
-    :param frontend_redirect: Optional URL to redirect to after the session is cleared.
-    :returns: A 302 redirect response with the session cookie deleted.
-    :rtype: RedirectResponse
-    :raises HTTPException: If the session store is unavailable.
-    """
-    settings = get_settings()
-    session_id = request.cookies.get(settings.session_cookie_name)
-    store = get_session_store()
-    if session_id:
-        with _session_store_op():
-            store.revoke_session(session_id)
-
+    """Revoke the local session (clear token cookies) without Keycloak logout."""
     redirect_target = safe_frontend_redirect(frontend_redirect=frontend_redirect, request=request)
     response = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    delete_token_cookies(response)
     return response
 
 
 def logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
-    """
-    Revoke the backend session and redirect the browser to the Keycloak
-    logout endpoint.
-
-    :param request: Incoming FastAPI request.
-    :param frontend_redirect: Optional URL to redirect to after logout completes.
-    :returns: A 302 redirect response with the session cookie deleted.
-    :rtype: RedirectResponse
-    :raises HTTPException: If the session store is unavailable.
-    """
+    """Clear token cookies and redirect to Keycloak logout."""
     settings = get_settings()
-    session_id = request.cookies.get(settings.session_cookie_name)
-    id_token_hint: str | None = None
-    store = get_session_store()
-    if session_id:
-        with _session_store_op():
-            id_token_hint = store.get_id_token(session_id)
-            store.revoke_session(session_id)
+    id_token_hint = get_id_token(request)
 
     redirect_target = safe_frontend_redirect(frontend_redirect=frontend_redirect, request=request)
-    params = {
+    params: dict[str, str] = {
         "post_logout_redirect_uri": redirect_target,
         "client_id": settings.keycloak_client_id,
     }
@@ -283,5 +209,5 @@ def logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> R
     logout_url = f"{keycloak_realm_base()}/protocol/openid-connect/logout?{urlencode(params)}"
 
     response = RedirectResponse(url=logout_url, status_code=status.HTTP_302_FOUND)
-    response.delete_cookie(key=settings.session_cookie_name, path="/")
+    delete_token_cookies(response)
     return response

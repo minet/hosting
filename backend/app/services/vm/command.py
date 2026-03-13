@@ -6,19 +6,21 @@ Provides a single synchronous entry point for all VM mutation operations
 Proxmox thread-pool executor. Each method manages its own database session
 lifetime.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
+from app.services.dns import DnsService
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
-from app.services.dns import DnsService
 from app.services.vm.create import VmCreateService
 from app.services.vm.delete import VmDeleteService
 from app.services.vm.errors import raise_proxmox_as_http

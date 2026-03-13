@@ -7,12 +7,13 @@ user information retrieval, and logout.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request as FastAPIRequest, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import Request as FastAPIRequest
 from fastapi.responses import RedirectResponse
 
 from app.core.config import get_settings
 from app.core.security.token import TokenPayload, get_token_payload
-from app.core.sessions import get_session_store
+from app.core.sessions import get_refresh_token, set_token_cookies
 from app.services.auth import (
     AuthMeResponse,
     callback_redirect,
@@ -31,14 +32,7 @@ def auth_login(
     request: FastAPIRequest,
     frontend_redirect: str | None = Query(default=None),
 ) -> RedirectResponse:
-    """
-    Start the OIDC login flow and redirect the user to Keycloak.
-
-    :param request: The incoming HTTP request.
-    :param frontend_redirect: Optional URL to redirect the user back to after login.
-    :returns: A redirect response pointing to the Keycloak authorization endpoint.
-    :rtype: RedirectResponse
-    """
+    """Start the OIDC login flow and redirect the user to Keycloak."""
     return login_redirect(request=request, frontend_redirect=frontend_redirect)
 
 
@@ -50,17 +44,7 @@ def auth_callback(
     error: str | None = Query(default=None),
     error_description: str | None = Query(default=None),
 ) -> RedirectResponse:
-    """
-    Handle the OIDC callback and issue a backend session cookie.
-
-    :param request: The incoming HTTP request.
-    :param code: Authorization code returned by the identity provider.
-    :param state: CSRF state parameter for validation.
-    :param error: Error code if the authorization failed.
-    :param error_description: Human-readable description of the error.
-    :returns: A redirect response that sets the session cookie.
-    :rtype: RedirectResponse
-    """
+    """Handle the OIDC callback and set token cookies."""
     return callback_redirect(
         request=request,
         code=code,
@@ -72,45 +56,35 @@ def auth_callback(
 
 @router.get("/me")
 def auth_me(payload: TokenPayload = Depends(get_token_payload)) -> AuthMeResponse:
-    """
-    Return the claims of the currently authenticated user.
-
-    :param payload: Decoded JWT token payload (injected).
-    :returns: The authenticated user's identity claims.
-    :rtype: AuthMeResponse
-    """
+    """Return the claims of the currently authenticated user."""
     return current_user_claims(payload)
 
 
 @router.post("/refresh")
 def auth_refresh(request: FastAPIRequest, response: Response) -> dict:
-    """Refresh the access token using the stored refresh token.
+    """Refresh the access token using the refresh token cookie.
 
-    :param request: The incoming HTTP request.
-    :param response: The HTTP response used to update the session cookie TTL.
     :returns: ``{"ok": true}`` on success.
-    :raises HTTPException: 401 if session or refresh token is missing/invalid.
+    :raises HTTPException: 401 if refresh token is missing or refresh fails.
     """
-    settings = get_settings()
-    session_id = request.cookies.get(settings.session_cookie_name)
-    if not session_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session")
-    store = get_session_store()
-    refresh_token = store.get_refresh_token(session_id)
+    refresh_token = get_refresh_token(request)
     if not refresh_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
     try:
         token_response = refresh_access_token(refresh_token)
     except HTTPException:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh failed")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh failed") from None
     new_access_token = token_response.get("access_token")
     new_refresh_token = token_response.get("refresh_token")
     if not isinstance(new_access_token, str):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh failed")
-    store.update_session_tokens(
-        session_id,
+
+    settings = get_settings()
+    set_token_cookies(
+        response,
         access_token=new_access_token,
         refresh_token=new_refresh_token if isinstance(new_refresh_token, str) else None,
+        settings=settings,
     )
     return {"ok": True}
 
@@ -120,17 +94,7 @@ def auth_local_logout(
     request: FastAPIRequest,
     frontend_redirect: str | None = Query(default=None),
 ) -> RedirectResponse:
-    """
-    Clear the local session only, without triggering a global Keycloak logout.
-
-    Use this to evict users from this application while keeping their SSO
-    session intact for other clients.
-
-    :param request: The incoming HTTP request.
-    :param frontend_redirect: Optional URL to redirect the user to after the session is cleared.
-    :returns: A redirect response that clears the session cookie.
-    :rtype: RedirectResponse
-    """
+    """Clear the local session only, without triggering a global Keycloak logout."""
     return local_logout_redirect(request=request, frontend_redirect=frontend_redirect)
 
 
@@ -139,14 +103,5 @@ def auth_logout(
     request: FastAPIRequest,
     frontend_redirect: str | None = Query(default=None),
 ) -> RedirectResponse:
-    """
-    Log the user out by clearing the session and redirecting.
-
-    Supports both GET and POST methods for browser and API clients.
-
-    :param request: The incoming HTTP request.
-    :param frontend_redirect: Optional URL to redirect the user to after logout.
-    :returns: A redirect response that clears the session cookie.
-    :rtype: RedirectResponse
-    """
+    """Log the user out by clearing cookies and redirecting to Keycloak."""
     return logout_redirect(request=request, frontend_redirect=frontend_redirect)

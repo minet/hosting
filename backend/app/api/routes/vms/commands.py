@@ -9,19 +9,19 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import status as http_status
+from sqlalchemy.orm import Session
 
 from app.auth import AuthCtx, require_charter_signed, require_cotisant
+from app.db.core import get_db
+from app.db.repositories.request import RequestRepo
 from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_share_service
 from app.services.vm.share import VmShareService
 
-from app.db.core import get_db
-from app.db.repositories.request import RequestRepo
-from sqlalchemy.orm import Session
-from fastapi import HTTPException, status as http_status
 from .schemas import (
     VMAccessMutationResponse,
     VMActionResponse,
@@ -210,12 +210,18 @@ def create_request(
     db: Session = Depends(get_db),
 ) -> VMRequestResponse:
     from app.db.repositories.vm import VmQueryRepo
+
     access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
     if body.type == "dns" and not body.dns_label:
-        raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests")
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests"
+        )
     repo = RequestRepo(db)
     if repo.exists_active(vm_id=vm_id, type=body.type):
-        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="A request of this type is already pending or approved for this VM")
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail="A request of this type is already pending or approved for this VM",
+        )
     if body.type == "ipv4":
         vm = VmQueryRepo(db).get_vm(vm_id)
         if vm and vm.get("ipv4") is not None:

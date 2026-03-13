@@ -40,6 +40,7 @@ export default function VMPage() {
 
   const running = vmStatusEntry?.status === 'running'
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
+  const canAccessConsole = !me.is_admin || (vm?.current_user_role === 'owner')
   const uptime = vmStatusEntry?.uptime ?? null
   const realmPrefix = me.user_id ? me.user_id.split(':').slice(0, 2).join(':') : null
 
@@ -124,6 +125,9 @@ export default function VMPage() {
         maxCpu={res.maxCpu}
         maxRam={res.maxRam}
         maxDisk={res.maxDisk}
+        minCpu={res.minCpu}
+        minRam={res.minRam}
+        minDisk={res.minDisk}
         onClose={() => res.setResModalOpen(false)}
         onSave={res.doSaveResources}
       />
@@ -170,7 +174,7 @@ export default function VMPage() {
       />
 
       {/* Bouton terminal mobile */}
-      {vmId && running && (
+      {vmId && running && canAccessConsole && (
         <button
           onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
           className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-white text-sm font-semibold transition-colors cursor-pointer h-12"
@@ -183,7 +187,14 @@ export default function VMPage() {
       {/* Terminal — tablette & desktop uniquement */}
       {vmId && isDesktop && (
         <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 shadow-md rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
-          {running && <VMTerminal vmId={vmId} />}
+          {running && canAccessConsole && <VMTerminal vmId={vmId} />}
+          {running && !canAccessConsole && (
+            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+              <TerminalSquare size={24} className="text-neutral-500" />
+              <p className="text-sm text-white/70 font-medium">Console non disponible</p>
+              <p className="text-xs text-neutral-500 text-center px-6">En tant qu'administrateur, vous ne pouvez pas accéder à la console des VMs d'autres utilisateurs.</p>
+            </div>
+          )}
           {!running && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <p className="text-sm text-white/70 font-medium">La VM est éteinte</p>

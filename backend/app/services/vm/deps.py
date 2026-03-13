@@ -5,6 +5,7 @@ Each function in this module is a FastAPI dependency that constructs and
 returns a fully configured service or repository instance, resolving its
 own sub-dependencies automatically via :func:`fastapi.Depends`.
 """
+
 from fastapi import Depends
 from sqlalchemy.orm import Session
 

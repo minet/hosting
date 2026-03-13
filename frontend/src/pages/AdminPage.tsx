@@ -12,17 +12,17 @@ import Th from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
 import ProxmoxTab from '../components/admin/ProxmoxTab'
 
-type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status'
+type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status' | 'node'
 type SortDir = 'asc' | 'desc'
-type StatusMap = Map<number, { status: string; uptime: number | null }>
+type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
 type Tab = 'vms' | 'templates' | 'proxmox'
 
-const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
+const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'node', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
 type ColId = typeof COLS[number]
 
 const DEFAULT_WIDTHS: Record<ColId, number> = {
   vm_id: 60, status: 120, name: 150, template_name: 130,
-  cpu_cores: 220, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
+  cpu_cores: 220, node: 120, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
 }
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
@@ -123,6 +123,7 @@ export default function AdminPage() {
   const sorted = useMemo(() => [...filtered].sort((a, b) => {
     let cmp = 0
     if (sortKey === 'status') cmp = getStatusOrder(a.vm_id, statuses) - getStatusOrder(b.vm_id, statuses)
+    else if (sortKey === 'node') cmp = (statuses.get(a.vm_id)?.node ?? '').localeCompare(statuses.get(b.vm_id)?.node ?? '')
     else if (sortKey === 'vm_id' || sortKey === 'cpu_cores') cmp = (a[sortKey] as number) - (b[sortKey] as number)
     else {
       const av = (a[sortKey as keyof AdminVM] as string | null) ?? ''
@@ -198,6 +199,7 @@ export default function AdminPage() {
               <Th col="template_name" label="Template"   width={colWidths.template_name} {...thProps}
                 filter={{ active: !!filters.template, type: 'text', value: filters.template, onChange: v => setFilter('template', v), placeholder: 'Template…' }} />
               <Th col="cpu_cores"    label="Ressources"   width={colWidths.cpu_cores}    {...thProps} />
+              <Th col="node"         label="Nœud"         width={colWidths.node}         {...thProps} />
               <Th col="ipv4"         label="IPv4"         width={colWidths.ipv4}         {...thProps}
                 filter={{ active: !!filters.ipv4, type: 'text', value: filters.ipv4, onChange: v => setFilter('ipv4', v), placeholder: 'x.x.x.x' }} />
               <Th col="ipv6"         label="IPv6"         width={colWidths.ipv6}         {...thProps}
@@ -213,7 +215,7 @@ export default function AdminPage() {
           </thead>
           <tbody className="bg-white divide-y divide-neutral-100">
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucune VM</td></tr>
+              <tr><td colSpan={12} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucune VM</td></tr>
             )}
             {sorted.map(vm => (
               <tr key={vm.vm_id} onClick={() => navigate(`/vm/${vm.vm_id}`)} className="hover:bg-neutral-50 transition-colors cursor-pointer">
@@ -245,6 +247,9 @@ export default function AdminPage() {
                       <span className="text-emerald-400">Go</span>
                     </span>
                   </div>
+                </td>
+                <td className="px-3 py-2 font-mono text-xs text-neutral-500 border-r border-neutral-100 overflow-hidden">
+                  <span className="block truncate">{statuses.get(vm.vm_id)?.node ?? <span className="text-neutral-300">—</span>}</span>
                 </td>
                 <td className="px-3 py-2 text-xs border-r border-neutral-100 overflow-hidden" onClick={e => e.stopPropagation()}>
                   {(() => {

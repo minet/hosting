@@ -4,6 +4,7 @@ Low-level authentication helpers.
 Contains PKCE utilities, Keycloak URL builders, HTTP helpers for the
 token endpoint, and redirect-origin validation.
 """
+
 from __future__ import annotations
 
 import base64
@@ -17,7 +18,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
-from fastapi import HTTPException, Request as FastAPIRequest, status
+from fastapi import HTTPException, status
+from fastapi import Request as FastAPIRequest
 
 from app.core.config import get_settings
 
@@ -174,6 +176,11 @@ def _post_form_json_with_retry(*, url: str, payload: dict[str, str]) -> dict[str
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Invalid token response from authentication provider",
             ) from exc
+
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Authentication provider is unreachable",
+    )
 
 
 def refresh_access_token(refresh_token: str) -> dict[str, Any]:

@@ -10,11 +10,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_started
     environment:
       DATABASE_URL: postgresql+psycopg://app:app@postgres:5432/hosting
-      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: dev-secret-change-me
     command: >
       sh -c "pip install --no-cache-dir -r requirements.txt &&
              sh docker-entrypoint.sh --reload"
@@ -38,11 +36,6 @@ services:
       retries: 10
     ports:
       - "5432:5432"
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
 
   frontend_test:
     image: nginx:alpine

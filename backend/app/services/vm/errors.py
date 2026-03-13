@@ -6,9 +6,11 @@ into FastAPI :class:`~fastapi.HTTPException` instances with appropriate HTTP
 status codes so that the API layer does not need to know about Proxmox
 internals.
 """
+
 from __future__ import annotations
 
 import logging
+from typing import NoReturn
 
 from fastapi import HTTPException, status
 
@@ -17,7 +19,7 @@ from app.services.proxmox.errors import ProxmoxError, ProxmoxInvalidDiskSize, Pr
 logger = logging.getLogger(__name__)
 
 
-def raise_proxmox_as_http(exc: ProxmoxError, *, unavailable: str) -> None:
+def raise_proxmox_as_http(exc: ProxmoxError, *, unavailable: str) -> NoReturn:
     """
     Map a :class:`~app.services.proxmox.errors.ProxmoxError` to the
     appropriate :class:`~fastapi.HTTPException` and raise it.

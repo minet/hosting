@@ -168,7 +168,12 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
     }
 
     ws.onclose = (e) => {
-      term.writeln(`\r\n\x1b[33mConnexion fermée (code ${e.code}${e.reason ? ' — ' + e.reason : ''}).\x1b[0m`)
+      if (e.code === 4409) {
+        term.writeln('\r\n\x1b[33mCette console est déjà utilisée par un autre utilisateur.\x1b[0m')
+        term.writeln('\x1b[33mVeuillez réessayer plus tard.\x1b[0m')
+      } else {
+        term.writeln(`\r\n\x1b[33mConnexion fermée (code ${e.code}${e.reason ? ' — ' + e.reason : ''}).\x1b[0m`)
+      }
     }
 
     ws.onerror = () => {

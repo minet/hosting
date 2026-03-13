@@ -4,6 +4,7 @@ Data-transfer types for VM creation commands.
 Defines the plain dataclasses used to carry validated input from the API
 layer down to the VM creation service without coupling to ORM models.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

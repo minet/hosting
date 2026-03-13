@@ -17,14 +17,17 @@ logger = logging.getLogger(__name__)
 
 import websockets
 import websockets.exceptions
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, status
+from fastapi import APIRouter, Depends, WebSocket
 from fastapi.websockets import WebSocketState
 
 from app.auth import AuthCtx, require_user
+
+# Track active terminal sessions per VM: vm_id -> user_id
+_active_terminals: dict[int, str] = {}
 from app.auth.context import build_auth_ctx
 from app.core.config import get_settings
 from app.core.security.token import TokenService
-from app.core.sessions import get_session_store
+from app.core.sessions import get_access_token
 from app.db.core.engine import get_session_factory
 from app.db.repositories.vm import VmAccessRepo
 from app.services.proxmox.errors import ProxmoxError
@@ -40,6 +43,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # REST — get termproxy ticket
 # ---------------------------------------------------------------------------
+
 
 @router.post("/{vm_id}/termproxy")
 async def get_termproxy(
@@ -78,6 +82,7 @@ async def get_termproxy(
 # ---------------------------------------------------------------------------
 # WebSocket — proxied terminal
 # ---------------------------------------------------------------------------
+
 
 def _proxmox_ssl_context(verify: bool) -> ssl.SSLContext | None:
     """
@@ -129,28 +134,12 @@ def _check_vm_access_sync(vm_id: int, user_id: str, is_admin: bool) -> bool:
 
 
 async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
-    """
-    Authenticate a WebSocket connection using the session cookie.
-
-    Reads the session cookie from the incoming WebSocket handshake, retrieves
-    the associated access token from the session store, decodes it, and builds
-    an :class:`~app.auth.context.AuthCtx` from the token payload.
-
-    :param websocket: The incoming WebSocket connection to authenticate.
-    :returns: An :class:`~app.auth.context.AuthCtx` instance if authentication
-        succeeds, or ``None`` if the session cookie is missing, the token is
-        not found, or decoding fails.
-    :rtype: AuthCtx | None
-    """
+    """Authenticate a WebSocket connection using the access token cookie."""
     settings = get_settings()
-    session_id = websocket.cookies.get(settings.session_cookie_name)
-    if not session_id:
+    access_token = get_access_token(websocket)
+    if not access_token:
         return None
     try:
-        store = get_session_store()
-        access_token = store.get_access_token(session_id)
-        if not access_token:
-            return None
         payload = TokenService(settings=settings).decode(access_token)
         return build_auth_ctx(payload, settings)
     except Exception:
@@ -189,6 +178,13 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     if not allowed:
         await websocket.close(code=4403, reason="Forbidden")
         return
+
+    current_user = _active_terminals.get(vm_id)
+    if current_user and current_user != ctx.user_id:
+        await websocket.close(code=4409, reason="Console already in use by another user")
+        return
+
+    _active_terminals[vm_id] = ctx.user_id
 
     settings = get_settings()
     gateway = get_proxmox_gateway()
@@ -268,5 +264,6 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     except Exception as exc:
         logger.warning("terminal_ws vm=%s proxmox connection failed: %r", vm_id, exc)
     finally:
+        _active_terminals.pop(vm_id, None)
         if websocket.client_state != WebSocketState.DISCONNECTED:
             await websocket.close()

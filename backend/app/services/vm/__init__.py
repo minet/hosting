@@ -4,6 +4,7 @@ VM service package.
 Re-exports the public service classes and data types used by API route
 handlers to manage virtual machines.
 """
+
 from app.services.vm.access import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
 from app.services.vm.create import VmCreateService
@@ -17,11 +18,11 @@ __all__ = [
     "AccessLevel",
     "VmAccessService",
     "VmCommandService",
-    "VmCreateService",
-    "VmPatchService",
-    "VmDeleteService",
-    "VmShareService",
-    "VmQueryService",
-    "VmCreateResource",
     "VmCreateCmd",
+    "VmCreateResource",
+    "VmCreateService",
+    "VmDeleteService",
+    "VmPatchService",
+    "VmQueryService",
+    "VmShareService",
 ]

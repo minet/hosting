@@ -4,21 +4,22 @@ Charter endpoints.
 Provides routes to retrieve the hosting charter and to record a user's
 digital signature, which triggers a confirmation email with a PDF attachment.
 """
+
 from __future__ import annotations
 
 import logging
 import smtplib
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.auth import AuthCtx, require_user
 from app.core.config import Settings, get_settings
-from app.core.sessions import get_session_store
+from app.core.sessions import get_refresh_token, set_token_cookies
 from app.services.auth.helpers import refresh_access_token
 from app.services.auth.keycloak_admin import fetch_keycloak_user_by_id, set_date_signed_hosting
 from app.services.auth.service import current_user_claims
@@ -28,7 +29,20 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/charter", tags=["charter"])
 
-_MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"]
+_MOIS = [
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
+]
 
 
 def _fmt_date(iso: str) -> str:
@@ -151,31 +165,25 @@ def _send_charter_email(
     logger.info("Charter email sent successfully to %s", to_email)
 
 
-def _refresh_session_token(request: Request, settings: Settings) -> None:
-    """Refresh the access token stored in the current session.
+def _refresh_session_token(request: Request, response: Response, settings: Settings) -> None:
+    """Refresh the access token and update cookies.
 
     Called after a Keycloak user attribute update so the new JWT immediately
     reflects the change (e.g. ``dateSignedHosting``).
-
-    :param request: The current HTTP request (used to read the session cookie).
-    :param settings: Application settings.
     """
-    session_id = request.cookies.get(settings.session_cookie_name)
-    if not session_id:
-        return
-    store = get_session_store()
-    refresh_token = store.get_refresh_token(session_id)
-    if not refresh_token:
+    refresh_tok = get_refresh_token(request)
+    if not refresh_tok:
         return
     try:
-        token_response = refresh_access_token(refresh_token)
+        token_response = refresh_access_token(refresh_tok)
         new_access_token = token_response.get("access_token")
         new_refresh_token = token_response.get("refresh_token")
         if isinstance(new_access_token, str):
-            store.update_session_tokens(
-                session_id,
+            set_token_cookies(
+                response,
                 access_token=new_access_token,
                 refresh_token=new_refresh_token if isinstance(new_refresh_token, str) else None,
+                settings=settings,
             )
     except Exception:
         logger.warning("Could not refresh token after charter signature — user may need to re-login")
@@ -184,6 +192,7 @@ def _refresh_session_token(request: Request, settings: Settings) -> None:
 @router.post("/sign")
 def sign_charter(
     request: Request,
+    response: Response,
     ctx: AuthCtx = Depends(require_user),
     settings: Settings = Depends(get_settings),
 ) -> dict:
@@ -211,7 +220,7 @@ def sign_charter(
         if kc_profile:
             email = kc_profile.get("email") or ""
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     signed_at_ms = int(now.timestamp() * 1000)
     signed_at = now.isoformat()
 
@@ -224,7 +233,7 @@ def sign_charter(
 
     # Refresh the session token so the new dateSignedHosting attribute is
     # immediately present in the JWT for subsequent requests.
-    _refresh_session_token(request, settings)
+    _refresh_session_token(request, response, settings)
 
     try:
         pdf_bytes = generate_charter_pdf(prenom=prenom, nom=nom, signed_at=signed_at)

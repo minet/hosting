@@ -7,6 +7,7 @@ from typing import NoReturn
 try:
     from proxmoxer.core import ResourceException
 except ImportError:  # pragma: no cover - defensive fallback for proxmoxer variants
+
     class ResourceException(Exception):  # type: ignore[no-redef]
         status_code: int | None = None
 
@@ -97,17 +98,17 @@ def raise_mapped_proxmox_error(exc: Exception) -> NoReturn:
 
 
 __all__ = [
-    "ResourceException",
-    "ProxmoxError",
     "ProxmoxConfigError",
-    "ProxmoxUnavailableError",
-    "ProxmoxPermissionError",
-    "ProxmoxVMNotFound",
-    "ProxmoxInvalidResponse",
-    "ProxmoxTaskFailed",
-    "ProxmoxInvalidRequest",
+    "ProxmoxError",
     "ProxmoxInvalidDiskSize",
-    "resource_exception_status_code",
+    "ProxmoxInvalidRequest",
+    "ProxmoxInvalidResponse",
+    "ProxmoxPermissionError",
+    "ProxmoxTaskFailed",
+    "ProxmoxUnavailableError",
+    "ProxmoxVMNotFound",
+    "ResourceException",
     "map_to_proxmox_error",
     "raise_mapped_proxmox_error",
+    "resource_exception_status_code",
 ]

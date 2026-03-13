@@ -17,10 +17,14 @@ export function useAdminRequests(onUpdated?: () => void) {
   const [requests, setRequests] = useState<AdminRequest[]>([])
   const { toast } = useToast()
 
-  const refresh = useCallback(() => {
-    apiFetch<{ items: AdminRequest[] }>('/api/requests')
-      .then(data => setRequests(data.items))
-      .catch(err => toast(err.message ?? 'Impossible de charger les demandes'))
+  const refresh = useCallback(async () => {
+    try {
+      const data = await apiFetch<{ items: AdminRequest[] }>('/api/requests')
+      setRequests(data.items)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Impossible de charger les demandes'
+      toast(msg)
+    }
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
@@ -32,7 +36,7 @@ export function useAdminRequests(onUpdated?: () => void) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
-      refresh()
+      await refresh()
       onUpdated?.()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Échec de la mise à jour de la demande'

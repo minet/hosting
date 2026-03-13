@@ -9,6 +9,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostn
 interface VMStatusEntry {
   status: string
   uptime: number | null
+  node: string | null
 }
 
 export interface VMListItem {
@@ -62,10 +63,10 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
 
     es.onmessage = (e) => {
       try {
-        const { vm_id, status, uptime } = JSON.parse(e.data) as { vm_id: number; status: string; uptime: number | null }
+        const { vm_id, status, uptime, node } = JSON.parse(e.data) as { vm_id: number; status: string; uptime: number | null; node: string | null }
         setStatuses(prev => {
           const next = new Map(prev)
-          next.set(vm_id, { status, uptime })
+          next.set(vm_id, { status, uptime, node: node ?? null })
           return next
         })
         if (!knownIdsRef.current.has(vm_id)) {

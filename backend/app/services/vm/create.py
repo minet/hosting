@@ -5,6 +5,7 @@ Implements the full VM provisioning workflow: quota validation, database
 slot reservation, Proxmox clone/firewall/disk-resize, and compensating
 transactions on failure.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,10 +18,10 @@ from sqlalchemy.orm import Session
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
+from app.services.dns import DnsService
 from app.services.proxmox.allocation import allocate_next_vm_ipv6
 from app.services.proxmox.errors import ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
 from app.services.proxmox.gateway import ProxmoxGateway
-from app.services.dns import DnsService
 from app.services.vm.errors import raise_proxmox_as_http
 from app.services.vm.query import VmQueryService
 from app.services.vm.types import VmCreateCmd
@@ -95,7 +96,12 @@ class VmCreateService:
         """
         logger.info(
             "vm_create_start user_id=%s name=%s template_id=%s cpu=%s ram=%s disk=%s",
-            ctx.user_id, cmd.name, cmd.template_id, cmd.cpu_cores, cmd.ram_gb, cmd.disk_gb,
+            ctx.user_id,
+            cmd.name,
+            cmd.template_id,
+            cmd.cpu_cores,
+            cmd.ram_gb,
+            cmd.disk_gb,
         )
 
         self._validate_limits(cmd)
@@ -158,7 +164,8 @@ class VmCreateService:
                 self.db.rollback()
                 logger.exception("vm_create_reserve_db_error user_id=%s", ctx.user_id)
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable",
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Database temporarily unavailable",
                 ) from exc
 
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM creation conflict")
@@ -189,9 +196,15 @@ class VmCreateService:
         vm_id = self._allocate_vm_id()
 
         self.cmd_repo.insert_vm_with_owner_and_resource(
-            vm_id=vm_id, name=cmd.name, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb,
-            disk_gb=cmd.disk_gb, template_id=cmd.template_id, ipv6=vm_ipv6,
-            owner_user_id=ctx.user_id, username=cmd.resource.username,
+            vm_id=vm_id,
+            name=cmd.name,
+            cpu_cores=cmd.cpu_cores,
+            ram_mb=ram_mb,
+            disk_gb=cmd.disk_gb,
+            template_id=cmd.template_id,
+            ipv6=vm_ipv6,
+            owner_user_id=ctx.user_id,
+            username=cmd.resource.username,
             ssh_public_key=cmd.resource.ssh_public_key,
         )
         self.db.commit()
@@ -226,9 +239,14 @@ class VmCreateService:
         try:
             logger.info("vm_create_proxmox_clone user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
             self.gateway.create_vm(
-                vm_id=res.vm_id, template_vmid=cmd.template_id, vm_ipv6=res.vm_ipv6,
-                name=cmd.name, cpu_cores=cmd.cpu_cores, ram_mb=res.ram_mb,
-                username=cmd.resource.username, password=cmd.resource.password,
+                vm_id=res.vm_id,
+                template_vmid=cmd.template_id,
+                vm_ipv6=res.vm_ipv6,
+                name=cmd.name,
+                cpu_cores=cmd.cpu_cores,
+                ram_mb=res.ram_mb,
+                username=cmd.resource.username,
+                password=cmd.resource.password,
                 ssh_public_key=cmd.resource.ssh_public_key,
             )
             logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
@@ -320,7 +338,8 @@ class VmCreateService:
             self.db.rollback()
             logger.exception("vm_create_finalize_db_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
             ) from exc
 
     def _compensate(self, *, vm_id: int) -> None:

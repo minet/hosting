@@ -5,17 +5,18 @@ Checks all VMs whose owner's membership (cotisation) has expired.
 - Sends a monthly warning email to the owner.
 - After 6 months of expired membership, deletes the VM from Proxmox and DB.
 """
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members
 from app.services.dns import DnsService
 from app.services.email import send_email
 from app.services.proxmox.errors import ProxmoxError
@@ -128,7 +129,7 @@ def run_purge(
 
     Returns a summary dict.
     """
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     query_repo = VmQueryRepo(db)
     cmd_repo = VmCmdRepo(db)
     dns = DnsService(settings=settings)
@@ -163,14 +164,16 @@ def run_purge(
         # We need to find when the cotisation expired.
         # Use the Keycloak user profile to get cotise_end_ms.
         from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
-        profile = fetch_keycloak_user_profile(member.get("username")) if member.get("username") else None
+
+        username = member.get("username")
+        profile = fetch_keycloak_user_profile(username) if isinstance(username, str) else None
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
 
         if cotise_end_ms is None:
             logger.warning("purge: cannot determine cotise_end for user %s, skipping vm %s", owner_id, vm_id)
             continue
 
-        cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=timezone.utc)
+        cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=UTC)
         elapsed = now - cotise_end
         elapsed_seconds = elapsed.total_seconds()
 
@@ -229,14 +232,23 @@ def run_purge(
             # Not yet 6 months — send warning email (once per run, meant to be run monthly)
             if email:
                 subject, plain, html = _build_warning_email(
-                    prenom=prenom, nom=nom, vm_name=vm_name, vm_id=vm_id,
-                    days_expired=days_expired, days_remaining=days_remaining,
+                    prenom=prenom,
+                    nom=nom,
+                    vm_name=vm_name,
+                    vm_id=vm_id,
+                    days_expired=days_expired,
+                    days_remaining=days_remaining,
                     settings=settings,
                 )
                 send_email(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
                 warned += 1
-                logger.info("purge: warned user %s for vm %s (expired %d days, %d remaining)",
-                            owner_id, vm_id, days_expired, days_remaining)
+                logger.info(
+                    "purge: warned user %s for vm %s (expired %d days, %d remaining)",
+                    owner_id,
+                    vm_id,
+                    days_expired,
+                    days_remaining,
+                )
 
     result = {"warned": warned, "deleted": deleted}
     logger.info("purge: done — %s", result)

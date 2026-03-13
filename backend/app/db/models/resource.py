@@ -20,9 +20,7 @@ class Resource(Base):
     """
 
     __tablename__ = "resources"
-    __table_args__ = (
-        UniqueConstraint("vm_id", "username", name="unique_user_per_vm"),
-    )
+    __table_args__ = (UniqueConstraint("vm_id", "username", name="unique_user_per_vm"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     vm_id: Mapped[int] = mapped_column(

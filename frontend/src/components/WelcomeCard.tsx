@@ -73,7 +73,7 @@ export default function WelcomeCard() {
           </p>
         )}
       </div>
-<button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 shadow-sm hover:shadow-md text-blue-700 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-all hover:scale-[1.01] cursor-pointer">
+<button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 shadow-sm hover:shadow-md text-blue-700 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
         <img src="/assets/pinguins/PinguinFiere.svg" alt="Pinguin fière" className="h-[90%] w-auto" />
         <div className="flex flex-col items-start flex-1">
           <span className="font-semibold text-sm md:text-base xl:text-base">Créer une VM</span>

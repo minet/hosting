@@ -45,4 +45,4 @@ class CloudInitPatchSpec:
     ci_ssh_public_key: str | None
 
 
-__all__ = ["VmCreateSpec", "CloudInitPatchSpec"]
+__all__ = ["CloudInitPatchSpec", "VmCreateSpec"]

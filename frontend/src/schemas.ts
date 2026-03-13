@@ -43,6 +43,7 @@ export const ResourcesSchema = z.object({
   }),
   limits: ResourceLimitsSchema,
   remaining: ResourceLimitsSchema,
+  minimums: ResourceLimitsSchema.nullable().optional(),
 })
 
 export type Resources = z.infer<typeof ResourcesSchema>

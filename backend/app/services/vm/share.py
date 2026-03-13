@@ -4,6 +4,7 @@ VM sharing service.
 Manages granting and revoking shared (non-owner) access to virtual machines
 by persisting access records in the database.
 """
+
 from __future__ import annotations
 
 from fastapi import HTTPException, status
@@ -42,7 +43,9 @@ class VmShareService:
             self.db.commit()
         except SQLAlchemyError as exc:
             self.db.rollback()
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc
         return {"vm_id": vm_id, "user_id": user_id, "action": "grant_access", "status": "ok", "result": result}
 
     def revoke_access(self, *, vm_id: int, user_id: str) -> dict:
@@ -64,7 +67,9 @@ class VmShareService:
             self.db.commit()
         except SQLAlchemyError as exc:
             self.db.rollback()
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc
 
         if result == "not_found":
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM access entry not found")

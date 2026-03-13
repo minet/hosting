@@ -35,7 +35,7 @@ def _require_proxmox(settings: Settings) -> None:
     raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Proxmox is not configured")
 
 
-async def _run_proxmox(fn, *, settings: Settings):
+async def _run_proxmox(fn: Any, *, settings: Settings) -> Any:
     """
     Execute a Proxmox gateway call inside the Proxmox executor.
 

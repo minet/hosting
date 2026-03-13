@@ -8,7 +8,7 @@ interface Props {
 export default function AdminLayout({ children }: Props) {
   return (
     <div className="flex flex-col h-screen bg-white text-neutral-900">
-      <Header onBurgerClick={() => {}} />
+      <Header />
       <main className="flex-1 overflow-hidden p-4">{children}</main>
     </div>
   )

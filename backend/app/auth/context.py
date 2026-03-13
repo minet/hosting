@@ -10,8 +10,7 @@ FastAPI dependency functions (``require_user``, ``require_admin``,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, status
 
@@ -29,6 +28,7 @@ class AuthCtx:
         admin group defined in the application settings.
     :param payload: Raw decoded token payload from the identity provider.
     """
+
     user_id: str
     groups: set[str]
     is_admin: bool
@@ -278,8 +278,8 @@ def require_cotisant(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Membership data unavailable",
         )
-    cotise_end = datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
-    if datetime.now(tz=timezone.utc) > cotise_end:
+    cotise_end = datetime.fromtimestamp(ms / 1000, tz=UTC)
+    if datetime.now(tz=UTC) > cotise_end:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Membership expired",

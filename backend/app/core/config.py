@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     app_env: str = Field(default="dev", alias="APP_ENV")
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
     database_url: str = Field(alias="DATABASE_URL")
-    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    session_secret: str = Field(alias="SESSION_SECRET")
 
     backend_url: str = Field(default="http://localhost:8000", alias="BACKEND_URL")
 
@@ -54,11 +54,8 @@ class Settings(BaseSettings):
         alias="FRONTEND_ALLOWED_ORIGINS",
     )
     session_cookie_secure: bool | None = Field(default=None, alias="SESSION_COOKIE_SECURE")
-    session_cookie_name: str = Field(default="backend_session", alias="SESSION_COOKIE_NAME")
     session_ttl_seconds: int = Field(default=3600, alias="SESSION_TTL_SECONDS")
     auth_state_ttl_seconds: int = Field(default=600, alias="AUTH_STATE_TTL_SECONDS")
-    auth_state_key_prefix: str = Field(default="auth:state:", alias="AUTH_STATE_KEY_PREFIX")
-    auth_session_key_prefix: str = Field(default="auth:session:", alias="AUTH_SESSION_KEY_PREFIX")
     db_pool_min_size: int = Field(default=1, alias="DB_POOL_MIN_SIZE")
     db_pool_max_size: int = Field(default=10, alias="DB_POOL_MAX_SIZE")
     db_pool_timeout_seconds: int = Field(default=10, alias="DB_POOL_TIMEOUT_SECONDS")

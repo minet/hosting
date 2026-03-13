@@ -15,10 +15,10 @@ from app.services.auth.service import (
 )
 
 __all__ = [
-    "login_redirect",
+    "AuthMeResponse",
     "callback_redirect",
     "current_user_claims",
-    "logout_redirect",
     "local_logout_redirect",
-    "AuthMeResponse",
+    "login_redirect",
+    "logout_redirect",
 ]

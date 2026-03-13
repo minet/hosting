@@ -5,9 +5,13 @@ Wraps the :class:`~app.services.proxmox.gateway.ProxmoxGateway` calls for
 individual VM power-state operations and translates Proxmox errors into HTTP
 exceptions via :func:`~app.services.vm.errors.raise_proxmox_as_http`.
 """
+
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
@@ -74,7 +78,9 @@ class VmActionService:
         :rtype: dict[str, Any]
         :raises HTTPException: On Proxmox communication or permission errors.
         """
-        runtime = self._run(lambda: self.gateway.get_vm_status(vm_id=vm_id), unavailable="Unable to fetch VM status from Proxmox")
+        runtime = self._run(
+            lambda: self.gateway.get_vm_status(vm_id=vm_id), unavailable="Unable to fetch VM status from Proxmox"
+        )
         return {"vm_id": vm_id, **runtime}
 
     def tasks(self, vm_id: int, limit: int = 20) -> dict[str, Any]:
@@ -87,10 +93,13 @@ class VmActionService:
         :rtype: dict[str, Any]
         :raises HTTPException: On Proxmox communication or permission errors.
         """
-        items = self._run(lambda: self.gateway.list_vm_tasks(vm_id=vm_id, limit=limit), unavailable="Unable to fetch VM tasks from Proxmox")
+        items = self._run(
+            lambda: self.gateway.list_vm_tasks(vm_id=vm_id, limit=limit),
+            unavailable="Unable to fetch VM tasks from Proxmox",
+        )
         return {"vm_id": vm_id, "items": items, "count": len(items)}
 
-    def _run(self, fn, *, unavailable: str):
+    def _run(self, fn: Callable[[], _T], *, unavailable: str) -> _T:
         """
         Execute ``fn`` and translate any :class:`~app.services.proxmox.errors.ProxmoxError`
         into an :class:`~fastapi.HTTPException`.

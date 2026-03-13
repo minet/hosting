@@ -54,11 +54,13 @@ def get_my_resources(
     :returns: Resource usage statistics, limits, and remaining capacity.
     :rtype: ResourcesResponse
     """
-    return ResourcesResponse.model_validate({
-        "scope": "me",
-        "user_id": ctx.user_id,
-        **query.get_resources(user_id=ctx.user_id),
-    })
+    return ResourcesResponse.model_validate(
+        {
+            "scope": "me",
+            "user_id": ctx.user_id,
+            **query.get_resources(user_id=ctx.user_id),
+        }
+    )
 
 
 router.include_router(admin_router)

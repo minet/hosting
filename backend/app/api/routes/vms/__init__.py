@@ -29,15 +29,15 @@ router.include_router(command_router, prefix="/vms")
 router.include_router(console_router, prefix="/vms")
 
 __all__ = [
-    "router",
-    "VMListResponse",
-    "VMDetailResponse",
-    "VMTasksResponse",
-    "VMStatusResponse",
     "VMAccessListResponse",
-    "VMActionResponse",
-    "VMPatchResponse",
     "VMAccessMutationResponse",
+    "VMActionResponse",
     "VMCreateBody",
+    "VMDetailResponse",
+    "VMListResponse",
     "VMPatchBody",
+    "VMPatchResponse",
+    "VMStatusResponse",
+    "VMTasksResponse",
+    "router",
 ]

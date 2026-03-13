@@ -5,6 +5,7 @@ Applies resource resizes and cloud-init credential updates to an existing
 virtual machine, keeping Proxmox and the database in sync with quota checks
 and conflict detection.
 """
+
 from __future__ import annotations
 
 import logging
@@ -84,13 +85,16 @@ class VmPatchService:
             found, 422 on invalid resize values, 403 on quota violation, 409
             on concurrent modification, 503 on infrastructure errors.
         """
-        wants_cloudinit = username is not None and (password is not None or ssh_public_key is not None)
+        wants_cloudinit = username is not None
         wants_resize = cpu_cores is not None or ram_gb is not None or disk_gb is not None
         if not wants_cloudinit and not wants_resize:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Nothing to update")
         logger.info(
             "vm_patch_start user_id=%s vm_id=%s wants_resize=%s wants_cloudinit=%s",
-            user_id, vm_id, wants_resize, wants_cloudinit,
+            user_id,
+            vm_id,
+            wants_resize,
+            wants_cloudinit,
         )
 
         target_cpu = cpu_cores
@@ -123,17 +127,28 @@ class VmPatchService:
 
         try:
             if wants_resize:
+                assert target_cpu is not None and target_ram_mb is not None and target_disk is not None
                 logger.info(
                     "vm_patch_proxmox_resize vm_id=%s cpu_cores=%s ram_mb=%s disk_gb=%s",
-                    vm_id, target_cpu, target_ram_mb, target_disk,
+                    vm_id,
+                    target_cpu,
+                    target_ram_mb,
+                    target_disk,
                 )
                 self.gateway.update_vm_resources(
-                    vm_id=vm_id, cpu_cores=target_cpu, ram_mb=target_ram_mb, disk_gb=target_disk,
+                    vm_id=vm_id,
+                    cpu_cores=target_cpu,
+                    ram_mb=target_ram_mb,
+                    disk_gb=target_disk,
                 )
             if wants_cloudinit:
+                assert username is not None
                 logger.info("vm_patch_proxmox_cloudinit vm_id=%s username=%s", vm_id, username)
                 self.gateway.update_vm_cloudinit(
-                    vm_id=vm_id, username=username, password=password, ssh_public_key=ssh_public_key,
+                    vm_id=vm_id,
+                    username=username,
+                    password=password,
+                    ssh_public_key=ssh_public_key,
                 )
         except ProxmoxError as exc:
             logger.warning("vm_patch_proxmox_error vm_id=%s exc=%s msg=%s", vm_id, type(exc).__name__, exc)
@@ -141,15 +156,22 @@ class VmPatchService:
 
         try:
             if wants_resize:
+                assert target_cpu is not None and target_ram_mb is not None and target_disk is not None
                 updated_vm = self.cmd_repo.update_vm_resources(
-                    vm_id=vm_id, cpu_cores=target_cpu, ram_mb=target_ram_mb, disk_gb=target_disk,
+                    vm_id=vm_id,
+                    cpu_cores=target_cpu,
+                    ram_mb=target_ram_mb,
+                    disk_gb=target_disk,
                 )
                 if not updated_vm:
                     self.db.rollback()
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM changed concurrently")
             if wants_cloudinit:
+                assert username is not None
                 updated_resource = self.cmd_repo.update_resource(
-                    vm_id=vm_id, username=username, ssh_public_key=ssh_public_key,
+                    vm_id=vm_id,
+                    username=username,
+                    ssh_public_key=ssh_public_key,
                 )
                 if not updated_resource:
                     self.db.rollback()
@@ -162,7 +184,8 @@ class VmPatchService:
             self.db.rollback()
             logger.exception("vm_patch_db_error vm_id=%s", vm_id)
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
             ) from exc
 
         result = {"vm_id": vm_id, "action": "patch", "status": "ok"}
@@ -188,13 +211,16 @@ class VmPatchService:
             vm = self.query_repo.get_vm(vm_id)
         except SQLAlchemyError as exc:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
             ) from exc
         if vm is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
         return vm
 
-    def _validate_resize(self, *, current_disk_gb: int, target_cpu: int, target_ram_mb: int, target_disk_gb: int) -> None:
+    def _validate_resize(
+        self, *, current_disk_gb: int, target_cpu: int, target_ram_mb: int, target_disk_gb: int
+    ) -> None:
         """
         Validate that the target resource values are within acceptable bounds.
 
@@ -246,7 +272,8 @@ class VmPatchService:
             usage = self.query_repo.get_owned_totals(user_id)
         except SQLAlchemyError as exc:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database temporarily unavailable",
             ) from exc
 
         projected_cpu = usage["cpu_cores"] - current_cpu + target_cpu

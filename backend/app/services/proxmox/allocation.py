@@ -199,7 +199,7 @@ def allocate_next_vm_ipv4(*, used_ipv4: set[str]) -> str:
 
     for host in range(2, host_space + 1):
         candidate = IPv4Address(int(network.network_address) + host)
-        if candidate == gateway_ip or candidate == broadcast:
+        if candidate in (gateway_ip, broadcast):
             continue
         if candidate not in used_addresses:
             return str(candidate)
@@ -230,10 +230,10 @@ def _parse_used_ipv4(*, used_ipv4: set[str], network: IPv4Network) -> set[IPv4Ad
 
 __all__ = [
     "VmIdAllocator",
-    "allocate_vm_id",
-    "vm_id_min",
-    "ipv6_network_settings",
-    "allocate_next_vm_ipv6",
-    "ipv4_network_settings",
     "allocate_next_vm_ipv4",
+    "allocate_next_vm_ipv6",
+    "allocate_vm_id",
+    "ipv4_network_settings",
+    "ipv6_network_settings",
+    "vm_id_min",
 ]

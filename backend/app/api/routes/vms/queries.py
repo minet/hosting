@@ -13,20 +13,29 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from app.auth import AuthCtx, require_charter_signed
-from app.db.core.engine import get_session_factory
-from app.db.repositories.vm import VmQueryRepo
 from app.core.config import get_settings
+from app.db.core import get_db
+from app.db.core.engine import get_session_factory
+from app.db.repositories.request import RequestRepo
+from app.db.repositories.vm import VmQueryRepo
 from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService, VmQueryService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_query_service
 
-from app.db.core import get_db
-from app.db.repositories.request import RequestRepo
-from sqlalchemy.orm import Session
-from .schemas import VMAccessListResponse, VMDetailResponse, VMListResponse, VMMetricsResponse, VMRequestListResponse, VMRequestResponse, VMStatusResponse, VMTasksResponse
+from .schemas import (
+    VMAccessListResponse,
+    VMDetailResponse,
+    VMListResponse,
+    VMMetricsResponse,
+    VMRequestListResponse,
+    VMRequestResponse,
+    VMStatusResponse,
+    VMTasksResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +81,10 @@ async def stream_vm_statuses(
                         data = await run_in_proxmox_executor(cmd.status, vm_id=vm_id)
                         s = data.get("status")
                         uptime = data.get("uptime")
+                        node = data.get("node")
                         if last.get(vm_id) != s:
                             last[vm_id] = s
-                            yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime})}\n\n"
+                            yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime, 'node': node})}\n\n"
                     except Exception:
                         logger.debug("SSE: failed to fetch status for vm_id=%s", vm_id, exc_info=True)
             except Exception:

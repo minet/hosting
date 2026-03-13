@@ -211,4 +211,4 @@ def _task_belongs_to_vm(*, item: dict[str, Any], vm_id: int) -> bool:
     return False
 
 
-__all__ = ["ensure_upid", "TaskService", "clamp_task_limit", "normalize_vm_tasks"]
+__all__ = ["TaskService", "clamp_task_limit", "ensure_upid", "normalize_vm_tasks"]

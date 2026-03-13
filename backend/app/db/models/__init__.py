@@ -13,9 +13,10 @@ class Base(DeclarativeBase):
 
 
 from app.db.models.quota_lock import QuotaLock
+from app.db.models.request import Request
 from app.db.models.resource import Resource
 from app.db.models.template import Template
 from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
 
-__all__ = ["Base", "VM", "VMAccess", "Template", "Resource", "QuotaLock"]
+__all__ = ["VM", "Base", "QuotaLock", "Request", "Resource", "Template", "VMAccess"]

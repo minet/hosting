@@ -14,15 +14,15 @@ from app.services.proxmox.errors import (
 from app.services.proxmox.gateway import ProxmoxGateway, get_proxmox_gateway
 
 __all__ = [
-    "ProxmoxError",
     "ProxmoxConfigError",
-    "ProxmoxUnavailableError",
-    "ProxmoxPermissionError",
-    "ProxmoxVMNotFound",
-    "ProxmoxInvalidResponse",
-    "ProxmoxTaskFailed",
-    "ProxmoxInvalidRequest",
-    "ProxmoxInvalidDiskSize",
+    "ProxmoxError",
     "ProxmoxGateway",
+    "ProxmoxInvalidDiskSize",
+    "ProxmoxInvalidRequest",
+    "ProxmoxInvalidResponse",
+    "ProxmoxPermissionError",
+    "ProxmoxTaskFailed",
+    "ProxmoxUnavailableError",
+    "ProxmoxVMNotFound",
     "get_proxmox_gateway",
 ]

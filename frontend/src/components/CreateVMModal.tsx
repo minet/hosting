@@ -29,6 +29,10 @@ export default function CreateVMModal({ onClose }: Props) {
   const maxRam = remaining ? Math.floor(remaining.ram_mb / 1024) : 1
   const maxDisk = remaining?.disk_gb ?? 1
 
+  const minCpu = resources?.minimums?.cpu_cores ?? 1
+  const minRam = resources?.minimums ? Math.ceil(resources.minimums.ram_mb / 1024) : 1
+  const minDisk = resources?.minimums?.disk_gb ?? 10
+
   const [name, setName] = useState('')
   const [templateId, setTemplateId] = useState<number | ''>('')
 
@@ -235,15 +239,15 @@ export default function CreateVMModal({ onClose }: Props) {
               <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>CPU <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxCpu})</span></label>
-                  <input className={inputClass} type="number" min={2} max={maxCpu} value={cpu} onChange={e => setCpu(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minCpu} max={maxCpu} value={cpu} onChange={e => setCpu(Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>RAM Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxRam})</span></label>
-                  <input className={inputClass} type="number" min={2} max={maxRam} value={ram} onChange={e => setRam(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minRam} max={maxRam} value={ram} onChange={e => setRam(Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>Disque Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxDisk})</span></label>
-                  <input className={inputClass} type="number" min={1} max={maxDisk} value={disk} onChange={e => setDisk(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minDisk} max={maxDisk} value={disk} onChange={e => setDisk(Number(e.target.value))} required />
                 </div>
               </div>
             </section>
@@ -262,7 +266,12 @@ export default function CreateVMModal({ onClose }: Props) {
                 </div>
               </div>
               <div className="flex flex-col gap-1">
-                <label className={labelClass}>Clé SSH publique</label>
+                <label className={labelClass}>
+                  Clé SSH publique
+                  <a href="https://wiki.minet.net/fr/guides/misc/ssh-key" target="_blank" rel="noopener noreferrer" className="ml-1.5 normal-case font-normal text-blue-500 hover:text-blue-600 hover:underline">
+                    Comment générer une clé ?
+                  </a>
+                </label>
                 <textarea className={`${inputClass} font-mono text-xs resize-none`} rows={3} value={sshKey} onChange={e => setSshKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." required />
               </div>
             </section>

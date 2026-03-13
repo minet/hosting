@@ -164,7 +164,9 @@ class VmQueryRepo:
         :returns: A list of row dicts each containing ``template_id`` and ``name``.
         :rtype: list[dict[str, Any]]
         """
-        stmt = select(Template.template_id.label("template_id"), Template.name.label("name")).order_by(Template.template_id.asc())
+        stmt = select(Template.template_id.label("template_id"), Template.name.label("name")).order_by(
+            Template.template_id.asc()
+        )
         return [dict(row) for row in self.db.execute(stmt).mappings().all()]
 
     def get_template(self, template_id: int) -> dict[str, Any] | None:
@@ -244,9 +246,5 @@ class VmQueryRepo:
         :returns: ``True`` if a matching resource row exists, ``False`` otherwise.
         :rtype: bool
         """
-        stmt = (
-            select(Resource.id)
-            .where(Resource.vm_id == vm_id, Resource.username == username)
-            .limit(1)
-        )
+        stmt = select(Resource.id).where(Resource.vm_id == vm_id, Resource.username == username).limit(1)
         return self.db.execute(stmt).first() is not None

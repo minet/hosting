@@ -4,9 +4,10 @@ VM access control service.
 Provides the :class:`AccessLevel` enumeration and :class:`VmAccessService`
 which enforces per-VM authorisation rules for regular and admin users.
 """
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,7 +16,7 @@ from app.auth import AuthCtx
 from app.db.repositories.vm import VmAccessRepo
 
 
-class AccessLevel(str, Enum):
+class AccessLevel(StrEnum):
     """Enumeration of access levels a user can hold on a VM."""
 
     OWNER = "owner"
@@ -53,7 +54,9 @@ class VmAccessService:
         try:
             allowed = self.repo.has_vm_access(vm_id=vm_id, user_id=ctx.user_id, owner_only=owner_only)
         except SQLAlchemyError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable") from exc
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc
 
         if allowed:
             return

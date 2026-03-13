@@ -4,6 +4,7 @@ Charter PDF generation service.
 Generates a PDF version of the hosting charter (CHARTE.md) using fpdf2,
 including the user's name and the signature date in a footer.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,18 +15,20 @@ _CHARTE_PATH = Path("/charte/CHARTE.md")
 _HEADING_PREFIX = "#"
 
 # Characters outside latin-1 that appear in the charter — map to safe equivalents
-_UNICODE_MAP = str.maketrans({
-    "\u2014": "--",   # em dash —
-    "\u2013": "-",    # en dash –
-    "\u2022": "-",    # bullet •
-    "\u2019": "'",    # right single quote '
-    "\u2018": "'",    # left single quote '
-    "\u201c": '"',    # left double quote "
-    "\u201d": '"',    # right double quote "
-    "\u2026": "...",  # ellipsis …
-    "\u00ab": '"',    # «
-    "\u00bb": '"',    # »
-})
+_UNICODE_MAP = str.maketrans(
+    {
+        "\u2014": "--",  # em dash —
+        "\u2013": "-",  # en dash –
+        "\u2022": "-",  # bullet •
+        "\u2019": "'",  # right single quote '
+        "\u2018": "'",  # left single quote '
+        "\u201c": '"',  # left double quote "
+        "\u201d": '"',  # right double quote "
+        "\u2026": "...",  # ellipsis …
+        "\u00ab": '"',  # «
+        "\u00bb": '"',  # »
+    }
+)
 
 
 def _safe(text: str) -> str:
@@ -123,10 +126,14 @@ def generate_charter_pdf(prenom: str, nom: str, signed_at: str) -> bytes:
     pdf.cell(0, 6, _safe("Signature electronique"))
     pdf.ln(6)
     pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(0, 6, _safe(
-        f"Je soussigne(e) {prenom} {nom} declare avoir pris connaissance de la presente "
-        "charte d'utilisation et m'engage a en respecter les termes."
-    ))
+    pdf.multi_cell(
+        0,
+        6,
+        _safe(
+            f"Je soussigne(e) {prenom} {nom} declare avoir pris connaissance de la presente "
+            "charte d'utilisation et m'engage a en respecter les termes."
+        ),
+    )
     pdf.ln(4)
     pdf.cell(0, 6, _safe(f"Date de signature : {signed_at}"))
 

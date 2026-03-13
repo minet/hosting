@@ -3,7 +3,10 @@ import { apiFetch } from '../api'
 import { useToast } from '../contexts/ToastContext'
 import { type VMDetail } from '../types/vm'
 
-type Resources = { remaining: { cpu_cores: number; ram_mb: number; disk_gb: number } } | null
+type Resources = {
+  remaining: { cpu_cores: number; ram_mb: number; disk_gb: number }
+  minimums?: { cpu_cores: number; ram_mb: number; disk_gb: number } | null
+} | null
 
 export function useVMResources(
   vmId: string | undefined,
@@ -47,6 +50,11 @@ export function useVMResources(
   const maxRam  = vm ? Math.round(vm.ram_mb / 1024) + Math.round((resources?.remaining.ram_mb ?? 0) / 1024) : 1
   const maxDisk = vm ? vm.disk_gb + (resources?.remaining.disk_gb ?? 0) : 10
 
+  const minCpu  = resources?.minimums ? resources.minimums.cpu_cores : 1
+  const minRam  = resources?.minimums ? Math.round(resources.minimums.ram_mb / 1024) : 1
+  // Disk cannot shrink, so min is current disk size
+  const minDisk = vm?.disk_gb ?? (resources?.minimums?.disk_gb ?? 10)
+
   return {
     resModalOpen, setResModalOpen,
     newCpu, setNewCpu,
@@ -54,5 +62,6 @@ export function useVMResources(
     newDisk, setNewDisk,
     resSaving, doSaveResources,
     maxCpu, maxRam, maxDisk,
+    minCpu, minRam, minDisk,
   }
 }
