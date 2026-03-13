@@ -2,15 +2,15 @@ import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import ColFilter from './ColFilter'
 import type { ColFilterProps } from './ColFilter'
 
-export type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status'
+export type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status' | 'node' | 'cotise'
 export type SortDir = 'asc' | 'desc'
 
-export const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
+export const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'node', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
 export type ColId = typeof COLS[number]
 
 export const DEFAULT_WIDTHS: Record<ColId, number> = {
   vm_id: 60, status: 120, name: 150, template_name: 130,
-  cpu_cores: 220, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
+  cpu_cores: 220, node: 120, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
 }
 
 export interface ThProps {
