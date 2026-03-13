@@ -93,15 +93,15 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
           <p className="text-sm font-bold text-neutral-700">{label}</p>
           <span className="text-xs text-neutral-400">({used} / {total} {unit})</span>
         </div>
-        <div className="flex-1 min-h-0 flex items-center overflow-hidden">
-          <div className="relative w-full">
+        <div className="flex-1 min-h-0 relative">
+          <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
             <GaugeComponent
               value={used}
               minValue={0}
               maxValue={total || 1}
               type="radial"
               fadeInAnimation={false}
-    
+
               arc={{
                 width: 0.2,
                 padding: 0.01,

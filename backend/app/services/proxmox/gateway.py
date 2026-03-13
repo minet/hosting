@@ -649,15 +649,13 @@ class ProxmoxGateway:
     def get_ws_auth_headers(self) -> dict[str, str]:
         """Return authentication headers for Proxmox WebSocket connections.
 
-        Proxmox VNC/terminal WebSockets require ticket-based auth, so we
-        always obtain a PVE ticket via user+password (even when the main
-        client uses an API token).
+        Proxmox VNC/terminal WebSockets require a fresh PVE ticket — the
+        cached ticket from the proxmoxer session may have expired (2 h TTL)
+        while the singleton gateway stayed alive.  We always obtain a new
+        ticket via user+password to guarantee validity.
         """
         service = self._settings.proxmox_service or "PVE"
-        if self._uses_api_token:
-            ticket = self._get_pve_ticket()
-        else:
-            ticket = self._client._backend.auth.pve_auth_ticket
+        ticket = self._get_pve_ticket()
         return {"Cookie": f"{service}AuthCookie={ticket}"}
 
     def _get_pve_ticket(self) -> str:
