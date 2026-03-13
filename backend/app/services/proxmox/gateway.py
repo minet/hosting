@@ -47,10 +47,18 @@ class ProxmoxGateway:
         """
         self._settings = settings
         if settings.proxmox_token_id and settings.proxmox_token_secret:
+            # proxmox_token_id may be "user@realm!token" or just "token";
+            # proxmoxer expects user and token_name separately.
+            raw_token_id = settings.proxmox_token_id
+            if "!" in raw_token_id:
+                token_user, token_name = raw_token_id.split("!", 1)
+            else:
+                token_user = self._user
+                token_name = raw_token_id
             self._client = ProxmoxAPI(
                 host=self._host,
-                user=self._user,
-                token_name=settings.proxmox_token_id,
+                user=token_user,
+                token_name=token_name,
                 token_value=settings.proxmox_token_secret,
                 verify_ssl=settings.proxmox_verify_tls,
                 timeout=settings.proxmox_timeout_seconds,

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NoReturn
+
+logger = logging.getLogger(__name__)
 
 try:
     from proxmoxer.core import ResourceException
@@ -79,13 +82,15 @@ def map_to_proxmox_error(exc: Exception) -> ProxmoxError:
         return ProxmoxUnavailableError("Proxmox API unavailable")
 
     status_code = resource_exception_status_code(exc)
+    detail = str(exc) if str(exc) else repr(exc)
     if status_code == 404:
-        return ProxmoxVMNotFound("VM not found on Proxmox")
+        return ProxmoxVMNotFound(f"VM not found on Proxmox: {detail}")
     if status_code in {401, 403}:
-        return ProxmoxPermissionError("Permission denied by Proxmox")
+        logger.warning("Proxmox permission error (HTTP %s): %s", status_code, detail)
+        return ProxmoxPermissionError(f"Permission denied by Proxmox (HTTP {status_code}): {detail}")
     if status_code is not None and status_code >= 500:
-        return ProxmoxUnavailableError("Proxmox API unavailable")
-    return ProxmoxError("Proxmox API request failed")
+        return ProxmoxUnavailableError(f"Proxmox API unavailable (HTTP {status_code}): {detail}")
+    return ProxmoxError(f"Proxmox API request failed (HTTP {status_code}): {detail}")
 
 
 def raise_mapped_proxmox_error(exc: Exception) -> NoReturn:
