@@ -8,22 +8,12 @@ import { VMStatusContext } from '../contexts/VMStatusContext'
 import RequestBadge from '../components/admin/RequestBadge'
 import StatusCell from '../components/admin/StatusCell'
 import RevealOwner from '../components/admin/RevealOwner'
-import Th from '../components/admin/Th'
+import Th, { type SortKey, type SortDir, type ColId, DEFAULT_WIDTHS } from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
 import ProxmoxTab from '../components/admin/ProxmoxTab'
 
-type SortKey = 'vm_id' | 'name' | 'template_name' | 'cpu_cores' | 'ipv4' | 'ipv6' | 'mac' | 'dns' | 'owner_id' | 'status' | 'node'
-type SortDir = 'asc' | 'desc'
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
 type Tab = 'vms' | 'templates' | 'proxmox'
-
-const COLS = ['vm_id', 'status', 'name', 'template_name', 'cpu_cores', 'node', 'ipv4', 'ipv6', 'mac', 'dns', 'owner_id', 'cotise'] as const
-type ColId = typeof COLS[number]
-
-const DEFAULT_WIDTHS: Record<ColId, number> = {
-  vm_id: 60, status: 120, name: 150, template_name: 130,
-  cpu_cores: 220, node: 120, ipv4: 120, ipv6: 260, mac: 140, dns: 200, owner_id: 340, cotise: 90,
-}
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
   const s = statuses.get(vmId)?.status
