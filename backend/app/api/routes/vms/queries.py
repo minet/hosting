@@ -71,7 +71,7 @@ async def stream_vm_statuses(
             try:
                 db = get_session_factory()()
                 try:
-                    query = VmQueryService(repo=VmQueryRepo(db), settings=settings)
+                    query = VmQueryService(repo=VmQueryRepo(db, dns_zone=settings.dns_zone.rstrip(".")), settings=settings)
                     vms = query.list_vms_for(ctx=ctx)
                     vm_ids = [v["vm_id"] for v in vms["items"]]
                 finally:

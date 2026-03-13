@@ -96,7 +96,7 @@ class VmCommandService:
         """
         with self._make_session() as db:
             cmd_repo = VmCmdRepo(db)
-            query_repo = VmQueryRepo(db)
+            query_repo = VmQueryRepo(db, dns_zone=self._settings.dns_zone.rstrip("."))
             service = VmCreateService(
                 db=db,
                 cmd_repo=cmd_repo,

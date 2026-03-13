@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import Text, cast, func, literal, select
+from sqlalchemy import Column, MetaData, String, Table, Text, cast, func, literal, select
 from sqlalchemy.orm import Session
 
 from app.db.models.resource import Resource
@@ -12,17 +12,49 @@ from app.db.models.template import Template
 from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
 
+_pdns_meta = MetaData()
+_pdns_records = Table(
+    "pdns_records",
+    _pdns_meta,
+    Column("name", String(255)),
+    Column("type", String(10)),
+    Column("content", String(65535)),
+)
 
-def _vm_columns():
+
+def _vm_columns(dns_zone: str):
     """Return the common set of labeled VM columns used across query statements.
 
-    Includes VM fields, the template name, and network addresses formatted as
-    plain host strings via the PostgreSQL ``host()`` function.
+    Includes VM fields, the template name, network addresses formatted as
+    plain host strings via the PostgreSQL ``host()`` function, and the custom
+    DNS label resolved from the PowerDNS CNAME records table.
 
+    :param dns_zone: The configured DNS zone (without trailing dot).
     :returns: A tuple of SQLAlchemy column expressions suitable for use in a
         ``select()`` statement.
     :rtype: tuple
     """
+    # Find a CNAME in pdns_records whose content ends with -{vm_id}.{zone}.
+    # and extract the custom label (name minus the .{zone}. suffix).
+    cname_subq = (
+        select(
+            func.replace(
+                _pdns_records.c.name,
+                f".{dns_zone}.",
+                "",
+            )
+        )
+        .where(
+            _pdns_records.c.type == "CNAME",
+            _pdns_records.c.content.like(
+                func.concat("%-", cast(VM.vm_id, Text), f".{dns_zone}.")
+            ),
+        )
+        .limit(1)
+        .correlate(VM)
+        .scalar_subquery()
+    ).label("dns_label")
+
     return (
         VM.vm_id.label("vm_id"),
         VM.name.label("name"),
@@ -34,6 +66,7 @@ def _vm_columns():
         func.host(VM.ipv4).label("ipv4"),
         func.host(VM.ipv6).label("ipv6"),
         cast(VM.mac, Text).label("mac"),
+        cname_subq,
     )
 
 
@@ -41,14 +74,18 @@ class VmQueryRepo:
     """Repository providing read-only query operations over VM-related tables.
 
     :param db: SQLAlchemy session used for database operations.
+    :param dns_zone: The configured DNS zone (without trailing dot), used to
+        resolve custom CNAME labels from the PowerDNS records table.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, dns_zone: str = ""):
         """Initialize the repository with a database session.
 
         :param db: Active SQLAlchemy session.
+        :param dns_zone: DNS zone for CNAME label resolution.
         """
         self.db = db
+        self._dns_zone = dns_zone
 
     def list_user_vms(self, user_id: str) -> list[dict[str, Any]]:
         """Return all VMs that the given user has access to, ordered by VM ID.
@@ -61,7 +98,7 @@ class VmQueryRepo:
         """
         stmt = (
             select(
-                *_vm_columns(),
+                *_vm_columns(self._dns_zone),
                 VMAccess.role_owner.label("role_owner"),
             )
             .join(VM, VM.vm_id == VMAccess.vm_id)
@@ -89,7 +126,7 @@ class VmQueryRepo:
         ).label("owner_id")
         stmt = (
             select(
-                *_vm_columns(),
+                *_vm_columns(self._dns_zone),
                 literal(True).label("role_owner"),
                 owner_subq,
             )
@@ -109,7 +146,7 @@ class VmQueryRepo:
         """
         stmt = (
             select(
-                *_vm_columns(),
+                *_vm_columns(self._dns_zone),
                 VMAccess.role_owner.label("role_owner"),
                 Resource.username.label("username"),
                 Resource.ssh_public_key.label("ssh_public_key"),
@@ -132,7 +169,7 @@ class VmQueryRepo:
         """
         stmt = (
             select(
-                *_vm_columns(),
+                *_vm_columns(self._dns_zone),
                 Resource.username.label("username"),
                 Resource.ssh_public_key.label("ssh_public_key"),
             )

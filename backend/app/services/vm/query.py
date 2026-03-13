@@ -180,7 +180,8 @@ class VmQueryService:
                 "ipv6": row["ipv6"],
                 "mac": row["mac"],
                 "owner_id": row.get("owner_id"),
-                "dns": f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
+                "dns": f"{row['dns_label']}.{dns_zone}" if row.get("dns_label") and dns_zone
+                    else f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
             }
             for row in rows
         ]
@@ -209,7 +210,8 @@ class VmQueryService:
             "current_user_role": role,
             "username": row.get("username") if role in ("owner", "admin") else None,
             "ssh_public_key": row.get("ssh_public_key") if role in ("owner", "admin") else None,
-            "dns": f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
+            "dns": f"{row['dns_label']}.{dns_zone}" if row.get("dns_label") and dns_zone
+                else f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
         }
 
     @staticmethod

@@ -20,15 +20,16 @@ from app.services.vm.query import VmQueryService
 from app.services.vm.share import VmShareService
 
 
-def get_vm_query_repo(db: Session = Depends(get_db)) -> VmQueryRepo:
+def get_vm_query_repo(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)) -> VmQueryRepo:
     """
     FastAPI dependency that provides a :class:`~app.db.repositories.vm.VmQueryRepo`.
 
     :param db: Injected database session.
+    :param settings: Injected application settings.
     :returns: A new :class:`~app.db.repositories.vm.VmQueryRepo` bound to ``db``.
     :rtype: VmQueryRepo
     """
-    return VmQueryRepo(db)
+    return VmQueryRepo(db, dns_zone=settings.dns_zone.rstrip("."))
 
 
 def get_vm_cmd_repo(db: Session = Depends(get_db)) -> VmCmdRepo:
