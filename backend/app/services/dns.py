@@ -17,6 +17,7 @@ import re
 import httpx
 
 from app.core.config import Settings
+from app.services.wordgen import vm_dns_label
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,8 @@ class DnsService:
     def _enabled(self) -> bool:
         return bool(self._api_url and self._api_key and self._zone)
 
-    def _fqdn(self, vm_name: str, vm_id: int) -> str:
-        label = f"{_sanitize(vm_name)}-{vm_id}"
-        return f"{label}.{self._zone}."
+    def _fqdn(self, vm_id: int) -> str:
+        return f"{vm_dns_label(vm_id)}.{self._zone}."
 
     def _headers(self) -> dict[str, str]:
         return {"X-API-Key": self._api_key or "", "Content-Type": "application/json"}
@@ -80,21 +80,19 @@ class DnsService:
     def create_records(
         self,
         *,
-        vm_name: str,
         vm_id: int,
         ipv4: str | None,
         ipv6: str | None,
     ) -> None:
         """Create A and/or AAAA records for a new VM.
 
-        :param vm_name: Human-readable VM name (will be sanitized).
-        :param vm_id: Numeric VM identifier (makes the label unique).
+        :param vm_id: Numeric VM identifier.
         :param ipv4: IPv4 address, or ``None`` if not assigned.
         :param ipv6: IPv6 address (CIDR or plain), or ``None``.
         """
         if not self._enabled:
             return
-        fqdn = self._fqdn(vm_name, vm_id)
+        fqdn = self._fqdn(vm_id)
         rrsets = []
         if ipv4:
             rrsets.append(_rrset(fqdn, "A", ipv4.split("/")[0]))
@@ -115,19 +113,23 @@ class DnsService:
         self,
         *,
         dns_label: str,
-        vm_name: str,
         vm_id: int,
+        raise_on_error: bool = False,
     ) -> None:
         """Create a CNAME record pointing a custom label to the default VM FQDN.
 
         :param dns_label: Custom DNS label chosen by the user (e.g. ``myapp``).
-        :param vm_name: Human-readable VM name (used to build the canonical FQDN).
         :param vm_id: Numeric VM identifier.
+        :param raise_on_error: If ``True``, exceptions are propagated to the caller
+            instead of being swallowed.  Use this for admin-driven operations where
+            the caller needs to know about failures.
         """
         if not self._enabled:
+            if raise_on_error:
+                raise RuntimeError("PowerDNS is not configured")
             return
         custom_fqdn = f"{dns_label}.{self._zone}."
-        target_fqdn = self._fqdn(vm_name, vm_id)
+        target_fqdn = self._fqdn(vm_id)
         rrsets = [_rrset(custom_fqdn, "CNAME", target_fqdn)]
         try:
             with _client(self._headers()) as c:
@@ -137,25 +139,65 @@ class DnsService:
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
         except Exception:
             logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
+            if raise_on_error:
+                raise
 
-    def delete_records(self, *, vm_name: str, vm_id: int) -> None:
-        """Remove all DNS records for a VM.
+    def delete_custom_label(
+        self,
+        *,
+        dns_label: str,
+        raise_on_error: bool = False,
+    ) -> None:
+        """Remove a custom CNAME record.
 
-        :param vm_name: Human-readable VM name.
+        :param dns_label: The custom DNS label to remove.
+        :param raise_on_error: If ``True``, propagate exceptions.
+        """
+        if not self._enabled:
+            if raise_on_error:
+                raise RuntimeError("PowerDNS is not configured")
+            return
+        custom_fqdn = f"{dns_label}.{self._zone}."
+        rrsets = [{"name": custom_fqdn, "type": "CNAME", "changetype": "DELETE"}]
+        try:
+            with _client(self._headers()) as c:
+                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
+                resp.raise_for_status()
+            logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
+        except Exception:
+            logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
+            if raise_on_error:
+                raise
+
+    def delete_records(self, *, vm_id: int) -> None:
+        """Remove all DNS records for a VM, including CNAMEs pointing to it.
+
         :param vm_id: Numeric VM identifier.
         """
         if not self._enabled:
             return
-        fqdn = self._fqdn(vm_name, vm_id)
+        fqdn = self._fqdn(vm_id)
+        # fqdn has trailing dot for the API, but PowerDNS stores without it
+        fqdn_no_dot = fqdn.rstrip(".")
         rrsets = [
             {"name": fqdn, "type": "A", "changetype": "DELETE"},
             {"name": fqdn, "type": "AAAA", "changetype": "DELETE"},
         ]
         try:
             with _client(self._headers()) as c:
+                # Find CNAMEs pointing to this VM's FQDN
+                resp = c.get(self._zone_url())
+                if resp.status_code == 200:
+                    zone_data = resp.json()
+                    for rrset in zone_data.get("rrsets", []):
+                        if rrset.get("type") == "CNAME":
+                            for rec in rrset.get("records", []):
+                                target = rec.get("content", "").rstrip(".")
+                                if target == fqdn_no_dot:
+                                    rrsets.append({"name": rrset["name"], "type": "CNAME", "changetype": "DELETE"})
                 resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
                 resp.raise_for_status()
-            logger.info("dns_delete_ok fqdn=%s", fqdn)
+            logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
         except Exception:
             logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)
 

@@ -1,0 +1,7 @@
+launch=gpgsql
+gpgsql-host={{ GPGSQL_HOST | default("postgres") }}
+gpgsql-port={{ GPGSQL_PORT | default("5432") }}
+gpgsql-dbname={{ GPGSQL_DBNAME | default("hosting") }}
+gpgsql-user={{ GPGSQL_USER | default("app") }}
+gpgsql-password={{ GPGSQL_PASSWORD | default("app") }}
+gpgsql-dnssec=no

@@ -11,8 +11,14 @@ function RequestDialog({ request, onClose, onUpdate }: {
 
   async function handle(status: 'approved' | 'rejected') {
     setLoading(true)
-    try { await onUpdate(request.id, status) } finally { setLoading(false) }
-    onClose()
+    try {
+      await onUpdate(request.id, status)
+      onClose()
+    } catch {
+      // toast already shown by useAdminRequests — keep dialog open
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

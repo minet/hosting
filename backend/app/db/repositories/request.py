@@ -48,6 +48,21 @@ class RequestRepo:
         )
         return self._db.execute(stmt).first() is not None
 
+    def list_approved_dns(self) -> list[dict[str, Any]]:
+        """Return all approved DNS requests with VM names."""
+        stmt = (
+            select(Request, VM.name.label("vm_name"))
+            .join(VM, VM.vm_id == Request.vm_id)
+            .where(Request.type == "dns", Request.status == "approved")
+            .order_by(Request.created_at.desc())
+        )
+        rows = self._db.execute(stmt).all()
+        return [{**self._to_dict(req), "vm_name": vm_name} for req, vm_name in rows]
+
+    def get(self, request_id: int) -> dict[str, Any] | None:
+        req = self._db.get(Request, request_id)
+        return self._to_dict(req) if req else None
+
     def update_status(self, *, request_id: int, status: str) -> dict[str, Any] | None:
         req = self._db.get(Request, request_id)
         if req is None:

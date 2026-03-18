@@ -111,7 +111,6 @@ class VmCreateService:
 
         result = self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
         self.dns.create_records(
-            vm_name=cmd.name,
             vm_id=reservation.vm_id,
             ipv4=result.get("network", {}).get("ipv4"),
             ipv6=reservation.vm_ipv6,

@@ -23,7 +23,7 @@ frontend_test/
 *.env.*
 
 # Docker stack / compose with secrets
-stack.yml
+stack.yaml
 
 # IDE / editor
 .idea/

@@ -11,9 +11,10 @@ import RevealOwner from '../components/admin/RevealOwner'
 import Th, { type SortKey, type SortDir, type ColId, DEFAULT_WIDTHS } from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
 import ProxmoxTab from '../components/admin/ProxmoxTab'
+import DnsTab from '../components/admin/DnsTab'
 
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
-type Tab = 'vms' | 'templates' | 'proxmox'
+type Tab = 'vms' | 'templates' | 'dns' | 'proxmox'
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
   const s = statuses.get(vmId)?.status
@@ -132,10 +133,10 @@ export default function AdminPage() {
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
     <div className="flex items-center gap-2">
-      {(['vms', 'templates', 'proxmox'] as Tab[]).map(t => (
+      {(['vms', 'templates', 'dns', 'proxmox'] as Tab[]).map(t => (
         <button key={t} onClick={() => setTab(t)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
-          {t === 'vms' ? 'Machines virtuelles' : t === 'templates' ? 'Templates' : 'Proxmox'}
+          {t === 'vms' ? 'Machines virtuelles' : t === 'templates' ? 'Templates' : t === 'dns' ? 'DNS' : 'Proxmox'}
         </button>
       ))}
     </div>
@@ -146,6 +147,15 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
         <TemplatesTab />
+      </div>
+    )
+  }
+
+  if (tab === 'dns') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <DnsTab />
       </div>
     )
   }

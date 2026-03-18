@@ -157,6 +157,16 @@ class VmQueryService:
         }
         return {"usage": usage, "limits": limits, "remaining": remaining, "minimums": minimums}
 
+    def _resolve_dns(self, vm_id: int, cname_map: dict[str, str]) -> str | None:
+        dns_zone = self.settings.dns_zone.rstrip(".")
+        if not dns_zone:
+            return None
+        default_fqdn = f"{vm_dns_label(vm_id)}.{dns_zone}"
+        custom_label = cname_map.get(default_fqdn)
+        if custom_label:
+            return f"{custom_label}.{dns_zone}"
+        return default_fqdn
+
     def _rows_to_list(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Convert a list of raw VM database rows into the standard list response shape.
@@ -165,7 +175,7 @@ class VmQueryService:
         :returns: Dictionary with ``items`` list and ``count``.
         :rtype: dict[str, Any]
         """
-        dns_zone = self.settings.dns_zone.rstrip(".")
+        cname_map = self.repo.list_cname_targets()
         items = [
             {
                 "vm_id": row["vm_id"],
@@ -180,8 +190,7 @@ class VmQueryService:
                 "ipv6": row["ipv6"],
                 "mac": row["mac"],
                 "owner_id": row.get("owner_id"),
-                "dns": f"{row['dns_label']}.{dns_zone}" if row.get("dns_label") and dns_zone
-                    else f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
+                "dns": self._resolve_dns(row["vm_id"], cname_map),
             }
             for row in rows
         ]
@@ -198,7 +207,7 @@ class VmQueryService:
             ``network`` sub-objects and ``current_user_role``.
         :rtype: dict[str, Any]
         """
-        dns_zone = self.settings.dns_zone.rstrip(".")
+        cname_map = self.repo.list_cname_targets()
         return {
             "vm_id": row["vm_id"],
             "name": row["name"],
@@ -210,8 +219,7 @@ class VmQueryService:
             "current_user_role": role,
             "username": row.get("username") if role in ("owner", "admin") else None,
             "ssh_public_key": row.get("ssh_public_key") if role in ("owner", "admin") else None,
-            "dns": f"{row['dns_label']}.{dns_zone}" if row.get("dns_label") and dns_zone
-                else f"{vm_dns_label(row['vm_id'])}.{dns_zone}" if dns_zone else None,
+            "dns": self._resolve_dns(row["vm_id"], cname_map),
         }
 
     @staticmethod

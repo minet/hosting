@@ -84,7 +84,6 @@ class VmDeleteService:
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
 
-        if vm_name:
-            self.dns.delete_records(vm_name=vm_name, vm_id=vm_id)
+        self.dns.delete_records(vm_id=vm_id)
 
         return {"vm_id": vm_id, "action": "delete", "status": "ok"}

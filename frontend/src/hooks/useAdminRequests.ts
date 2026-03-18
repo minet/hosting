@@ -41,6 +41,7 @@ export function useAdminRequests(onUpdated?: () => void) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Échec de la mise à jour de la demande'
       toast(msg)
+      throw err
     }
   }
 

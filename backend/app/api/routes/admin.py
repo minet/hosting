@@ -118,19 +118,50 @@ def _allocate_and_assign_ipv4(
 
 
 def _create_custom_dns(vm_id: int, dns_label: str | None, db: Session) -> None:
-    """Create a custom DNS CNAME record for an approved DNS request."""
+    """Create a custom DNS CNAME record for an approved DNS request.
+
+    Unlike the best-effort DNS operations during VM creation, this raises
+    an HTTPException on failure so the admin sees what went wrong.
+    """
     if not dns_label:
-        logger.warning("dns_approval_missing_label vm_id=%s", vm_id)
-        return
-    vm = VmQueryRepo(db).get_vm(vm_id)
-    if vm is None:
-        logger.warning("dns_approval_vm_not_found vm_id=%s", vm_id)
-        return
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="DNS label is missing on this request",
+        )
     from app.core.config import get_settings
     from app.services.dns import DnsService
 
-    dns_svc = DnsService(settings=get_settings())
-    dns_svc.create_custom_label(dns_label=dns_label, vm_name=vm["name"], vm_id=vm_id)
+    settings = get_settings()
+
+    dns_svc = DnsService(settings=settings)
+    try:
+        dns_svc.create_custom_label(
+            dns_label=dns_label, vm_id=vm_id, raise_on_error=True,
+        )
+    except Exception as exc:
+        logger.exception("DNS CNAME creation failed for vm_id=%s label=%s", vm_id, dns_label)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Failed to create DNS record in PowerDNS: {exc}",
+        ) from exc
+
+    # Verify the CNAME is now visible in the DB (PowerDNS writes to pdns_records)
+    from sqlalchemy import text
+
+    zone = settings.dns_zone.rstrip(".")
+    expected_name = f"{dns_label}.{zone}"
+    row = db.execute(
+        text("SELECT name, type, content FROM records WHERE type = 'CNAME' AND name = :name"),
+        {"name": expected_name},
+    ).first()
+    if row:
+        logger.info("dns_cname_verified name=%s content=%s", row[0], row[2])
+    else:
+        logger.warning(
+            "dns_cname_NOT_FOUND after creation: expected name=%s — "
+            "PowerDNS may use a different database or the API call did not persist the record.",
+            expected_name,
+        )
 
 
 @router.get("/users/{user_id}/identity")
@@ -295,6 +326,51 @@ def update_request_status(
         db.commit()
 
     return AdminRequestResponse.from_row(row)
+
+
+@router.get("/dns", response_model=AdminRequestListResponse)
+def list_approved_dns(
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AdminRequestListResponse:
+    """List all approved DNS requests (admin only)."""
+    rows = RequestRepo(db).list_approved_dns()
+    return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
+
+
+@router.delete("/dns/{request_id}", status_code=204)
+def revoke_dns(
+    request_id: int,
+    _: AuthCtx = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    """Revoke an approved DNS record: delete the CNAME from PowerDNS and reject the request."""
+    repo = RequestRepo(db)
+    row = repo.get(request_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+    if row["type"] != "dns":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Not a DNS request")
+    if row["status"] != "approved":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request is not approved")
+
+    dns_label = row.get("dns_label")
+    if dns_label:
+        from app.core.config import get_settings
+        from app.services.dns import DnsService
+
+        dns_svc = DnsService(settings=get_settings())
+        try:
+            dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
+        except Exception as exc:
+            logger.exception("DNS CNAME revoke failed for request_id=%s label=%s", request_id, dns_label)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to delete DNS record in PowerDNS: {exc}",
+            ) from exc
+
+    repo.update_status(request_id=request_id, status="rejected")
+    db.commit()
 
 
 @router.get("/cluster/resources")

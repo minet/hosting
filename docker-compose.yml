@@ -48,27 +48,20 @@ services:
       - "5173:5173"
 
   pdns:
-    image: powerdns/pdns-auth-49
+    build: ./pdns
     container_name: minet_pdns
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PDNS_AUTH_API: "yes"
       PDNS_AUTH_API_KEY: "${PDNS_API_KEY:-changeme}"
-      PDNS_AUTH_WEBSERVER: "yes"
-      PDNS_AUTH_WEBSERVER_ADDRESS: "0.0.0.0"
-      PDNS_AUTH_WEBSERVER_PORT: "8081"
-      PDNS_AUTH_WEBSERVER_ALLOW_FROM: "0.0.0.0/0"
-      PDNS_AUTH_LAUNCH: "gpgsql"
-      PDNS_AUTH_GPGSQL_HOST: "postgres"
-      PDNS_AUTH_GPGSQL_PORT: "5432"
-      PDNS_AUTH_GPGSQL_DBNAME: "hosting"
-      PDNS_AUTH_GPGSQL_USER: "app"
-      PDNS_AUTH_GPGSQL_PASSWORD: "app"
-      PDNS_AUTH_GPGSQL_DNSSEC: "no"
-      PDNS_AUTH_GPGSQL_TABLE_PREFIX: "pdns_"
+      TEMPLATE_FILES: gpgsql.conf
+      GPGSQL_HOST: postgres
+      GPGSQL_PORT: "5432"
+      GPGSQL_DBNAME: hosting
+      GPGSQL_USER: app
+      GPGSQL_PASSWORD: app
     ports:
       - "53:53/udp"
       - "53:53/tcp"

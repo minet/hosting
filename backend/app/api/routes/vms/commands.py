@@ -217,7 +217,7 @@ def create_request(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests"
         )
     repo = RequestRepo(db)
-    if repo.exists_active(vm_id=vm_id, type=body.type):
+    if body.type == "ipv4" and repo.exists_active(vm_id=vm_id, type="ipv4"):
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="A request of this type is already pending or approved for this VM",

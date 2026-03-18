@@ -44,6 +44,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit, schema?: Zod
     const message = await extractErrorMessage(res)
     throw new ApiError(res.status, message)
   }
+  if (res.status === 204) return undefined as T
   const data = await res.json()
   if (schema) return schema.parse(data)
   return data as T

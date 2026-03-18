@@ -225,7 +225,7 @@ def run_purge(
                 logger.exception("purge: failed to delete vm %s from DB (Proxmox already deleted)", vm_id)
                 continue
 
-            dns.delete_records(vm_name=vm_name, vm_id=vm_id)
+            dns.delete_records(vm_id=vm_id)
             deleted += 1
 
         else:

@@ -54,6 +54,26 @@ docker_frontend:
     - changes:
         - frontend/**/*
 
+docker_pdns:
+  stage: docker
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.0-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/pdns"
+      --dockerfile "$CI_PROJECT_DIR/pdns/Dockerfile"
+      --destination "$IMAGE_REGISTRY_BASE/pdns:latest"
+      --destination "$IMAGE_REGISTRY_BASE/pdns:$CI_COMMIT_SHORT_SHA"
+      --cache=true
+      --cache-repo "$IMAGE_REGISTRY_BASE/pdns/cache"
+      --snapshot-mode=redo
+      --use-new-run
+  rules:
+    - changes:
+        - pdns/**/*
+
 # ── Deploy stage ──────────────────────────────────────────────────────────────
 
 deploy:

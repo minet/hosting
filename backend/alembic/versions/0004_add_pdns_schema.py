@@ -20,7 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.create_table(
-        "pdns_domains",
+        "domains",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("master", sa.String(128), nullable=True),
@@ -31,12 +31,12 @@ def upgrade() -> None:
         sa.Column("options", sa.Text(), nullable=True),
         sa.Column("catalog", sa.Text(), nullable=True),
     )
-    op.create_index("pdns_domains_name_idx", "pdns_domains", ["name"], unique=True)
+    op.create_index("domains_name_idx", "domains", ["name"], unique=True)
 
     op.create_table(
-        "pdns_records",
+        "records",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
-        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("pdns_domains.id", ondelete="CASCADE"), nullable=True),
+        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("domains.id", ondelete="CASCADE"), nullable=True),
         sa.Column("name", sa.String(255), nullable=True),
         sa.Column("type", sa.String(10), nullable=True),
         sa.Column("content", sa.String(65535), nullable=True),
@@ -46,12 +46,12 @@ def upgrade() -> None:
         sa.Column("ordername", sa.String(255), nullable=True),
         sa.Column("auth", sa.Boolean(), server_default="true"),
     )
-    op.create_index("pdns_records_name_idx", "pdns_records", ["name"])
-    op.create_index("pdns_records_nametype_idx", "pdns_records", ["name", "type"])
-    op.create_index("pdns_records_domain_id_idx", "pdns_records", ["domain_id"])
+    op.create_index("records_name_idx", "records", ["name"])
+    op.create_index("records_nametype_idx", "records", ["name", "type"])
+    op.create_index("records_domain_id_idx", "records", ["domain_id"])
 
     op.create_table(
-        "pdns_supermasters",
+        "supermasters",
         sa.Column("ip", sa.String(64), nullable=False),
         sa.Column("nameserver", sa.String(255), nullable=False),
         sa.Column("account", sa.String(40), nullable=True),
@@ -59,53 +59,53 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "pdns_domainmetadata",
+        "domainmetadata",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("pdns_domains.id", ondelete="CASCADE")),
+        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("domains.id", ondelete="CASCADE")),
         sa.Column("kind", sa.String(32), nullable=True),
         sa.Column("content", sa.Text(), nullable=True),
     )
-    op.create_index("pdns_domainmetadata_domain_id_idx", "pdns_domainmetadata", ["domain_id"])
+    op.create_index("domainmetadata_domain_id_idx", "domainmetadata", ["domain_id"])
 
     op.create_table(
-        "pdns_cryptokeys",
+        "cryptokeys",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("pdns_domains.id", ondelete="CASCADE")),
+        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("domains.id", ondelete="CASCADE")),
         sa.Column("flags", sa.Integer(), nullable=False),
         sa.Column("active", sa.Boolean(), nullable=True),
         sa.Column("published", sa.Boolean(), nullable=True, server_default="true"),
         sa.Column("content", sa.Text(), nullable=True),
     )
-    op.create_index("pdns_cryptokeys_domain_id_idx", "pdns_cryptokeys", ["domain_id"])
+    op.create_index("cryptokeys_domain_id_idx", "cryptokeys", ["domain_id"])
 
     op.create_table(
-        "pdns_tsigkeys",
+        "tsigkeys",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("name", sa.String(255), nullable=True),
         sa.Column("algorithm", sa.String(50), nullable=True),
         sa.Column("secret", sa.String(255), nullable=True),
     )
-    op.create_index("pdns_tsigkeys_namealgo_idx", "pdns_tsigkeys", ["name", "algorithm"], unique=True)
+    op.create_index("tsigkeys_namealgo_idx", "tsigkeys", ["name", "algorithm"], unique=True)
 
     op.create_table(
-        "pdns_comments",
+        "comments",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("pdns_domains.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("domain_id", sa.Integer(), sa.ForeignKey("domains.id", ondelete="CASCADE"), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("type", sa.String(10), nullable=False),
         sa.Column("modified_at", sa.Integer(), nullable=False),
         sa.Column("account", sa.String(40), nullable=True),
         sa.Column("comment", sa.String(65535), nullable=False),
     )
-    op.create_index("pdns_comments_domain_id_idx", "pdns_comments", ["domain_id"])
-    op.create_index("pdns_comments_nametype_idx", "pdns_comments", ["name", "type"])
+    op.create_index("comments_domain_id_idx", "comments", ["domain_id"])
+    op.create_index("comments_nametype_idx", "comments", ["name", "type"])
 
 
 def downgrade() -> None:
-    op.drop_table("pdns_comments")
-    op.drop_table("pdns_tsigkeys")
-    op.drop_table("pdns_cryptokeys")
-    op.drop_table("pdns_domainmetadata")
-    op.drop_table("pdns_supermasters")
-    op.drop_table("pdns_records")
-    op.drop_table("pdns_domains")
+    op.drop_table("comments")
+    op.drop_table("tsigkeys")
+    op.drop_table("cryptokeys")
+    op.drop_table("domainmetadata")
+    op.drop_table("supermasters")
+    op.drop_table("records")
+    op.drop_table("domains")
