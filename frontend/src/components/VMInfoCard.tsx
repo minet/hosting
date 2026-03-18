@@ -52,9 +52,14 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-6 gap-y-4 w-full flex-1">
         <div className="min-w-0 overflow-hidden">
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="flex items-center gap-2 mb-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">DNS</p>
-            {isOwner && <button onClick={onOpenDnsRequest} className="text-neutral-300 hover:text-neutral-500 cursor-pointer transition-colors"><Pencil size={10} /></button>}
+            {isOwner && (
+              <button onClick={onOpenDnsRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[10px] font-semibold transition-colors cursor-pointer">
+                <Pencil size={9} />
+                Demander
+              </button>
+            )}
           </div>
           <p className="text-sm font-mono font-semibold text-neutral-800 leading-snug break-all">{vmFqdn(vm)}</p>
         </div>
@@ -67,9 +72,14 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
           <p className="text-sm font-semibold text-neutral-700">{formatUptime(uptime)}</p>
         </div>
         <div className="min-w-0 overflow-hidden">
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="flex items-center gap-2 mb-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">IP</p>
-            {isOwner && <button onClick={onOpenIpRequest} className="text-neutral-300 hover:text-neutral-500 cursor-pointer transition-colors"><Pencil size={10} /></button>}
+            {isOwner && (
+              <button onClick={onOpenIpRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[10px] font-semibold transition-colors cursor-pointer">
+                <Pencil size={9} />
+                Demander
+              </button>
+            )}
           </div>
           <p className="text-sm font-mono font-semibold text-neutral-700 leading-snug break-all">{vm.network.ipv6 ?? '—'}</p>
           {vm.network.ipv4 && <p className="text-sm font-mono font-semibold text-neutral-700 leading-snug break-all">{vm.network.ipv4}</p>}
