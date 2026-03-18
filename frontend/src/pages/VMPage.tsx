@@ -144,7 +144,7 @@ export default function VMPage() {
       </button>
     )}
 
-    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-2 xl:h-full">
+    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-2 xl:h-full [&>*]:min-w-0">
 
       {vm ? (
         <VMInfoCard
@@ -158,7 +158,7 @@ export default function VMPage() {
           onOpenIpRequest={() => { req.setReqType('ipv4'); req.loadRequests(); req.setReqModalOpen(true) }}
         />
       ) : (
-        <CardSkeleton className="md:col-span-2 xl:col-span-2 h-auto md:h-48 xl:h-auto" />
+        <CardSkeleton className="md:col-span-2 xl:col-span-2 min-h-[10rem]" />
       )}
 
       <VMActionsCard

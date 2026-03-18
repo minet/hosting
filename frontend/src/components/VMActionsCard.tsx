@@ -14,7 +14,7 @@ interface Props {
 
 export default function VMActionsCard({ running, isOwner, loadingAction, onboot, onToggleOnboot, onAction, onOpenDestroyModal, onOpenShareModal }: Props) {
   return (
-    <div className="flex rounded-sm bg-white px-4 py-3 flex-col gap-2 h-32 md:h-48 xl:h-auto xl:justify-center">
+    <div className="flex rounded-sm bg-white px-4 py-3 flex-col gap-2 min-w-0 overflow-hidden xl:justify-center">
       <div className="grid grid-cols-2 gap-2 h-full">
         {/* Row 1: Auto-start | Destroy/Stop */}
         <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : undefined}>

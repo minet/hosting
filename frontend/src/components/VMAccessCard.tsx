@@ -29,12 +29,12 @@ export default function VMAccessCard({
   credSaving, credSuccess, doSaveCreds,
 }: Props) {
   return (
-    <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 h-56 md:h-48 xl:h-auto justify-center">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Accès VM</p>
+    <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 min-w-0 min-h-0 overflow-hidden">
+      <div className="flex items-center justify-between mb-2 min-w-0 gap-2 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 shrink-0">Accès VM</p>
           {vm && isOwner && (
-            <p className="text-[10px] text-neutral-500 font-mono">
+            <p className="text-[10px] text-neutral-500 font-mono truncate min-w-0">
               <span className="font-bold">ssh {vm.username ?? 'username'}@{vmFqdn(vm)}</span> marche direct !
             </p>
           )}
@@ -50,9 +50,9 @@ export default function VMAccessCard({
           </button>
         </Tooltip>
       </div>
-      <div className="flex flex-col gap-3 flex-1">
-        <div className="flex gap-2">
-          <div className="flex flex-col gap-1 flex-1">
+      <div className="flex flex-col gap-2 flex-1 min-h-0 min-w-0 overflow-hidden">
+        <div className="flex gap-2 min-w-0 shrink-0">
+          <div className="flex flex-col gap-1 flex-1 min-w-0">
             <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Utilisateur</label>
             <input
               value={credUsername}
@@ -62,7 +62,7 @@ export default function VMAccessCard({
               className="w-full border border-neutral-200 rounded-md px-3 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:bg-neutral-50"
             />
           </div>
-          <div className="flex flex-col gap-1 flex-1">
+          <div className="flex flex-col gap-1 flex-1 min-w-0">
             <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Mot de passe</label>
             <div className="relative">
               <input
@@ -79,14 +79,14 @@ export default function VMAccessCard({
             </div>
           </div>
         </div>
-        <div className="flex flex-col gap-1 flex-1">
-          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Clé SSH</label>
+        <div className="flex flex-col gap-1 flex-1 min-h-0 min-w-0 overflow-hidden">
+          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 shrink-0">Clé SSH</label>
           <textarea
             value={credSshKey}
             onChange={e => setCredSshKey(e.target.value)}
             placeholder="ssh-ed25519 AAAA..."
             disabled={!isOwner}
-            className="w-full flex-1 min-h-0 h-full border border-neutral-200 rounded-md px-3 py-1.5 text-xs font-mono resize-none focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:bg-neutral-50"
+            className="w-full flex-1 min-h-0 border border-neutral-200 rounded-md px-3 py-1.5 text-xs font-mono resize-none focus:outline-none focus:ring-1 focus:ring-blue-300 disabled:opacity-50 disabled:bg-neutral-50 overflow-auto"
           />
         </div>
       </div>

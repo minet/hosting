@@ -11,10 +11,10 @@ interface Props {
 
 export default function VMResourcesCard({ vm, running, isOwner, onOpenResModal }: Props) {
   return (
-    <div className="border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col justify-between h-32 md:h-48 xl:h-auto">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Ressources allouées</p>
-        <div className="flex items-center gap-1.5">
+    <div className="border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col justify-between min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between mb-3 min-w-0 gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 truncate">Ressources allouées</p>
+        <div className="flex items-center gap-1.5 shrink-0">
           <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : running ? "Éteignez la VM d'abord" : undefined} align="right">
             <button
               onClick={onOpenResModal}
@@ -28,18 +28,18 @@ export default function VMResourcesCard({ vm, running, isOwner, onOpenResModal }
         </div>
       </div>
       {vm ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs text-neutral-500"><Cpu size={13} className="text-violet-500" />CPU</span>
-            <span className="text-sm font-bold text-neutral-800">{vm.cpu_cores} <span className="text-xs font-normal text-neutral-400">cœurs</span></span>
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex items-center justify-between min-w-0 gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-neutral-500 shrink-0"><Cpu size={13} className="text-violet-500" />CPU</span>
+            <span className="text-sm font-bold text-neutral-800 truncate">{vm.cpu_cores} <span className="text-xs font-normal text-neutral-400">cœurs</span></span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs text-neutral-500"><MemoryStick size={13} className="text-blue-500" />RAM</span>
-            <span className="text-sm font-bold text-neutral-800">{Math.round(vm.ram_mb / 1024)} <span className="text-xs font-normal text-neutral-400">Go</span></span>
+          <div className="flex items-center justify-between min-w-0 gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-neutral-500 shrink-0"><MemoryStick size={13} className="text-blue-500" />RAM</span>
+            <span className="text-sm font-bold text-neutral-800 truncate">{Math.round(vm.ram_mb / 1024)} <span className="text-xs font-normal text-neutral-400">Go</span></span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs text-neutral-500"><HardDrive size={13} className="text-emerald-500" />Disque</span>
-            <span className="text-sm font-bold text-neutral-800">{vm.disk_gb} <span className="text-xs font-normal text-neutral-400">Go</span></span>
+          <div className="flex items-center justify-between min-w-0 gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-neutral-500 shrink-0"><HardDrive size={13} className="text-emerald-500" />Disque</span>
+            <span className="text-sm font-bold text-neutral-800 truncate">{vm.disk_gb} <span className="text-xs font-normal text-neutral-400">Go</span></span>
           </div>
         </div>
       ) : (
