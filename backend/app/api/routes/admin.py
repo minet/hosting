@@ -313,12 +313,15 @@ def update_request_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
     if body.status == "approved" and row["type"] == "ipv4":
-        _allocate_and_assign_ipv4(
+        ipv4 = _allocate_and_assign_ipv4(
             vm_id=row["vm_id"],
             db=db,
             query_repo=VmQueryRepo(db),
             cmd_repo=VmCmdRepo(db),
         )
+        from app.core.config import get_settings
+        from app.services.dns import DnsService
+        DnsService(settings=get_settings()).create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
     elif body.status == "approved" and row["type"] == "dns":
         db.commit()
         _create_custom_dns(vm_id=row["vm_id"], dns_label=row.get("dns_label"), db=db)

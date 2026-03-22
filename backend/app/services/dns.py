@@ -106,6 +106,7 @@ class DnsService:
                 self._ensure_zone(c)
                 resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
                 resp.raise_for_status()
+                self._notify_zone(c)
             logger.info("dns_create_ok fqdn=%s", fqdn)
         except Exception:
             logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
@@ -137,6 +138,7 @@ class DnsService:
                 self._ensure_zone(c)
                 resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
                 resp.raise_for_status()
+                self._notify_zone(c)
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
         except Exception:
             logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
@@ -164,11 +166,16 @@ class DnsService:
             with _client(self._headers()) as c:
                 resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
                 resp.raise_for_status()
+                self._notify_zone(c)
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
         except Exception:
             logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
             if raise_on_error:
                 raise
+
+    def _notify_zone(self, client: httpx.Client) -> None:
+        """Trigger a NOTIFY to all zone secondaries so they pick up the change."""
+        client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
 
     def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
@@ -198,6 +205,7 @@ class DnsService:
                                     rrsets.append({"name": rrset["name"], "type": "CNAME", "changetype": "DELETE"})
                 resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
                 resp.raise_for_status()
+                self._notify_zone(c)
             logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
         except Exception:
             logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)
