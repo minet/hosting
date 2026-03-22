@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16
+    env_file: postgres.env
+    volumes:
+      - ${VOLUMES}/hosting-dev.minet.net/postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d hosting"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - hosting_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+
+  backend:
+    image: ${IMAGE_REGISTRY_BASE}/backend:latest
+    env_file: backend.env
+    ports:
+      - "41000:8000"
+    networks:
+      - hosting_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: start-first
+
+  frontend:
+    image: ${IMAGE_REGISTRY_BASE}/frontend:latest
+    ports:
+      - "41001:80"
+    networks:
+      - hosting_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: start-first
+
+  pdns:
+    image: ${IMAGE_REGISTRY_BASE}/pdns:latest
+    env_file: pdns.env
+    ports:
+      - "41053:53/udp"
+      - "41053:53/tcp"
+      - "41002:8081"
+    networks:
+      - hosting_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - node.role == manager
+
+networks:
+  hosting_net:
+    driver: overlay

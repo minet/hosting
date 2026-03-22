@@ -49,6 +49,7 @@ class DnsService:
         self._api_url = settings.pdns_api_url
         self._api_key = settings.pdns_api_key
         self._zone = settings.dns_zone.rstrip(".")
+        self._nameservers = [ns.strip() for ns in settings.dns_nameservers.split(",") if ns.strip()]
 
     @property
     def _enabled(self) -> bool:
@@ -72,8 +73,8 @@ class DnsService:
             f"{self._api_url}/api/v1/servers/localhost/zones",
             json={
                 "name": f"{self._zone}.",
-                "kind": "Native",
-                "nameservers": [f"ns1.{self._zone}."],
+                "kind": "Master",
+                "nameservers": self._nameservers,
             },
         )
 
