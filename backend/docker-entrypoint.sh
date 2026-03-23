@@ -1,6 +1,28 @@
 #!/bin/sh
 set -e
 
+echo "Waiting for database to be ready..."
+MAX_RETRIES=30
+RETRY=0
+while [ "$RETRY" -lt "$MAX_RETRIES" ]; do
+  python -c "
+from sqlalchemy import create_engine, text
+from app.core.config import get_settings
+engine = create_engine(get_settings().database_url)
+with engine.connect() as c: c.execute(text('SELECT 1'))
+engine.dispose()
+" 2>/dev/null && break
+  RETRY=$((RETRY + 1))
+  echo "Database not ready yet (attempt $RETRY/$MAX_RETRIES)..."
+  sleep 2
+done
+
+if [ "$RETRY" -eq "$MAX_RETRIES" ]; then
+  echo "ERROR: Could not connect to database after $MAX_RETRIES attempts"
+  exit 1
+fi
+echo "Database is ready!"
+
 python - <<'EOF'
 from sqlalchemy import create_engine, text
 from app.core.config import get_settings
