@@ -8,7 +8,7 @@ from app.core.config import get_settings
 from app.db.core.engine import dispose_db, get_engine, init_db
 
 
-def open_db_engine() -> None:
+async def open_db_engine() -> None:
     """Initialize the database engine and warm up the connection pool on application startup.
 
     Schema migrations are managed by Alembic -- run ``alembic upgrade head`` before starting.
@@ -17,13 +17,13 @@ def open_db_engine() -> None:
     :raises sqlalchemy.exc.OperationalError: If the database is unreachable.
     """
     init_db(get_settings())
-    with get_engine().begin() as conn:
-        conn.execute(text("SELECT 1"))
+    async with get_engine().begin() as conn:
+        await conn.execute(text("SELECT 1"))
 
 
-def close_db_engine() -> None:
+async def close_db_engine() -> None:
     """Dispose the database engine on application shutdown.
 
     :returns: None
     """
-    dispose_db()
+    await dispose_db()

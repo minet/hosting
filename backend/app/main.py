@@ -56,13 +56,13 @@ async def _purge_loop() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Manage startup and shutdown of shared resources around the application lifetime."""
-    open_db_engine()
+    await open_db_engine()
     purge_task = asyncio.create_task(_purge_loop())
     try:
         yield
     finally:
         purge_task.cancel()
-        close_db_engine()
+        await close_db_engine()
 
 
 _settings = get_settings()

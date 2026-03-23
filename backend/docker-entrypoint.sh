@@ -1,27 +1,34 @@
 #!/bin/sh
 set -e
 
-echo "Waiting for database to be ready..."
-MAX_RETRIES=30
-RETRY=0
-while [ "$RETRY" -lt "$MAX_RETRIES" ]; do
-  python -c "
-from sqlalchemy import create_engine, text
+echo "Connecting to database..."
+python -c "
+import sys
 from app.core.config import get_settings
-engine = create_engine(get_settings().database_url)
-with engine.connect() as c: c.execute(text('SELECT 1'))
-engine.dispose()
-" 2>/dev/null && break
-  RETRY=$((RETRY + 1))
-  echo "Database not ready yet (attempt $RETRY/$MAX_RETRIES)..."
-  sleep 2
-done
 
-if [ "$RETRY" -eq "$MAX_RETRIES" ]; then
-  echo "ERROR: Could not connect to database after $MAX_RETRIES attempts"
-  exit 1
-fi
-echo "Database is ready!"
+settings = get_settings()
+url = settings.database_url
+
+# Mask password for logging
+from urllib.parse import urlparse
+parsed = urlparse(url)
+safe_url = url.replace(parsed.password, '***') if parsed.password else url
+
+print(f'  Target: {safe_url}', flush=True)
+
+from sqlalchemy import create_engine, text
+engine = create_engine(url, connect_args={'connect_timeout': 5})
+try:
+    with engine.connect() as c:
+        c.execute(text('SELECT 1'))
+    print('Database is ready!', flush=True)
+except Exception as e:
+    print(f'ERROR: Cannot connect to database: {e}', file=sys.stderr, flush=True)
+    print(f'  Check that the postgres service is running and reachable.', file=sys.stderr, flush=True)
+    sys.exit(1)
+finally:
+    engine.dispose()
+"
 
 python - <<'EOF'
 from sqlalchemy import create_engine, text
