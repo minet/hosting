@@ -1,18 +1,20 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useMe } from './useMe'
 import { loginUrl } from './api'
 import Layout from './components/Layout'
 import AdminLayout from './components/AdminLayout'
-import Dashboard from './pages/Dashboard'
-import VMPage from './pages/VMPage'
-import AdminPage from './pages/AdminPage'
 import AccessDenied from './pages/AccessDenied'
 import CharterPage from './pages/CharterPage'
 import { UserProvider } from './contexts/UserContext'
 import { VMStatusProvider } from './contexts/VMStatusContext'
 import { ToastProvider } from './contexts/ToastContext'
 import ToastContainer from './components/ToastContainer'
+import ErrorBoundary from './components/ErrorBoundary'
+
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const VMPage = lazy(() => import('./pages/VMPage'))
+const AdminPage = lazy(() => import('./pages/AdminPage'))
 
 // Roles that trigger the access denied page (unless the user is also an admin).
 // Configure via VITE_RESTRICTED_ROLES (comma-separated), e.g.:
@@ -28,6 +30,10 @@ function isAccessDenied(me: { is_admin: boolean; groups: string[]; ldap_login?: 
   if (me.is_admin) return false
   if (DEV_MODE && !me.ldap_login) return true
   return RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))
+}
+
+function PageFallback() {
+  return <div className="flex items-center justify-center h-full text-xs text-neutral-400">Chargement…</div>
 }
 
 export default function App() {
@@ -54,11 +60,15 @@ export default function App() {
           <VMStatusProvider>
             <BrowserRouter>
               <AdminLayout>
-                <Routes>
-                  <Route path="/admin" element={<AdminPage />} />
-                  <Route path="/vm/:vmId" element={<VMPage />} />
-                  <Route path="*" element={<Navigate to="/admin" replace />} />
-                </Routes>
+                <ErrorBoundary>
+                  <Suspense fallback={<PageFallback />}>
+                    <Routes>
+                      <Route path="/admin" element={<AdminPage />} />
+                      <Route path="/vm/:vmId" element={<VMPage />} />
+                      <Route path="*" element={<Navigate to="/admin" replace />} />
+                    </Routes>
+                  </Suspense>
+                </ErrorBoundary>
               </AdminLayout>
             </BrowserRouter>
           </VMStatusProvider>
@@ -74,11 +84,15 @@ export default function App() {
         <VMStatusProvider>
           <BrowserRouter>
             <Layout>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/vm/:vmId" element={<VMPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
+              <ErrorBoundary>
+                <Suspense fallback={<PageFallback />}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/vm/:vmId" element={<VMPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
             </Layout>
           </BrowserRouter>
         </VMStatusProvider>

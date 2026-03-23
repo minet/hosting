@@ -30,8 +30,15 @@ class VmQueryService:
         """
         self.repo = repo
         self.settings = settings
+        self._cname_cache: dict[str, str] | None = None
 
-    def list_vms(self, *, user_id: str) -> dict[str, Any]:
+    async def _get_cname_map(self) -> dict[str, str]:
+        """Return CNAME targets, cached for the lifetime of this service instance."""
+        if self._cname_cache is None:
+            self._cname_cache = await self.repo.list_cname_targets()
+        return self._cname_cache
+
+    async def list_vms(self, *, user_id: str) -> dict[str, Any]:
         """
         List all VMs accessible to the given user.
 
@@ -40,10 +47,10 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        rows = self._db_call(lambda: self.repo.list_user_vms(user_id))
-        return self._rows_to_list(rows)
+        rows = await self._db_call(self.repo.list_user_vms(user_id))
+        return await self._rows_to_list(rows)
 
-    def list_all_vms(self) -> dict[str, Any]:
+    async def list_all_vms(self) -> dict[str, Any]:
         """
         List all VMs in the system (admin view).
 
@@ -51,10 +58,10 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        rows = self._db_call(self.repo.list_all_vms)
-        return self._rows_to_list(rows)
+        rows = await self._db_call(self.repo.list_all_vms())
+        return await self._rows_to_list(rows)
 
-    def list_vms_for(self, *, ctx: Any) -> dict[str, Any]:
+    async def list_vms_for(self, *, ctx: Any) -> dict[str, Any]:
         """
         List VMs appropriate for the requesting user's role.
 
@@ -68,10 +75,10 @@ class VmQueryService:
         :raises HTTPException: 503 on database errors.
         """
         if ctx.is_admin:
-            return self.list_all_vms()
-        return self.list_vms(user_id=ctx.user_id)
+            return await self.list_all_vms()
+        return await self.list_vms(user_id=ctx.user_id)
 
-    def get_vm(self, *, vm_id: int) -> dict[str, Any]:
+    async def get_vm(self, *, vm_id: int) -> dict[str, Any]:
         """
         Retrieve full detail for a VM by ID (admin view).
 
@@ -82,12 +89,12 @@ class VmQueryService:
         :raises HTTPException: 404 when the VM does not exist, 503 on
             database errors.
         """
-        row = self._db_call(lambda: self.repo.get_vm(vm_id))
+        row = await self._db_call(self.repo.get_vm(vm_id))
         if row is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        return self._to_detail(row, role="admin")
+        return await self._to_detail(row, role="admin")
 
-    def get_user_vm(self, *, vm_id: int, user_id: str) -> dict[str, Any]:
+    async def get_user_vm(self, *, vm_id: int, user_id: str) -> dict[str, Any]:
         """
         Retrieve full detail for a VM accessible to the given user.
 
@@ -99,12 +106,12 @@ class VmQueryService:
         :raises HTTPException: 404 when the VM does not exist or the user
             has no access, 503 on database errors.
         """
-        row = self._db_call(lambda: self.repo.get_user_vm(vm_id, user_id))
+        row = await self._db_call(self.repo.get_user_vm(vm_id, user_id))
         if row is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        return self._to_detail(row, role="owner" if bool(row["role_owner"]) else "shared")
+        return await self._to_detail(row, role="owner" if bool(row["role_owner"]) else "shared")
 
-    def list_vm_access(self, *, vm_id: int) -> dict[str, Any]:
+    async def list_vm_access(self, *, vm_id: int) -> dict[str, Any]:
         """
         List all users who have access to a given VM.
 
@@ -113,11 +120,11 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        rows = self._db_call(lambda: self.repo.list_vm_access(vm_id))
+        rows = await self._db_call(self.repo.list_vm_access(vm_id))
         users = [{"user_id": row["user_id"], "role": "owner" if bool(row["role_owner"]) else "shared"} for row in rows]
         return {"vm_id": vm_id, "users": users, "count": len(users)}
 
-    def list_templates(self) -> dict[str, Any]:
+    async def list_templates(self) -> dict[str, Any]:
         """
         List all available VM templates.
 
@@ -125,11 +132,11 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        rows = self._db_call(self.repo.list_templates)
+        rows = await self._db_call(self.repo.list_templates())
         items = [{"template_id": row["template_id"], "name": row["name"]} for row in rows]
         return {"items": items, "count": len(items)}
 
-    def get_resources(self, *, user_id: str) -> dict[str, Any]:
+    async def get_resources(self, *, user_id: str) -> dict[str, Any]:
         """
         Return current resource usage, configured limits and remaining capacity.
 
@@ -139,7 +146,7 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        usage = self._db_call(lambda: self.repo.get_owned_totals(user_id))
+        usage = await self._db_call(self.repo.get_owned_totals(user_id))
         limits = {
             "cpu_cores": self.settings.resource_max_cpu_cores,
             "ram_mb": self.settings.resource_max_ram_gb * 1024,
@@ -167,7 +174,7 @@ class VmQueryService:
             return f"{custom_label}.{dns_zone}"
         return default_fqdn
 
-    def _rows_to_list(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    async def _rows_to_list(self, rows: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Convert a list of raw VM database rows into the standard list response shape.
 
@@ -175,7 +182,7 @@ class VmQueryService:
         :returns: Dictionary with ``items`` list and ``count``.
         :rtype: dict[str, Any]
         """
-        cname_map = self.repo.list_cname_targets()
+        cname_map = await self._get_cname_map()
         items = [
             {
                 "vm_id": row["vm_id"],
@@ -196,7 +203,7 @@ class VmQueryService:
         ]
         return {"items": items, "count": len(items)}
 
-    def _to_detail(self, row: dict[str, Any], role: str) -> dict[str, Any]:
+    async def _to_detail(self, row: dict[str, Any], role: str) -> dict[str, Any]:
         """
         Convert a raw VM database row into the standard detail response shape.
 
@@ -207,7 +214,7 @@ class VmQueryService:
             ``network`` sub-objects and ``current_user_role``.
         :rtype: dict[str, Any]
         """
-        cname_map = self.repo.list_cname_targets()
+        cname_map = await self._get_cname_map()
         return {
             "vm_id": row["vm_id"],
             "name": row["name"],
@@ -223,18 +230,16 @@ class VmQueryService:
         }
 
     @staticmethod
-    def _db_call(fn):
+    async def _db_call(coro):
         """
-        Execute a zero-argument callable and map any
-        :class:`~sqlalchemy.exc.SQLAlchemyError` to HTTP 503.
+        Await a coroutine and map any SQLAlchemyError to HTTP 503.
 
-        :param fn: Zero-argument callable that performs a database read.
-        :returns: The return value of ``fn``.
-        :raises HTTPException: 503 when a
-            :class:`~sqlalchemy.exc.SQLAlchemyError` is raised.
+        :param coro: Awaitable performing a database operation.
+        :returns: The return value of ``coro``.
+        :raises HTTPException: 503 when a SQLAlchemyError is raised.
         """
         try:
-            return fn()
+            return await coro
         except SQLAlchemyError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"

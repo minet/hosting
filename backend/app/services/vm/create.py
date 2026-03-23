@@ -8,12 +8,13 @@ transactions on failure.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx
 from app.core.config import Settings
@@ -52,7 +53,7 @@ class VmCreateService:
     def __init__(
         self,
         *,
-        db: Session,
+        db: AsyncSession,
         cmd_repo: VmCmdRepo,
         query_repo: VmQueryRepo,
         query_service: VmQueryService,
@@ -62,7 +63,7 @@ class VmCreateService:
         """
         Initialise the VM creation service.
 
-        :param db: Active SQLAlchemy database session.
+        :param db: Active SQLAlchemy async database session.
         :param cmd_repo: Repository for VM write operations.
         :param query_repo: Repository for VM read operations.
         :param query_service: Higher-level VM query service used to build the
@@ -78,7 +79,7 @@ class VmCreateService:
         self.settings = settings
         self.dns = DnsService(settings=settings)
 
-    def create(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> dict:
+    async def create(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> dict:
         """
         Create a new VM for the given user according to the supplied command.
 
@@ -105,12 +106,12 @@ class VmCreateService:
         )
 
         self._validate_limits(cmd)
-        reservation = self._reserve_db_slot(ctx=ctx, cmd=cmd)
-        self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
-        self._finalize_db(ctx=ctx, res=reservation)
+        reservation = await self._reserve_db_slot(ctx=ctx, cmd=cmd)
+        await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
+        await self._finalize_db(ctx=ctx, res=reservation)
 
-        result = self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
-        self.dns.create_records(
+        result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
+        await self.dns.create_records(
             vm_id=reservation.vm_id,
             ipv4=result.get("network", {}).get("ipv4"),
             ipv6=reservation.vm_ipv6,
@@ -133,7 +134,7 @@ class VmCreateService:
         if cmd.disk_gb < self.settings.vm_min_disk_gb:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="disk_gb below minimum")
 
-    def _reserve_db_slot(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> _DbReservation:
+    async def _reserve_db_slot(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> _DbReservation:
         """
         Reserve a database record for the new VM, retrying on transient errors.
 
@@ -149,18 +150,18 @@ class VmCreateService:
 
         for attempt in range(_MAX_DB_RESERVE_ATTEMPTS):
             try:
-                return self._try_reserve(ctx=ctx, cmd=cmd, ram_mb=ram_mb, attempt=attempt)
+                return await self._try_reserve(ctx=ctx, cmd=cmd, ram_mb=ram_mb, attempt=attempt)
             except HTTPException:
-                self.db.rollback()
+                await self.db.rollback()
                 raise
             except (IntegrityError, OperationalError) as exc:
-                self.db.rollback()
+                await self.db.rollback()
                 if attempt < _MAX_DB_RESERVE_ATTEMPTS - 1 and _is_retryable(exc):
                     logger.warning("vm_create_reserve_retry user_id=%s attempt=%s", ctx.user_id, attempt + 1)
                     continue
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM creation conflict") from exc
             except SQLAlchemyError as exc:
-                self.db.rollback()
+                await self.db.rollback()
                 logger.exception("vm_create_reserve_db_error user_id=%s", ctx.user_id)
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -169,7 +170,7 @@ class VmCreateService:
 
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM creation conflict")
 
-    def _try_reserve(self, *, ctx: AuthCtx, cmd: VmCreateCmd, ram_mb: int, attempt: int) -> _DbReservation:
+    async def _try_reserve(self, *, ctx: AuthCtx, cmd: VmCreateCmd, ram_mb: int, attempt: int) -> _DbReservation:
         """
         Perform a single attempt to lock the user quota and insert a VM record.
 
@@ -184,17 +185,17 @@ class VmCreateService:
         """
         logger.info("vm_create_reserve attempt=%s user_id=%s", attempt + 1, ctx.user_id)
 
-        self.cmd_repo.lock_user_quota(ctx.user_id)
+        await self.cmd_repo.lock_user_quota(ctx.user_id)
 
-        template = self.query_repo.get_template(cmd.template_id)
+        template = await self.query_repo.get_template(cmd.template_id)
         if template is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
-        self._check_quota(user_id=ctx.user_id, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb, disk_gb=cmd.disk_gb)
-        vm_ipv6 = self._allocate_ipv6()
-        vm_id = self._allocate_vm_id()
+        await self._check_quota(user_id=ctx.user_id, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb, disk_gb=cmd.disk_gb)
+        vm_ipv6 = await self._allocate_ipv6()
+        vm_id = await self._allocate_vm_id()
 
-        self.cmd_repo.insert_vm_with_owner_and_resource(
+        await self.cmd_repo.insert_vm_with_owner_and_resource(
             vm_id=vm_id,
             name=cmd.name,
             cpu_cores=cmd.cpu_cores,
@@ -206,12 +207,12 @@ class VmCreateService:
             username=cmd.resource.username,
             ssh_public_key=cmd.resource.ssh_public_key,
         )
-        self.db.commit()
+        await self.db.commit()
 
         logger.info("vm_create_reserved user_id=%s vm_id=%s ipv6=%s", ctx.user_id, vm_id, vm_ipv6)
         return _DbReservation(vm_id=vm_id, vm_ipv6=vm_ipv6, ram_mb=ram_mb)
 
-    def _provision_on_proxmox(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _provision_on_proxmox(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
         """
         Run the three-step Proxmox provisioning sequence: clone, firewall, disk resize.
 
@@ -221,11 +222,11 @@ class VmCreateService:
         :raises HTTPException: On any Proxmox provisioning failure; compensating
             cleanup is attempted before raising.
         """
-        self._clone_vm(ctx=ctx, cmd=cmd, res=res)
-        self._setup_firewall(ctx=ctx, res=res)
-        self._resize_disk(ctx=ctx, cmd=cmd, res=res)
+        await self._clone_vm(ctx=ctx, cmd=cmd, res=res)
+        await self._setup_firewall(ctx=ctx, res=res)
+        await self._resize_disk(ctx=ctx, cmd=cmd, res=res)
 
-    def _clone_vm(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _clone_vm(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
         """
         Clone the template VM on Proxmox and apply initial configuration.
 
@@ -237,7 +238,8 @@ class VmCreateService:
         """
         try:
             logger.info("vm_create_proxmox_clone user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-            self.gateway.create_vm(
+            await asyncio.to_thread(
+                self.gateway.create_vm,
                 vm_id=res.vm_id,
                 template_vmid=cmd.template_id,
                 vm_ipv6=res.vm_ipv6,
@@ -250,9 +252,9 @@ class VmCreateService:
             )
             logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
         except ProxmoxError as exc:
-            self._handle_clone_failure(ctx=ctx, res=res, exc=exc)
+            await self._handle_clone_failure(ctx=ctx, res=res, exc=exc)
 
-    def _handle_clone_failure(self, *, ctx: AuthCtx, res: _DbReservation, exc: ProxmoxError) -> None:
+    async def _handle_clone_failure(self, *, ctx: AuthCtx, res: _DbReservation, exc: ProxmoxError) -> None:
         """
         Handle a Proxmox clone error with best-effort compensating cleanup.
 
@@ -267,10 +269,10 @@ class VmCreateService:
             the VM state is unknown.
         """
         logger.exception("vm_create_proxmox_clone_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-        vm_exists = self._probe_vm_exists(res.vm_id)
+        vm_exists = await self._probe_vm_exists(res.vm_id)
 
         if vm_exists is False:
-            self._compensate(vm_id=res.vm_id)
+            await self._compensate(vm_id=res.vm_id)
             raise_proxmox_as_http(exc, unavailable="Unable to create VM on Proxmox")
 
         if vm_exists is None:
@@ -282,7 +284,7 @@ class VmCreateService:
 
         logger.warning("vm_create_proxmox_exists_after_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
 
-    def _setup_firewall(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
+    async def _setup_firewall(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
         """
         Configure the Proxmox firewall for the newly cloned VM.
 
@@ -293,14 +295,14 @@ class VmCreateService:
         :raises HTTPException: On firewall configuration failure after cleanup.
         """
         try:
-            self.gateway.setup_vm_firewall(vm_id=res.vm_id, vm_ipv6=res.vm_ipv6)
+            await asyncio.to_thread(self.gateway.setup_vm_firewall, vm_id=res.vm_id, vm_ipv6=res.vm_ipv6)
             logger.info("vm_create_firewall_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
         except ProxmoxError as exc:
             logger.exception("vm_create_firewall_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-            self._compensate(vm_id=res.vm_id)
+            await self._compensate(vm_id=res.vm_id)
             raise_proxmox_as_http(exc, unavailable="Unable to configure VM firewall on Proxmox")
 
-    def _resize_disk(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _resize_disk(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
         """
         Resize the VM root disk to the requested size on Proxmox.
 
@@ -312,14 +314,14 @@ class VmCreateService:
         :raises HTTPException: On disk resize failure after cleanup.
         """
         try:
-            self.gateway.resize_vm_disk(vm_id=res.vm_id, disk_gb=cmd.disk_gb)
+            await asyncio.to_thread(self.gateway.resize_vm_disk, vm_id=res.vm_id, disk_gb=cmd.disk_gb)
             logger.info("vm_create_disk_resize_ok user_id=%s vm_id=%s disk_gb=%s", ctx.user_id, res.vm_id, cmd.disk_gb)
         except ProxmoxError as exc:
             logger.exception("vm_create_disk_resize_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-            self._compensate(vm_id=res.vm_id)
+            await self._compensate(vm_id=res.vm_id)
             raise_proxmox_as_http(exc, unavailable="Unable to resize VM disk on Proxmox")
 
-    def _finalize_db(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
+    async def _finalize_db(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
         """
         Probe the VM MAC address from Proxmox and persist it to the database.
 
@@ -327,21 +329,21 @@ class VmCreateService:
         :param res: Database reservation identifying the VM.
         :raises HTTPException: 503 on database write failure.
         """
-        mac = self._probe_vm_mac(res.vm_id)
+        mac = await self._probe_vm_mac(res.vm_id)
         logger.info("vm_create_mac_probe user_id=%s vm_id=%s mac=%s", ctx.user_id, res.vm_id, mac)
         try:
-            self.cmd_repo.update_vm_mac(res.vm_id, mac)
-            self.db.commit()
+            await self.cmd_repo.update_vm_mac(res.vm_id, mac)
+            await self.db.commit()
             logger.info("vm_create_finalize_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
         except SQLAlchemyError as exc:
-            self.db.rollback()
+            await self.db.rollback()
             logger.exception("vm_create_finalize_db_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Database temporarily unavailable",
             ) from exc
 
-    def _compensate(self, *, vm_id: int) -> None:
+    async def _compensate(self, *, vm_id: int) -> None:
         """
         Attempt to roll back both the Proxmox VM and the database record.
 
@@ -350,48 +352,48 @@ class VmCreateService:
 
         :param vm_id: Identifier of the VM to clean up.
         """
-        self._compensate_proxmox(vm_id=vm_id)
-        self._compensate_db(vm_id=vm_id)
+        await self._compensate_proxmox(vm_id=vm_id)
+        await self._compensate_db(vm_id=vm_id)
 
-    def _compensate_proxmox(self, *, vm_id: int) -> None:
+    async def _compensate_proxmox(self, *, vm_id: int) -> None:
         """
         Best-effort deletion of a VM from Proxmox during compensation.
 
         :param vm_id: Proxmox VM identifier to delete.
         """
         try:
-            self.gateway.delete_vm(vm_id=vm_id)
+            await asyncio.to_thread(self.gateway.delete_vm, vm_id=vm_id)
             logger.warning("vm_create_compensate_proxmox_deleted vm_id=%s", vm_id)
         except ProxmoxError:
             logger.exception("vm_create_compensate_proxmox_failed vm_id=%s", vm_id)
 
-    def _compensate_db(self, *, vm_id: int) -> None:
+    async def _compensate_db(self, *, vm_id: int) -> None:
         """
         Best-effort deletion of a VM record from the database during compensation.
 
         :param vm_id: Database VM identifier to delete.
         """
         try:
-            self.cmd_repo.delete_vm_with_related(vm_id)
-            self.db.commit()
+            await self.cmd_repo.delete_vm_with_related(vm_id)
+            await self.db.commit()
             logger.warning("vm_create_compensate_db_deleted vm_id=%s", vm_id)
         except SQLAlchemyError:
-            self.db.rollback()
+            await self.db.rollback()
             logger.exception("vm_create_compensate_db_failed vm_id=%s", vm_id)
 
-    def _allocate_vm_id(self) -> int:
+    async def _allocate_vm_id(self) -> int:
         """
         Determine the next available Proxmox VM ID that is not already in the database.
 
         :returns: A free VM identifier.
         :rtype: int
         """
-        candidate = self.gateway.next_vm_id()
-        while self.query_repo.get_vm(candidate) is not None:
+        candidate = await asyncio.to_thread(self.gateway.next_vm_id)
+        while await self.query_repo.get_vm(candidate) is not None:
             candidate += 1
         return candidate
 
-    def _allocate_ipv6(self) -> str:
+    async def _allocate_ipv6(self) -> str:
         """
         Select the next available IPv6 address from the configured subnet.
 
@@ -400,7 +402,7 @@ class VmCreateService:
         :raises HTTPException: 503 when no IPv6 address is available, 500 on
             configuration errors.
         """
-        used_ipv6 = self.query_repo.list_used_ipv6()
+        used_ipv6 = await self.query_repo.list_used_ipv6()
         try:
             return allocate_next_vm_ipv6(used_ipv6=used_ipv6)
         except ProxmoxUnavailableError as exc:
@@ -414,7 +416,7 @@ class VmCreateService:
                 detail="Invalid VM IPv6 configuration",
             ) from exc
 
-    def _check_quota(self, *, user_id: str, cpu_cores: int, ram_mb: int, disk_gb: int) -> None:
+    async def _check_quota(self, *, user_id: str, cpu_cores: int, ram_mb: int, disk_gb: int) -> None:
         """
         Raise HTTP 403 if adding the requested resources would exceed user quota.
 
@@ -425,7 +427,7 @@ class VmCreateService:
         :raises HTTPException: 403 when any resource dimension exceeds the
             configured maximum.
         """
-        usage = self.query_repo.get_owned_totals(user_id)
+        usage = await self.query_repo.get_owned_totals(user_id)
         max_cpu = self.settings.resource_max_cpu_cores
         max_ram = self.settings.resource_max_ram_gb * 1024
         max_disk = self.settings.resource_max_disk_gb
@@ -436,7 +438,7 @@ class VmCreateService:
         if usage["disk_gb"] + disk_gb > max_disk:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Quota exceeded")
 
-    def _probe_vm_exists(self, vm_id: int) -> bool | None:
+    async def _probe_vm_exists(self, vm_id: int) -> bool | None:
         """
         Check whether a VM currently exists on Proxmox.
 
@@ -446,14 +448,14 @@ class VmCreateService:
         :rtype: bool | None
         """
         try:
-            self.gateway.get_vm_status(vm_id=vm_id)
+            await asyncio.to_thread(self.gateway.get_vm_status, vm_id=vm_id)
             return True
         except ProxmoxVMNotFound:
             return False
         except ProxmoxError:
             return None
 
-    def _probe_vm_mac(self, vm_id: int) -> str | None:
+    async def _probe_vm_mac(self, vm_id: int) -> str | None:
         """
         Retrieve the MAC address of a VM from Proxmox, returning ``None`` on failure.
 
@@ -462,7 +464,7 @@ class VmCreateService:
         :rtype: str | None
         """
         try:
-            return self.gateway.get_vm_mac(vm_id=vm_id)
+            return await asyncio.to_thread(self.gateway.get_vm_mac, vm_id=vm_id)
         except ProxmoxError:
             logger.warning("vm_create_probe_mac_failed vm_id=%s", vm_id)
             return None

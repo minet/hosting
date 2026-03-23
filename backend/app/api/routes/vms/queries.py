@@ -13,7 +13,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx, require_charter_signed
 from app.core.config import get_settings
@@ -21,7 +21,6 @@ from app.db.core import get_db
 from app.db.core.engine import get_session_factory
 from app.db.repositories.request import RequestRepo
 from app.db.repositories.vm import VmQueryRepo
-from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService, VmQueryService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_query_service
@@ -69,24 +68,24 @@ async def stream_vm_statuses(
         while True:
             vm_ids: list[int] = []
             try:
-                db = get_session_factory()()
-                try:
+                async with get_session_factory()() as db:
                     query = VmQueryService(repo=VmQueryRepo(db, dns_zone=settings.dns_zone.rstrip(".")), settings=settings)
-                    vms = query.list_vms_for(ctx=ctx)
+                    vms = await query.list_vms_for(ctx=ctx)
                     vm_ids = [v["vm_id"] for v in vms["items"]]
-                finally:
-                    db.close()
-                for vm_id in vm_ids:
-                    try:
-                        data = await run_in_proxmox_executor(cmd.status, vm_id=vm_id)
-                        s = data.get("status")
-                        uptime = data.get("uptime")
-                        node = data.get("node")
-                        if last.get(vm_id) != s:
-                            last[vm_id] = s
-                            yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime, 'node': node})}\n\n"
-                    except Exception:
-                        logger.debug("SSE: failed to fetch status for vm_id=%s", vm_id, exc_info=True)
+                results = await asyncio.gather(
+                    *[cmd.status(vm_id=vm_id) for vm_id in vm_ids],
+                    return_exceptions=True,
+                )
+                for vm_id, data in zip(vm_ids, results):
+                    if isinstance(data, Exception):
+                        logger.debug("SSE: failed to fetch status for vm_id=%s", vm_id, exc_info=data)
+                        continue
+                    s = data.get("status")
+                    uptime = data.get("uptime")
+                    node = data.get("node")
+                    if last.get(vm_id) != s:
+                        last[vm_id] = s
+                        yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime, 'node': node})}\n\n"
             except Exception:
                 logger.exception("SSE: error during VM list or DB query for user_id=%s", ctx.user_id)
             yield f"event: sync\ndata: {json.dumps({'vm_ids': vm_ids})}\n\n"
@@ -101,7 +100,7 @@ async def stream_vm_statuses(
 
 
 @router.get("", response_model=VMListResponse)
-def list_vms(
+async def list_vms(
     ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> VMListResponse:
@@ -113,11 +112,11 @@ def list_vms(
     :returns: A list of VM summaries together with the total count.
     :rtype: VMListResponse
     """
-    return VMListResponse.model_validate(query.list_vms_for(ctx=ctx))
+    return VMListResponse.model_validate(await query.list_vms_for(ctx=ctx))
 
 
 @router.get("/{vm_id}", response_model=VMDetailResponse)
-def get_vm(
+async def get_vm(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
@@ -136,8 +135,8 @@ def get_vm(
     :raises HTTPException: With status 404 if the VM is not found or inaccessible.
     """
     if ctx.is_admin:
-        return VMDetailResponse.model_validate(query.get_vm(vm_id=vm_id))
-    return VMDetailResponse.model_validate(query.get_user_vm(vm_id=vm_id, user_id=ctx.user_id))
+        return VMDetailResponse.model_validate(await query.get_vm(vm_id=vm_id))
+    return VMDetailResponse.model_validate(await query.get_user_vm(vm_id=vm_id, user_id=ctx.user_id))
 
 
 @router.get("/{vm_id}/tasks", response_model=VMTasksResponse)
@@ -160,8 +159,8 @@ async def list_vm_tasks(
     :rtype: VMTasksResponse
     :raises HTTPException: With status 403 if the caller has no access to the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMTasksResponse.model_validate(await run_in_proxmox_executor(cmd.tasks, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMTasksResponse.model_validate(await cmd.tasks(vm_id=vm_id))
 
 
 @router.get("/{vm_id}/status", response_model=VMStatusResponse)
@@ -184,8 +183,8 @@ async def get_vm_status(
     :rtype: VMStatusResponse
     :raises HTTPException: With status 403 if the caller has no access to the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMStatusResponse.model_validate(await run_in_proxmox_executor(cmd.status, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMStatusResponse.model_validate(await cmd.status(vm_id=vm_id))
 
 
 @router.get("/{vm_id}/metrics", response_model=VMMetricsResponse)
@@ -214,26 +213,24 @@ async def get_vm_metrics(
     :rtype: VMMetricsResponse
     :raises HTTPException: With status 403 if the caller has no access to the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMMetricsResponse.model_validate(
-        await run_in_proxmox_executor(cmd.metrics, vm_id=vm_id, timeframe=timeframe, cf=cf)
-    )
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMMetricsResponse.model_validate(await cmd.metrics(vm_id=vm_id, timeframe=timeframe, cf=cf))
 
 
 @router.get("/{vm_id}/requests", response_model=VMRequestListResponse)
-def list_vm_requests(
+async def list_vm_requests(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VMRequestListResponse:
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    rows = RequestRepo(db).list_for_vm(vm_id)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    rows = await RequestRepo(db).list_for_vm(vm_id)
     return VMRequestListResponse(items=[VMRequestResponse.from_row(r) for r in rows], count=len(rows))
 
 
 @router.get("/{vm_id}/access", response_model=VMAccessListResponse)
-def list_vm_access(
+async def list_vm_access(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
@@ -252,5 +249,5 @@ def list_vm_access(
     :rtype: VMAccessListResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMAccessListResponse.model_validate(query.list_vm_access(vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMAccessListResponse.model_validate(await query.list_vm_access(vm_id=vm_id))

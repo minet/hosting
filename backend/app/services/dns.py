@@ -50,6 +50,19 @@ class DnsService:
         self._api_key = settings.pdns_api_key
         self._zone = settings.dns_zone.rstrip(".")
         self._nameservers = [ns.strip() for ns in settings.dns_nameservers.split(",") if ns.strip()]
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Return a shared async HTTP client, creating it lazily."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(headers=self._headers(), timeout=5.0)
+        return self._client
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client."""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     @property
     def _enabled(self) -> bool:
@@ -64,12 +77,12 @@ class DnsService:
     def _zone_url(self) -> str:
         return f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}."
 
-    def _ensure_zone(self, client: httpx.Client) -> None:
+    async def _ensure_zone(self, client: httpx.AsyncClient) -> None:
         """Create the zone in PowerDNS if it does not already exist."""
-        resp = client.get(self._zone_url())
+        resp = await client.get(self._zone_url())
         if resp.status_code == 200:
             return
-        client.post(
+        await client.post(
             f"{self._api_url}/api/v1/servers/localhost/zones",
             json={
                 "name": f"{self._zone}.",
@@ -78,7 +91,7 @@ class DnsService:
             },
         )
 
-    def create_records(
+    async def create_records(
         self,
         *,
         vm_id: int,
@@ -102,16 +115,16 @@ class DnsService:
         if not rrsets:
             return
         try:
-            with _client(self._headers()) as c:
-                self._ensure_zone(c)
-                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
-                resp.raise_for_status()
-                self._notify_zone(c)
+            c = self._get_client()
+            await self._ensure_zone(c)
+            resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
+            resp.raise_for_status()
+            await self._notify_zone(c)
             logger.info("dns_create_ok fqdn=%s", fqdn)
         except Exception:
             logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
 
-    def create_custom_label(
+    async def create_custom_label(
         self,
         *,
         dns_label: str,
@@ -134,18 +147,18 @@ class DnsService:
         target_fqdn = self._fqdn(vm_id)
         rrsets = [_rrset(custom_fqdn, "CNAME", target_fqdn)]
         try:
-            with _client(self._headers()) as c:
-                self._ensure_zone(c)
-                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
-                resp.raise_for_status()
-                self._notify_zone(c)
+            c = self._get_client()
+            await self._ensure_zone(c)
+            resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
+            resp.raise_for_status()
+            await self._notify_zone(c)
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
         except Exception:
             logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
             if raise_on_error:
                 raise
 
-    def delete_custom_label(
+    async def delete_custom_label(
         self,
         *,
         dns_label: str,
@@ -163,21 +176,58 @@ class DnsService:
         custom_fqdn = f"{dns_label}.{self._zone}."
         rrsets = [{"name": custom_fqdn, "type": "CNAME", "changetype": "DELETE"}]
         try:
-            with _client(self._headers()) as c:
-                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
-                resp.raise_for_status()
-                self._notify_zone(c)
+            c = self._get_client()
+            resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
+            resp.raise_for_status()
+            await self._notify_zone(c)
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
         except Exception:
             logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
             if raise_on_error:
                 raise
 
-    def _notify_zone(self, client: httpx.Client) -> None:
-        """Trigger a NOTIFY to all zone secondaries so they pick up the change."""
-        client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
+    async def create_and_verify_custom_dns(
+        self,
+        *,
+        dns_label: str,
+        vm_id: int,
+        db: Any,
+    ) -> None:
+        """Create a custom DNS CNAME and verify it appears in the PowerDNS DB.
 
-    def delete_records(self, *, vm_id: int) -> None:
+        Raises on any failure so the admin caller sees what went wrong.
+
+        :param dns_label: Custom DNS label chosen by the user.
+        :param vm_id: Numeric VM identifier.
+        :param db: SQLAlchemy async session for verification query.
+        :raises RuntimeError: If PowerDNS is not configured.
+        :raises Exception: On DNS API failure.
+        """
+        if not dns_label:
+            raise ValueError("DNS label is required")
+        await self.create_custom_label(dns_label=dns_label, vm_id=vm_id, raise_on_error=True)
+
+        # Verify the CNAME is now visible in the DB
+        from sqlalchemy import text
+
+        expected_name = f"{dns_label}.{self._zone}"
+        row = (await db.execute(
+            text("SELECT name, type, content FROM records WHERE type = 'CNAME' AND name = :name"),
+            {"name": expected_name},
+        )).first()
+        if row:
+            logger.info("dns_cname_verified name=%s content=%s", row[0], row[2])
+        else:
+            logger.warning(
+                "dns_cname_NOT_FOUND after creation: expected name=%s",
+                expected_name,
+            )
+
+    async def _notify_zone(self, client: httpx.AsyncClient) -> None:
+        """Trigger a NOTIFY to all zone secondaries so they pick up the change."""
+        await client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
+
+    async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
 
         :param vm_id: Numeric VM identifier.
@@ -192,20 +242,20 @@ class DnsService:
             {"name": fqdn, "type": "AAAA", "changetype": "DELETE"},
         ]
         try:
-            with _client(self._headers()) as c:
-                # Find CNAMEs pointing to this VM's FQDN
-                resp = c.get(self._zone_url())
-                if resp.status_code == 200:
-                    zone_data = resp.json()
-                    for rrset in zone_data.get("rrsets", []):
-                        if rrset.get("type") == "CNAME":
-                            for rec in rrset.get("records", []):
-                                target = rec.get("content", "").rstrip(".")
-                                if target == fqdn_no_dot:
-                                    rrsets.append({"name": rrset["name"], "type": "CNAME", "changetype": "DELETE"})
-                resp = c.patch(self._zone_url(), json={"rrsets": rrsets})
-                resp.raise_for_status()
-                self._notify_zone(c)
+            c = self._get_client()
+            # Find CNAMEs pointing to this VM's FQDN
+            resp = await c.get(self._zone_url())
+            if resp.status_code == 200:
+                zone_data = resp.json()
+                for rrset in zone_data.get("rrsets", []):
+                    if rrset.get("type") == "CNAME":
+                        for rec in rrset.get("records", []):
+                            target = rec.get("content", "").rstrip(".")
+                            if target == fqdn_no_dot:
+                                rrsets.append({"name": rrset["name"], "type": "CNAME", "changetype": "DELETE"})
+            resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
+            resp.raise_for_status()
+            await self._notify_zone(c)
             logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
         except Exception:
             logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)
@@ -221,5 +271,3 @@ def _rrset(name: str, rtype: str, content: str, ttl: int = 300) -> dict:
     }
 
 
-def _client(headers: dict[str, str]) -> httpx.Client:
-    return httpx.Client(headers=headers, timeout=5.0)

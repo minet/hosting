@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -36,3 +37,22 @@ def send_email(
     except Exception:
         logger.exception("Failed to send email to %s: %s", to_email, subject)
         return False
+
+
+async def send_email_async(
+    *,
+    to_email: str,
+    subject: str,
+    plain: str,
+    html: str,
+    settings: Settings,
+) -> bool:
+    """Async wrapper around :func:`send_email` — runs SMTP in a thread."""
+    return await asyncio.to_thread(
+        send_email,
+        to_email=to_email,
+        subject=subject,
+        plain=plain,
+        html=html,
+        settings=settings,
+    )

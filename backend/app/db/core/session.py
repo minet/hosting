@@ -2,23 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.core.engine import get_session_factory
 
 
-def get_db() -> Iterator[Session]:
-    """Yield a request-scoped SQLAlchemy session for FastAPI dependency injection.
+async def get_db() -> AsyncIterator[AsyncSession]:
+    """Yield a request-scoped async SQLAlchemy session for FastAPI dependency injection.
 
     The session is automatically closed when the request finishes.
 
-    :returns: An iterator yielding a single SQLAlchemy session.
-    :rtype: Iterator[sqlalchemy.orm.Session]
+    :returns: An async iterator yielding a single SQLAlchemy async session.
+    :rtype: AsyncIterator[sqlalchemy.ext.asyncio.AsyncSession]
     """
-    session = get_session_factory()()
-    try:
+    async with get_session_factory()() as session:
         yield session
-    finally:
-        session.close()

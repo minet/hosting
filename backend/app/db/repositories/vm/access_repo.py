@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.vm_access import VMAccess
 
@@ -11,17 +11,17 @@ from app.db.models.vm_access import VMAccess
 class VmAccessRepo:
     """Repository handling VM access control queries and mutations.
 
-    :param db: SQLAlchemy session used for database operations.
+    :param db: SQLAlchemy async session used for database operations.
     """
 
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         """Initialize the repository with a database session.
 
-        :param db: Active SQLAlchemy session.
+        :param db: Active SQLAlchemy async session.
         """
         self.db = db
 
-    def has_vm_access(self, vm_id: int, user_id: str, owner_only: bool) -> bool:
+    async def has_vm_access(self, vm_id: int, user_id: str, owner_only: bool) -> bool:
         """Check whether a user has access to a given VM.
 
         :param vm_id: The VM identifier to check access for.
@@ -34,9 +34,9 @@ class VmAccessRepo:
         if owner_only:
             stmt = stmt.where(VMAccess.role_owner.is_(True))
         stmt = stmt.limit(1)
-        return self.db.execute(stmt).first() is not None
+        return (await self.db.execute(stmt)).first() is not None
 
-    def grant_access(self, vm_id: int, user_id: str) -> str:
+    async def grant_access(self, vm_id: int, user_id: str) -> str:
         """Grant a user non-owner access to a VM.
 
         :param vm_id: The VM identifier.
@@ -46,7 +46,7 @@ class VmAccessRepo:
             or ``"already_shared"`` if a non-owner entry already exists.
         :rtype: str
         """
-        entry = self.db.get(VMAccess, {"vm_id": vm_id, "user_id": user_id})
+        entry = await self.db.get(VMAccess, {"vm_id": vm_id, "user_id": user_id})
         if entry is None:
             self.db.add(VMAccess(vm_id=vm_id, user_id=user_id, role_owner=False))
             return "created"
@@ -54,7 +54,7 @@ class VmAccessRepo:
             return "already_owner"
         return "already_shared"
 
-    def revoke_access(self, vm_id: int, user_id: str) -> str:
+    async def revoke_access(self, vm_id: int, user_id: str) -> str:
         """Revoke a user's access to a VM.
 
         Owner access cannot be revoked through this method.
@@ -65,10 +65,10 @@ class VmAccessRepo:
             or ``"owner_forbidden"`` if the user is the owner.
         :rtype: str
         """
-        entry = self.db.get(VMAccess, {"vm_id": vm_id, "user_id": user_id})
+        entry = await self.db.get(VMAccess, {"vm_id": vm_id, "user_id": user_id})
         if entry is None:
             return "not_found"
         if bool(entry.role_owner):
             return "owner_forbidden"
-        self.db.delete(entry)
+        await self.db.delete(entry)
         return "revoked"

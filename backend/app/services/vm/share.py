@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.vm import VmAccessRepo
 
@@ -17,17 +17,17 @@ from app.db.repositories.vm import VmAccessRepo
 class VmShareService:
     """Service for managing shared access to virtual machines."""
 
-    def __init__(self, *, db: Session, repo: VmAccessRepo):
+    def __init__(self, *, db: AsyncSession, repo: VmAccessRepo):
         """
         Initialise the VM share service.
 
-        :param db: Active SQLAlchemy database session.
+        :param db: Active SQLAlchemy async database session.
         :param repo: Repository for VM access record operations.
         """
         self.db = db
         self.repo = repo
 
-    def grant_access(self, *, vm_id: int, user_id: str) -> dict:
+    async def grant_access(self, *, vm_id: int, user_id: str) -> dict:
         """
         Grant a user shared access to a VM.
 
@@ -39,16 +39,16 @@ class VmShareService:
         :raises HTTPException: 503 on database errors.
         """
         try:
-            result = self.repo.grant_access(vm_id=vm_id, user_id=user_id)
-            self.db.commit()
+            result = await self.repo.grant_access(vm_id=vm_id, user_id=user_id)
+            await self.db.commit()
         except SQLAlchemyError as exc:
-            self.db.rollback()
+            await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
             ) from exc
         return {"vm_id": vm_id, "user_id": user_id, "action": "grant_access", "status": "ok", "result": result}
 
-    def revoke_access(self, *, vm_id: int, user_id: str) -> dict:
+    async def revoke_access(self, *, vm_id: int, user_id: str) -> dict:
         """
         Revoke a user's shared access to a VM.
 
@@ -63,10 +63,10 @@ class VmShareService:
             when attempting to revoke owner access, 503 on database errors.
         """
         try:
-            result = self.repo.revoke_access(vm_id=vm_id, user_id=user_id)
-            self.db.commit()
+            result = await self.repo.revoke_access(vm_id=vm_id, user_id=user_id)
+            await self.db.commit()
         except SQLAlchemyError as exc:
-            self.db.rollback()
+            await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
             ) from exc

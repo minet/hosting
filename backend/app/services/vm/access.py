@@ -34,7 +34,7 @@ class VmAccessService:
         """
         self.repo = repo
 
-    def ensure(self, *, vm_id: int, ctx: AuthCtx, min_level: AccessLevel = AccessLevel.SHARED) -> None:
+    async def ensure(self, *, vm_id: int, ctx: AuthCtx, min_level: AccessLevel = AccessLevel.SHARED) -> None:
         """
         Assert that the requesting user holds at least ``min_level`` access on the VM.
 
@@ -52,7 +52,7 @@ class VmAccessService:
 
         owner_only = min_level == AccessLevel.OWNER
         try:
-            allowed = self.repo.has_vm_access(vm_id=vm_id, user_id=ctx.user_id, owner_only=owner_only)
+            allowed = await self.repo.has_vm_access(vm_id=vm_id, user_id=ctx.user_id, owner_only=owner_only)
         except SQLAlchemyError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"

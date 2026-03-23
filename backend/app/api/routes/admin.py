@@ -5,12 +5,13 @@ Provides admin-only routes for inspecting any user's virtual machines,
 resource consumption, and network address assignment.
 """
 
+import asyncio
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +28,16 @@ from app.api.routes.vms.schemas import (
     VMTemplateResponse,
 )
 from app.auth import AuthCtx, require_admin
+from app.core.config import get_settings
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
-from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members, fetch_keycloak_user_by_id
-from app.services.proxmox.allocation import allocate_next_vm_ipv4
-from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
-from app.services.proxmox.executor import run_in_proxmox_executor
+from app.db.repositories.vm import VmCmdRepo
+from app.services.auth.keycloak_admin import (
+    fetch_keycloak_group_members_async,
+    fetch_keycloak_user_by_id_async,
+)
+from app.services.dns import DnsService
+from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_command_service, get_vm_query_service
@@ -42,130 +46,10 @@ from app.services.vm.query import VmQueryService
 router = APIRouter(tags=["admin"])
 
 
-def _allocate_and_assign_ipv4(
-    vm_id: int,
-    db: Session,
-    query_repo: VmQueryRepo,
-    cmd_repo: VmCmdRepo,
-) -> str:
-    """Validate, allocate, persist, and configure an IPv4 address for a VM.
-
-    Returns the allocated IPv4 string on success.
-
-    Raises :class:`HTTPException` on every anticipated failure so callers
-    can let exceptions propagate directly.
-    """
-    vm = query_repo.get_vm(vm_id)
-    if vm is None:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
-
-    if vm.get("ipv4") is not None:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
-
-    cmd_repo.lock_ipv4_allocation()
-    used_ipv4 = query_repo.list_used_ipv4()
-    try:
-        ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
-    except ProxmoxConfigError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except ProxmoxUnavailableError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet"
-        ) from exc
-
-    try:
-        cmd_repo.update_vm_ipv4(vm_id, ipv4)
-    except IntegrityError as exc:
-        db.rollback()
-        logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="IPv4 address conflict, please retry") from exc
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
-        ) from exc
-
-    try:
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
-        ) from exc
-
-    gateway = get_proxmox_gateway()
-    try:
-        gateway.assign_vm_ipv4(vm_id=vm_id, vm_ipv4=ipv4)
-    except ProxmoxError as exc:
-        logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
-        ) from exc
-
-    try:
-        gateway.restart_vm(vm_id=vm_id)
-    except ProxmoxError:
-        logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
-
-    return ipv4
-
-
-def _create_custom_dns(vm_id: int, dns_label: str | None, db: Session) -> None:
-    """Create a custom DNS CNAME record for an approved DNS request.
-
-    Unlike the best-effort DNS operations during VM creation, this raises
-    an HTTPException on failure so the admin sees what went wrong.
-    """
-    if not dns_label:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="DNS label is missing on this request",
-        )
-    from app.core.config import get_settings
-    from app.services.dns import DnsService
-
-    settings = get_settings()
-
-    dns_svc = DnsService(settings=settings)
-    try:
-        dns_svc.create_custom_label(
-            dns_label=dns_label, vm_id=vm_id, raise_on_error=True,
-        )
-    except Exception as exc:
-        logger.exception("DNS CNAME creation failed for vm_id=%s label=%s", vm_id, dns_label)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Failed to create DNS record in PowerDNS: {exc}",
-        ) from exc
-
-    # Verify the CNAME is now visible in the DB (PowerDNS writes to pdns_records)
-    from sqlalchemy import text
-
-    zone = settings.dns_zone.rstrip(".")
-    expected_name = f"{dns_label}.{zone}"
-    row = db.execute(
-        text("SELECT name, type, content FROM records WHERE type = 'CNAME' AND name = :name"),
-        {"name": expected_name},
-    ).first()
-    if row:
-        logger.info("dns_cname_verified name=%s content=%s", row[0], row[2])
-    else:
-        logger.warning(
-            "dns_cname_NOT_FOUND after creation: expected name=%s — "
-            "PowerDNS may use a different database or the API call did not persist the record.",
-            expected_name,
-        )
 
 
 @router.get("/users/{user_id}/identity")
-def get_user_identity(
+async def get_user_identity(
     user_id: str,
     _: AuthCtx = Depends(require_admin),
 ) -> dict:
@@ -178,14 +62,14 @@ def get_user_identity(
     :raises HTTPException 404: If the user is not found in Keycloak.
     :raises HTTPException 503: If Keycloak is unavailable.
     """
-    profile = fetch_keycloak_user_by_id(user_id)
+    profile = await fetch_keycloak_user_by_id_async(user_id)
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return profile
 
 
 @router.get("/users/{user_id}/vms", response_model=VMListResponse)
-def list_user_vms_admin(
+async def list_user_vms_admin(
     user_id: str,
     _: AuthCtx = Depends(require_admin),
     query: VmQueryService = Depends(get_vm_query_service),
@@ -199,11 +83,11 @@ def list_user_vms_admin(
     :returns: List of VMs owned by or shared with the specified user.
     :rtype: VMListResponse
     """
-    return VMListResponse.model_validate(query.list_vms(user_id=user_id))
+    return VMListResponse.model_validate(await query.list_vms(user_id=user_id))
 
 
 @router.get("/users/{user_id}/resources", response_model=ResourcesResponse)
-def get_user_resources_admin(
+async def get_user_resources_admin(
     user_id: str,
     _: AuthCtx = Depends(require_admin),
     query: VmQueryService = Depends(get_vm_query_service),
@@ -217,13 +101,13 @@ def get_user_resources_admin(
     :returns: Resource usage statistics, limits, and remaining capacity.
     :rtype: ResourcesResponse
     """
-    profile = fetch_keycloak_user_by_id(user_id)
+    profile = await fetch_keycloak_user_by_id_async(user_id)
     return ResourcesResponse.model_validate(
         {
             "scope": "user",
             "user_id": user_id,
             "profile": profile,
-            **query.get_resources(user_id=user_id),
+            **await query.get_resources(user_id=user_id),
         }
     )
 
@@ -238,8 +122,7 @@ async def create_vm_for_user_admin(
     """
     Create a new VM owned by the specified user (admin only).
 
-    The VM is provisioned asynchronously via the Proxmox executor and
-    assigned to ``user_id`` as the owner. The admin making the request
+    The VM is assigned to ``user_id`` as the owner. The admin making the request
     does not become the owner.
 
     :param user_id: Keycloak UUID of the user who will own the VM.
@@ -250,8 +133,7 @@ async def create_vm_for_user_admin(
     :rtype: VMDetailResponse
     """
     return VMDetailResponse.model_validate(
-        await run_in_proxmox_executor(
-            cmd.create_for_user,
+        await cmd.create_for_user(
             owner_user_id=user_id,
             name=body.name,
             template_id=body.template_id,
@@ -266,7 +148,7 @@ async def create_vm_for_user_admin(
 
 
 @router.get("/users/cotise-ended")
-def list_cotise_ended_users(
+async def list_cotise_ended_users(
     _: AuthCtx = Depends(require_admin),
 ) -> list[dict]:
     """
@@ -276,80 +158,90 @@ def list_cotise_ended_users(
     :returns: List of user dicts with ``id``, ``username``, ``first_name``, ``last_name``, ``email``.
     :rtype: list[dict]
     """
-    return fetch_keycloak_group_members("/hosting_ended")
+    return await fetch_keycloak_group_members_async("/hosting_ended")
 
 
 @router.get("/users/hosting-charte")
-def list_hosting_charte_users(
+async def list_hosting_charte_users(
     _: AuthCtx = Depends(require_admin),
 ) -> list[dict]:
     """Return all Keycloak users in the ``/hosting-charte`` group (admin only)."""
-    return fetch_keycloak_group_members("/hosting-charte")
+    return await fetch_keycloak_group_members_async("/hosting-charte")
 
 
 @router.get("/requests", response_model=AdminRequestListResponse)
-def list_pending_requests(
+async def list_pending_requests(
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AdminRequestListResponse:
-    rows = RequestRepo(db).list_pending()
+    rows = await RequestRepo(db).list_pending()
     return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
 
 
 @router.patch("/requests/{request_id}", response_model=AdminRequestResponse)
-def update_request_status(
+async def update_request_status(
     request_id: int,
     body: AdminRequestUpdateBody,
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
+    cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> AdminRequestResponse:
     if body.status == "pending":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending"
         )
 
-    row = RequestRepo(db).update_status(request_id=request_id, status=body.status)
+    row = await RequestRepo(db).update_status(request_id=request_id, status=body.status)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
+    settings = get_settings()
+    dns_svc = DnsService(settings=settings)
+
     if body.status == "approved" and row["type"] == "ipv4":
-        ipv4 = _allocate_and_assign_ipv4(
-            vm_id=row["vm_id"],
-            db=db,
-            query_repo=VmQueryRepo(db),
-            cmd_repo=VmCmdRepo(db),
-        )
-        from app.core.config import get_settings
-        from app.services.dns import DnsService
-        DnsService(settings=get_settings()).create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
+        ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=row["vm_id"])
+        await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
     elif body.status == "approved" and row["type"] == "dns":
-        db.commit()
-        _create_custom_dns(vm_id=row["vm_id"], dns_label=row.get("dns_label"), db=db)
+        await db.commit()
+        dns_label = row.get("dns_label")
+        if not dns_label:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="DNS label is missing on this request",
+            )
+        try:
+            await dns_svc.create_and_verify_custom_dns(dns_label=dns_label, vm_id=row["vm_id"], db=db)
+        except Exception as exc:
+            logger.exception("DNS CNAME creation failed for vm_id=%s label=%s", row["vm_id"], dns_label)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Failed to create DNS record in PowerDNS: {exc}",
+            ) from exc
     else:
-        db.commit()
+        await db.commit()
 
     return AdminRequestResponse.from_row(row)
 
 
 @router.get("/dns", response_model=AdminRequestListResponse)
-def list_approved_dns(
+async def list_approved_dns(
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> AdminRequestListResponse:
     """List all approved DNS requests (admin only)."""
-    rows = RequestRepo(db).list_approved_dns()
+    rows = await RequestRepo(db).list_approved_dns()
     return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
 
 
 @router.delete("/dns/{request_id}", status_code=204)
-def revoke_dns(
+async def revoke_dns(
     request_id: int,
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Revoke an approved DNS record: delete the CNAME from PowerDNS and reject the request."""
     repo = RequestRepo(db)
-    row = repo.get(request_id)
+    row = await repo.get(request_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     if row["type"] != "dns":
@@ -359,12 +251,9 @@ def revoke_dns(
 
     dns_label = row.get("dns_label")
     if dns_label:
-        from app.core.config import get_settings
-        from app.services.dns import DnsService
-
         dns_svc = DnsService(settings=get_settings())
         try:
-            dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
+            await dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
         except Exception as exc:
             logger.exception("DNS CNAME revoke failed for request_id=%s label=%s", request_id, dns_label)
             raise HTTPException(
@@ -372,8 +261,8 @@ def revoke_dns(
                 detail=f"Failed to delete DNS record in PowerDNS: {exc}",
             ) from exc
 
-    repo.update_status(request_id=request_id, status="rejected")
-    db.commit()
+    await repo.update_status(request_id=request_id, status="rejected")
+    await db.commit()
 
 
 @router.get("/cluster/resources")
@@ -393,7 +282,7 @@ async def get_cluster_resources(
     :raises HTTPException 503: If Proxmox is unreachable.
     """
     try:
-        return await run_in_proxmox_executor(get_proxmox_gateway().cluster_resources, type=type)
+        return await asyncio.to_thread(get_proxmox_gateway().cluster_resources, type=type)
     except ProxmoxError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
@@ -409,51 +298,40 @@ async def get_cluster_status(
     """
     gw = get_proxmox_gateway()
     try:
-        nodes = await run_in_proxmox_executor(gw.cluster_resources, type="node")
-        storages = await run_in_proxmox_executor(gw.cluster_resources, type="storage")
-        version = await run_in_proxmox_executor(gw.version)
+        nodes, storages, version = await asyncio.gather(
+            asyncio.to_thread(gw.cluster_resources, type="node"),
+            asyncio.to_thread(gw.cluster_resources, type="storage"),
+            asyncio.to_thread(gw.version),
+        )
     except ProxmoxError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     return {"nodes": nodes, "storages": storages, "version": version}
 
 
 @router.post("/vms/{vm_id}/ipv4", response_model=VMAssignIPv4Response, status_code=201)
-def assign_vm_ipv4(
+async def assign_vm_ipv4(
     vm_id: int,
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMAssignIPv4Response:
     """
     Automatically assign the next free IPv4 address to a VM (admin only).
 
-    Allocates the next available address from the configured ``VM_IPV4_SUBNET``,
-    skipping addresses already assigned to other VMs in the database.
-
     :param vm_id: The target VM identifier.
     :param _: Authenticated admin context (injected).
-    :param db: Database session (injected).
+    :param cmd: VM command service (injected).
     :returns: The VM identifier and the newly assigned IPv4 address.
     :rtype: VMAssignIPv4Response
-    :raises HTTPException 404: If the VM does not exist.
-    :raises HTTPException 409: If the VM already has an IPv4 address assigned.
-    :raises HTTPException 503: If no IPv4 addresses are available in the subnet,
-        the subnet is not configured, or a database error occurs.
     """
-    ipv4 = _allocate_and_assign_ipv4(
-        vm_id=vm_id,
-        db=db,
-        query_repo=VmQueryRepo(db),
-        cmd_repo=VmCmdRepo(db),
-    )
-
+    ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=vm_id)
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 
 @router.post("/templates", response_model=VMTemplateResponse, status_code=201)
-def create_template(
+async def create_template(
     body: AdminTemplateCreateBody,
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VMTemplateResponse:
     """Create a new VM template (admin only).
 
@@ -461,10 +339,10 @@ def create_template(
     """
     repo = VmCmdRepo(db)
     try:
-        repo.insert_template(template_id=body.template_id, name=body.name)
-        db.commit()
+        await repo.insert_template(template_id=body.template_id, name=body.name)
+        await db.commit()
     except IntegrityError as exc:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Template with this ID or name already exists",
@@ -473,10 +351,10 @@ def create_template(
 
 
 @router.delete("/templates/{template_id}", status_code=204)
-def delete_template(
+async def delete_template(
     template_id: int,
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a VM template (admin only).
 
@@ -484,11 +362,11 @@ def delete_template(
     """
     repo = VmCmdRepo(db)
     try:
-        if not repo.delete_template(template_id):
+        if not await repo.delete_template(template_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
-        db.commit()
+        await db.commit()
     except IntegrityError as exc:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete template: VMs still reference it",
@@ -496,14 +374,11 @@ def delete_template(
 
 
 @router.post("/purge", status_code=200)
-def trigger_purge(
+async def trigger_purge(
     _: AuthCtx = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Manually trigger the expired-membership VM purge (admin only)."""
-    from app.core.config import get_settings as _gs
-    from app.services.proxmox.gateway import get_proxmox_gateway
     from app.services.vm.purge import run_purge
 
-    settings = _gs()
-    return run_purge(db=db, gateway=get_proxmox_gateway(), settings=settings)
+    return await run_purge(db=db, gateway=get_proxmox_gateway(), settings=get_settings())

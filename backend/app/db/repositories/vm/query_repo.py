@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import Column, MetaData, String, Table, Text, cast, func, literal, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.resource import Resource
 from app.db.models.template import Template
@@ -38,21 +38,21 @@ _VM_COLUMNS = (
 class VmQueryRepo:
     """Repository providing read-only query operations over VM-related tables.
 
-    :param db: SQLAlchemy session used for database operations.
+    :param db: SQLAlchemy async session used for database operations.
     :param dns_zone: The configured DNS zone (without trailing dot), used to
         resolve custom CNAME labels from the PowerDNS records table.
     """
 
-    def __init__(self, db: Session, dns_zone: str = ""):
+    def __init__(self, db: AsyncSession, dns_zone: str = ""):
         """Initialize the repository with a database session.
 
-        :param db: Active SQLAlchemy session.
+        :param db: Active SQLAlchemy async session.
         :param dns_zone: DNS zone for CNAME label resolution.
         """
         self.db = db
         self._dns_zone = dns_zone
 
-    def list_cname_targets(self) -> dict[str, str]:
+    async def list_cname_targets(self) -> dict[str, str]:
         """Return a mapping of CNAME target → custom label for the configured zone.
 
         E.g. ``{"wise-cloud.h.lan": "myapp"}`` means there is a CNAME
@@ -66,13 +66,13 @@ class VmQueryRepo:
             _pdns_records.c.name.like(f"%{zone_suffix}"),
         )
         result: dict[str, str] = {}
-        for row in self.db.execute(stmt).mappings().all():
+        for row in (await self.db.execute(stmt)).mappings().all():
             target = row["content"]
             label = row["name"].removesuffix(zone_suffix)
             result[target] = label
         return result
 
-    def list_user_vms(self, user_id: str) -> list[dict[str, Any]]:
+    async def list_user_vms(self, user_id: str) -> list[dict[str, Any]]:
         """Return all VMs that the given user has access to, ordered by VM ID.
 
         Each dict contains the standard VM columns plus ``role_owner``.
@@ -91,9 +91,9 @@ class VmQueryRepo:
             .where(VMAccess.user_id == user_id)
             .order_by(VM.vm_id.asc())
         )
-        return [dict(row) for row in self.db.execute(stmt).mappings().all()]
+        return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
-    def list_all_vms(self) -> list[dict[str, Any]]:
+    async def list_all_vms(self) -> list[dict[str, Any]]:
         """Return all VMs in the database, ordered by VM ID.
 
         The ``role_owner`` field is always ``True`` in the result set, as this
@@ -118,9 +118,31 @@ class VmQueryRepo:
             .join(Template, Template.template_id == VM.template_id)
             .order_by(VM.vm_id.asc())
         )
-        return [dict(row) for row in self.db.execute(stmt).mappings().all()]
+        return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
-    def get_user_vm(self, vm_id: int, user_id: str) -> dict[str, Any] | None:
+    async def list_vms_by_owners(self, owner_ids: set[str]) -> list[dict[str, Any]]:
+        """Return all VMs owned by any of the given user IDs.
+
+        :param owner_ids: Set of user identifiers to filter by.
+        :returns: A list of row dicts with VM columns, ``role_owner``, and ``owner_id``.
+        :rtype: list[dict[str, Any]]
+        """
+        if not owner_ids:
+            return []
+        stmt = (
+            select(
+                *_VM_COLUMNS,
+                literal(True).label("role_owner"),
+                VMAccess.user_id.label("owner_id"),
+            )
+            .join(VMAccess, VMAccess.vm_id == VM.vm_id)
+            .join(Template, Template.template_id == VM.template_id)
+            .where(VMAccess.role_owner.is_(True), VMAccess.user_id.in_(owner_ids))
+            .order_by(VM.vm_id.asc())
+        )
+        return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
+
+    async def get_user_vm(self, vm_id: int, user_id: str) -> dict[str, Any] | None:
         """Return a single VM that the given user has access to.
 
         :param vm_id: The VM identifier to look up.
@@ -142,10 +164,10 @@ class VmQueryRepo:
             .where(VM.vm_id == vm_id, VMAccess.user_id == user_id)
             .limit(1)
         )
-        row = self.db.execute(stmt).mappings().first()
+        row = (await self.db.execute(stmt)).mappings().first()
         return dict(row) if row else None
 
-    def get_vm(self, vm_id: int) -> dict[str, Any] | None:
+    async def get_vm(self, vm_id: int) -> dict[str, Any] | None:
         """Return a single VM by its identifier without access filtering.
 
         :param vm_id: The VM identifier to look up.
@@ -163,10 +185,10 @@ class VmQueryRepo:
             .where(VM.vm_id == vm_id)
             .limit(1)
         )
-        row = self.db.execute(stmt).mappings().first()
+        row = (await self.db.execute(stmt)).mappings().first()
         return dict(row) if row else None
 
-    def list_vm_access(self, vm_id: int) -> list[dict[str, Any]]:
+    async def list_vm_access(self, vm_id: int) -> list[dict[str, Any]]:
         """Return all access entries for a given VM, owners first then alphabetically.
 
         :param vm_id: The VM identifier whose access entries to list.
@@ -178,9 +200,9 @@ class VmQueryRepo:
             .where(VMAccess.vm_id == vm_id)
             .order_by(VMAccess.role_owner.desc(), VMAccess.user_id.asc())
         )
-        return [dict(row) for row in self.db.execute(stmt).mappings().all()]
+        return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
-    def list_templates(self) -> list[dict[str, Any]]:
+    async def list_templates(self) -> list[dict[str, Any]]:
         """Return all templates ordered by template ID ascending.
 
         :returns: A list of row dicts each containing ``template_id`` and ``name``.
@@ -189,9 +211,9 @@ class VmQueryRepo:
         stmt = select(Template.template_id.label("template_id"), Template.name.label("name")).order_by(
             Template.template_id.asc()
         )
-        return [dict(row) for row in self.db.execute(stmt).mappings().all()]
+        return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
-    def get_template(self, template_id: int) -> dict[str, Any] | None:
+    async def get_template(self, template_id: int) -> dict[str, Any] | None:
         """Return a single template by its identifier.
 
         :param template_id: The template identifier to look up.
@@ -204,10 +226,10 @@ class VmQueryRepo:
             .where(Template.template_id == template_id)
             .limit(1)
         )
-        row = self.db.execute(stmt).mappings().first()
+        row = (await self.db.execute(stmt)).mappings().first()
         return dict(row) if row else None
 
-    def get_owned_totals(self, user_id: str) -> dict[str, int]:
+    async def get_owned_totals(self, user_id: str) -> dict[str, int]:
         """Return the aggregate resource usage for all VMs owned by the given user.
 
         Counts VMs and sums CPU cores, RAM, and disk across all VMs where the user
@@ -229,7 +251,7 @@ class VmQueryRepo:
             .join(VM, VM.vm_id == VMAccess.vm_id)
             .where(VMAccess.user_id == user_id, VMAccess.role_owner.is_(True))
         )
-        row = self.db.execute(stmt).mappings().first()
+        row = (await self.db.execute(stmt)).mappings().first()
         if row is None:
             return {"vm_count": 0, "cpu_cores": 0, "ram_mb": 0, "disk_gb": 0}
         return {
@@ -239,7 +261,7 @@ class VmQueryRepo:
             "disk_gb": int(row["disk_gb"]),
         }
 
-    def list_used_ipv6(self) -> set[str]:
+    async def list_used_ipv6(self) -> set[str]:
         """Return all IPv6 addresses currently assigned to any VM.
 
         :returns: A set of IPv6 address strings (CIDR notation as stored by
@@ -247,20 +269,20 @@ class VmQueryRepo:
         :rtype: set[str]
         """
         stmt = select(VM.ipv6).where(VM.ipv6.is_not(None))
-        values = self.db.execute(stmt).scalars().all()
+        values = (await self.db.execute(stmt)).scalars().all()
         return {str(v) for v in values if v is not None}
 
-    def list_used_ipv4(self) -> set[str]:
+    async def list_used_ipv4(self) -> set[str]:
         """Return all IPv4 addresses currently assigned to any VM.
 
         :returns: A set of IPv4 address strings for every VM that has a non-null ``ipv4``.
         :rtype: set[str]
         """
         stmt = select(VM.ipv4).where(VM.ipv4.is_not(None))
-        values = self.db.execute(stmt).scalars().all()
+        values = (await self.db.execute(stmt)).scalars().all()
         return {str(v) for v in values if v is not None}
 
-    def resource_exists(self, vm_id: int, username: str) -> bool:
+    async def resource_exists(self, vm_id: int, username: str) -> bool:
         """Check whether a resource entry exists for the given VM and username.
 
         :param vm_id: The VM identifier to look up.
@@ -269,4 +291,4 @@ class VmQueryRepo:
         :rtype: bool
         """
         stmt = select(Resource.id).where(Resource.vm_id == vm_id, Resource.username == username).limit(1)
-        return self.db.execute(stmt).first() is not None
+        return (await self.db.execute(stmt)).first() is not None

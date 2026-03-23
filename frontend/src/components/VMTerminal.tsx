@@ -2,8 +2,7 @@ import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import 'xterm/css/xterm.css'
-
-const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
+import { API_BASE } from '../api'
 
 const enc = new TextEncoder()
 const dec = new TextDecoder()

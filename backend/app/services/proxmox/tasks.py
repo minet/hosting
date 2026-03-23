@@ -40,8 +40,6 @@ class TaskService:
     def wait_for_task(self, *, node: str, upid: str, timeout_seconds: int) -> dict[str, Any]:
         """Synchronously block until the given Proxmox task completes or times out.
 
-        Internally runs :meth:`wait_for_task_async` via :func:`asyncio.run`.
-
         :param node: Proxmox node name that owns the task.
         :param upid: Unique task identifier (UPID).
         :param timeout_seconds: Maximum seconds to wait before raising.
@@ -50,7 +48,29 @@ class TaskService:
         :raises ProxmoxTaskFailed: If the task fails or the timeout is reached.
         :raises ProxmoxInvalidResponse: If Proxmox returns an unexpected payload.
         """
-        return asyncio.run(self.wait_for_task_async(node=node, upid=upid, timeout_seconds=timeout_seconds))
+        logger.info("proxmox_task_wait_start node=%s upid=%s timeout_seconds=%s", node, upid, timeout_seconds)
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            status = self._client.nodes(node).tasks(upid).status.get()
+            if not isinstance(status, dict):
+                raise ProxmoxInvalidResponse("Invalid task status payload from Proxmox")
+            if status.get("status") != "stopped":
+                time.sleep(1)
+                continue
+            exit_status = status.get("exitstatus")
+            if exit_status != "OK":
+                logger.warning(
+                    "proxmox_task_failed node=%s upid=%s status=%s exitstatus=%s",
+                    node,
+                    upid,
+                    status.get("status"),
+                    exit_status,
+                )
+                raise ProxmoxTaskFailed(f"Proxmox task failed ({exit_status})")
+            logger.info("proxmox_task_wait_done node=%s upid=%s", node, upid)
+            return status
+        logger.warning("proxmox_task_timeout node=%s upid=%s timeout_seconds=%s", node, upid, timeout_seconds)
+        raise ProxmoxTaskFailed("Proxmox task timeout")
 
     async def wait_for_task_async(self, *, node: str, upid: str, timeout_seconds: int) -> dict[str, Any]:
         """Asynchronously poll Proxmox until the task finishes or the deadline is reached.

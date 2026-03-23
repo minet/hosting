@@ -23,6 +23,8 @@ from fastapi.websockets import WebSocketState
 from app.auth import AuthCtx, require_user
 
 # Track active terminal sessions per VM: vm_id -> user_id
+# NOTE: This is process-local — only works with a single uvicorn worker.
+# With multiple workers, two users could open terminals on the same VM.
 _active_terminals: dict[int, str] = {}
 from app.auth.context import build_auth_ctx
 from app.core.config import get_settings
@@ -31,7 +33,6 @@ from app.core.sessions import get_access_token
 from app.db.core.engine import get_session_factory
 from app.db.repositories.vm import VmAccessRepo
 from app.services.proxmox.errors import ProxmoxError
-from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.access import AccessLevel, VmAccessService
 from app.services.vm.deps import get_vm_access_service
@@ -64,10 +65,10 @@ async def get_termproxy(
     :raises HTTPException: With status 403 if the caller has no access to the VM,
         or with an appropriate status if the Proxmox API is unreachable.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     gateway = get_proxmox_gateway()
     try:
-        info = await run_in_proxmox_executor(gateway.termproxy, vm_id=vm_id)
+        info = await asyncio.to_thread(gateway.termproxy, vm_id=vm_id)
     except ProxmoxError as exc:
         raise_proxmox_as_http(exc, unavailable="Unable to get terminal ticket from Proxmox")
     return {
@@ -106,16 +107,12 @@ def _proxmox_ssl_context(verify: bool) -> ssl.SSLContext | None:
     return ctx
 
 
-def _check_vm_access_sync(vm_id: int, user_id: str, is_admin: bool) -> bool:
+async def _check_vm_access(vm_id: int, user_id: str, is_admin: bool) -> bool:
     """
-    Synchronously check whether a user has any access level on a VM.
+    Asynchronously check whether a user has any access level on a VM.
 
     Administrators are always granted access without a database query.  For
-    regular users a new database session is opened, queried, and closed.
-
-    This function is intended to be called via :func:`asyncio.to_thread` from
-    an async context so that the blocking database call does not block the
-    event loop.
+    regular users a new async database session is opened, queried, and closed.
 
     :param vm_id: Numeric identifier of the target VM.
     :param user_id: Identifier of the user to check.
@@ -126,11 +123,8 @@ def _check_vm_access_sync(vm_id: int, user_id: str, is_admin: bool) -> bool:
     """
     if is_admin:
         return True
-    db = get_session_factory()()
-    try:
-        return VmAccessRepo(db).has_vm_access(vm_id=vm_id, user_id=user_id, owner_only=False)
-    finally:
-        db.close()
+    async with get_session_factory()() as db:
+        return await VmAccessRepo(db).has_vm_access(vm_id=vm_id, user_id=user_id, owner_only=False)
 
 
 async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
@@ -174,7 +168,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
         await websocket.close(code=4401, reason="Unauthorized")
         return
 
-    allowed = await asyncio.to_thread(_check_vm_access_sync, vm_id, ctx.user_id, ctx.is_admin)
+    allowed = await _check_vm_access(vm_id, ctx.user_id, ctx.is_admin)
     if not allowed:
         await websocket.close(code=4403, reason="Forbidden")
         return
@@ -190,7 +184,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
     gateway = get_proxmox_gateway()
 
     try:
-        info = await run_in_proxmox_executor(gateway.termproxy_with_ticket, vm_id=vm_id)
+        info = await asyncio.to_thread(gateway.termproxy_with_ticket, vm_id=vm_id)
     except ProxmoxError as exc:
         await websocket.close(code=4503, reason=str(exc))
         return

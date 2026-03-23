@@ -1,10 +1,8 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import { apiFetch } from '../api'
+import { apiFetch, API_BASE } from '../api'
 import { useToast } from './ToastContext'
 import { VMListSchema } from '../schemas'
-
-const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
 
 interface VMStatusEntry {
   status: string
@@ -19,16 +17,60 @@ export interface VMListItem {
 }
 
 type StatusMap = Map<number, VMStatusEntry>
+type Listener = () => void
+
+/** Mutable store for VM statuses — avoids cloning the Map on every SSE event */
+class VMStatusStore {
+  private map: StatusMap = new Map()
+  private listeners = new Set<Listener>()
+  private version = 0
+
+  getMap(): StatusMap { return this.map }
+  getVersion(): number { return this.version }
+
+  set(vmId: number, entry: VMStatusEntry) {
+    const prev = this.map.get(vmId)
+    if (prev && prev.status === entry.status && prev.uptime === entry.uptime && prev.node === entry.node) return
+    this.map.set(vmId, entry)
+    this.version++
+    this.notify()
+  }
+
+  subscribe(listener: Listener): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  private notify() {
+    for (const l of this.listeners) l()
+  }
+}
 
 interface VMStatusCtx {
-  statuses: StatusMap
+  store: VMStatusStore
   vms: VMListItem[]
 }
 
-export const VMStatusContext = createContext<VMStatusCtx>({ statuses: new Map(), vms: [] })
+export const VMStatusContext = createContext<VMStatusCtx>({
+  store: new VMStatusStore(),
+  vms: [],
+})
 
 export function useVMStatus(vmId: number): VMStatusEntry | undefined {
-  return useContext(VMStatusContext).statuses.get(vmId)
+  const { store } = useContext(VMStatusContext)
+  const subscribe = useCallback((cb: () => void) => store.subscribe(cb), [store])
+  const getSnapshot = useCallback(() => store.getMap().get(vmId), [store, vmId])
+  return useSyncExternalStore(subscribe, getSnapshot)
+}
+
+/** Returns the full statuses Map (for AdminPage). Re-renders on any status change. */
+export function useAllStatuses(): StatusMap {
+  const { store } = useContext(VMStatusContext)
+  const subscribe = useCallback((cb: () => void) => store.subscribe(cb), [store])
+  // Return version as snapshot to trigger re-render, but the consumer reads the map
+  const getSnapshot = useCallback(() => store.getVersion(), [store])
+  useSyncExternalStore(subscribe, getSnapshot)
+  return store.getMap()
 }
 
 export function useVMList(): VMListItem[] {
@@ -36,7 +78,7 @@ export function useVMList(): VMListItem[] {
 }
 
 export function VMStatusProvider({ children }: { children: ReactNode }) {
-  const [statuses, setStatuses] = useState<StatusMap>(new Map())
+  const [store] = useState(() => new VMStatusStore())
   const [vms, setVms] = useState<VMListItem[]>([])
   const knownIdsRef = useRef<Set<number>>(new Set())
   const esRef = useRef<EventSource | null>(null)
@@ -64,11 +106,7 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
     es.onmessage = (e) => {
       try {
         const { vm_id, status, uptime, node } = JSON.parse(e.data) as { vm_id: number; status: string; uptime: number | null; node: string | null }
-        setStatuses(prev => {
-          const next = new Map(prev)
-          next.set(vm_id, { status, uptime, node: node ?? null })
-          return next
-        })
+        store.set(vm_id, { status, uptime, node: node ?? null })
         if (!knownIdsRef.current.has(vm_id)) {
           refreshVMs()
         }
@@ -86,7 +124,6 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
     })
 
     es.onerror = () => {
-      // On error, close and retry after a delay (handles 401 on direct navigation)
       es.close()
       esRef.current = null
       setTimeout(() => {
@@ -104,7 +141,7 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <VMStatusContext.Provider value={{ statuses, vms }}>
+    <VMStatusContext.Provider value={{ store, vms }}>
       {children}
     </VMStatusContext.Provider>
   )

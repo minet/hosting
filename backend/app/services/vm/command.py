@@ -1,25 +1,28 @@
 """
-VM command service (synchronous facade).
+VM command service (async facade).
 
-Provides a single synchronous entry point for all VM mutation operations
-(create, start, stop, restart, patch, delete) intended to run inside the
-Proxmox thread-pool executor. Each method manages its own database session
-lifetime.
+Provides a single async entry point for all VM mutation operations
+(create, start, stop, restart, patch, delete). The session is injected
+per request via FastAPI dependency injection.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+import asyncio
+import logging
 from typing import Any
 
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import HTTPException, status as http_status
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
-from app.services.proxmox.errors import ProxmoxError
+from app.services.proxmox.allocation import allocate_next_vm_ipv4
+from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.create import VmCreateService
 from app.services.vm.delete import VmDeleteService
@@ -28,44 +31,37 @@ from app.services.vm.patch import VmPatchService
 from app.services.vm.query import VmQueryService
 from app.services.vm.types import VmCreateCmd, VmCreateResource
 
+logger = logging.getLogger(__name__)
+
 
 class VmCommandService:
-    """Synchronous service for VM mutation operations. Intended to run inside the Proxmox thread-pool executor."""
+    """Async service for VM mutation operations."""
 
     def __init__(
         self,
         *,
-        session_factory: sessionmaker[Session],
+        db: AsyncSession,
         gateway: ProxmoxGateway,
         settings: Settings,
+        cmd_repo: VmCmdRepo | None = None,
+        query_repo: VmQueryRepo | None = None,
     ):
         """
         Initialise the VM command service.
 
-        :param session_factory: SQLAlchemy session factory used to create
-            short-lived sessions per operation.
+        :param db: Request-scoped SQLAlchemy async session.
         :param gateway: Proxmox API gateway for hypervisor operations.
         :param settings: Application settings (limits, quotas, etc.).
+        :param cmd_repo: Optional pre-built command repository.
+        :param query_repo: Optional pre-built query repository.
         """
-        self._session_factory = session_factory
+        self._db = db
         self._gateway = gateway
         self._settings = settings
+        self._cmd_repo = cmd_repo or VmCmdRepo(db)
+        self._query_repo = query_repo or VmQueryRepo(db, dns_zone=settings.dns_zone.rstrip("."))
 
-    @contextmanager
-    def _make_session(self) -> Iterator[Session]:
-        """
-        Context manager that yields a fresh database session and closes it on exit.
-
-        :returns: An iterator yielding a :class:`~sqlalchemy.orm.Session`.
-        :rtype: Iterator[Session]
-        """
-        session = self._session_factory()
-        try:
-            yield session
-        finally:
-            session.close()
-
-    def create(
+    async def create(
         self,
         *,
         ctx: AuthCtx,
@@ -94,34 +90,31 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On validation, Proxmox, or database errors.
         """
-        with self._make_session() as db:
-            cmd_repo = VmCmdRepo(db)
-            query_repo = VmQueryRepo(db, dns_zone=self._settings.dns_zone.rstrip("."))
-            service = VmCreateService(
-                db=db,
-                cmd_repo=cmd_repo,
-                query_repo=query_repo,
-                query_service=VmQueryService(repo=query_repo, settings=self._settings),
-                gateway=self._gateway,
-                settings=self._settings,
-            )
-            return service.create(
-                ctx=ctx,
-                cmd=VmCreateCmd(
-                    name=name,
-                    template_id=template_id,
-                    cpu_cores=cpu_cores,
-                    ram_gb=ram_gb,
-                    disk_gb=disk_gb,
-                    resource=VmCreateResource(
-                        username=username,
-                        password=password,
-                        ssh_public_key=ssh_public_key,
-                    ),
+        service = VmCreateService(
+            db=self._db,
+            cmd_repo=self._cmd_repo,
+            query_repo=self._query_repo,
+            query_service=VmQueryService(repo=self._query_repo, settings=self._settings),
+            gateway=self._gateway,
+            settings=self._settings,
+        )
+        return await service.create(
+            ctx=ctx,
+            cmd=VmCreateCmd(
+                name=name,
+                template_id=template_id,
+                cpu_cores=cpu_cores,
+                ram_gb=ram_gb,
+                disk_gb=disk_gb,
+                resource=VmCreateResource(
+                    username=username,
+                    password=password,
+                    ssh_public_key=ssh_public_key,
                 ),
-            )
+            ),
+        )
 
-    def create_for_user(
+    async def create_for_user(
         self,
         *,
         owner_user_id: str,
@@ -154,7 +147,7 @@ class VmCommandService:
         :raises HTTPException: On validation, Proxmox, or database errors.
         """
         owner_ctx = AuthCtx(user_id=owner_user_id, groups=set(), is_admin=False, payload={})
-        return self.create(
+        return await self.create(
             ctx=owner_ctx,
             name=name,
             template_id=template_id,
@@ -166,7 +159,7 @@ class VmCommandService:
             ssh_public_key=ssh_public_key,
         )
 
-    def start(self, *, vm_id: int) -> dict[str, Any]:
+    async def start(self, *, vm_id: int) -> dict[str, Any]:
         """
         Start a virtual machine.
 
@@ -176,12 +169,12 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            self._gateway.start_vm(vm_id=vm_id)
+            await asyncio.to_thread(self._gateway.start_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to start VM on Proxmox")
         return {"vm_id": vm_id, "action": "start", "status": "ok"}
 
-    def stop(self, *, vm_id: int) -> dict[str, Any]:
+    async def stop(self, *, vm_id: int) -> dict[str, Any]:
         """
         Stop (power off) a virtual machine.
 
@@ -191,12 +184,12 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            self._gateway.stop_vm(vm_id=vm_id)
+            await asyncio.to_thread(self._gateway.stop_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to stop VM on Proxmox")
         return {"vm_id": vm_id, "action": "stop", "status": "ok"}
 
-    def restart(self, *, vm_id: int) -> dict[str, Any]:
+    async def restart(self, *, vm_id: int) -> dict[str, Any]:
         """
         Restart a virtual machine.
 
@@ -206,29 +199,29 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            self._gateway.restart_vm(vm_id=vm_id)
+            await asyncio.to_thread(self._gateway.restart_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to restart VM on Proxmox")
         return {"vm_id": vm_id, "action": "restart", "status": "ok"}
 
-    def get_onboot(self, *, vm_id: int) -> dict[str, Any]:
+    async def get_onboot(self, *, vm_id: int) -> dict[str, Any]:
         """Return the onboot setting for a VM."""
         try:
-            onboot = self._gateway.get_onboot(vm_id=vm_id)
+            onboot = await asyncio.to_thread(self._gateway.get_onboot, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to fetch VM config from Proxmox")
         return {"vm_id": vm_id, "onboot": onboot}
 
-    def toggle_onboot(self, *, vm_id: int) -> dict[str, Any]:
+    async def toggle_onboot(self, *, vm_id: int) -> dict[str, Any]:
         """Toggle the onboot setting for a VM."""
         try:
-            current = self._gateway.get_onboot(vm_id=vm_id)
-            self._gateway.set_onboot(vm_id=vm_id, onboot=not current)
+            current = await asyncio.to_thread(self._gateway.get_onboot, vm_id=vm_id)
+            await asyncio.to_thread(self._gateway.set_onboot, vm_id=vm_id, onboot=not current)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to update VM config on Proxmox")
         return {"vm_id": vm_id, "onboot": not current}
 
-    def status(self, *, vm_id: int) -> dict[str, Any]:
+    async def status(self, *, vm_id: int) -> dict[str, Any]:
         """
         Retrieve the current runtime status of a virtual machine.
 
@@ -238,12 +231,12 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            runtime = self._gateway.get_vm_status(vm_id=vm_id)
+            runtime = await asyncio.to_thread(self._gateway.get_vm_status, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to fetch VM status from Proxmox")
         return {"vm_id": vm_id, **runtime}
 
-    def tasks(self, *, vm_id: int, limit: int = 20) -> dict[str, Any]:
+    async def tasks(self, *, vm_id: int, limit: int = 20) -> dict[str, Any]:
         """
         List recent Proxmox tasks for a virtual machine.
 
@@ -254,12 +247,12 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            items = self._gateway.list_vm_tasks(vm_id=vm_id, limit=limit)
+            items = await asyncio.to_thread(self._gateway.list_vm_tasks, vm_id=vm_id, limit=limit)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to fetch VM tasks from Proxmox")
         return {"vm_id": vm_id, "items": items, "count": len(items)}
 
-    def metrics(self, *, vm_id: int, timeframe: str = "hour", cf: str = "AVERAGE") -> dict[str, Any]:
+    async def metrics(self, *, vm_id: int, timeframe: str = "hour", cf: str = "AVERAGE") -> dict[str, Any]:
         """
         Retrieve historical RRD metrics for a virtual machine.
 
@@ -273,12 +266,12 @@ class VmCommandService:
         :raises HTTPException: On Proxmox errors.
         """
         try:
-            items = self._gateway.vm_rrddata(vm_id=vm_id, timeframe=timeframe, cf=cf)
+            items = await asyncio.to_thread(self._gateway.vm_rrddata, vm_id=vm_id, timeframe=timeframe, cf=cf)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to fetch VM metrics from Proxmox")
         return {"vm_id": vm_id, "timeframe": timeframe, "cf": cf, "items": items, "count": len(items)}
 
-    def patch(
+    async def patch(
         self,
         *,
         vm_id: int,
@@ -307,27 +300,26 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On validation, Proxmox, or database errors.
         """
-        with self._make_session() as db:
-            service = VmPatchService(
-                db=db,
-                cmd_repo=VmCmdRepo(db),
-                query_repo=VmQueryRepo(db),
-                gateway=self._gateway,
-                settings=self._settings,
-            )
-            return service.patch(
-                vm_id=vm_id,
-                user_id=ctx.user_id,
-                is_admin=ctx.is_admin,
-                username=username,
-                password=password,
-                ssh_public_key=ssh_public_key,
-                cpu_cores=cpu_cores,
-                ram_gb=ram_gb,
-                disk_gb=disk_gb,
-            )
+        service = VmPatchService(
+            db=self._db,
+            cmd_repo=self._cmd_repo,
+            query_repo=self._query_repo,
+            gateway=self._gateway,
+            settings=self._settings,
+        )
+        return await service.patch(
+            vm_id=vm_id,
+            user_id=ctx.user_id,
+            is_admin=ctx.is_admin,
+            username=username,
+            password=password,
+            ssh_public_key=ssh_public_key,
+            cpu_cores=cpu_cores,
+            ram_gb=ram_gb,
+            disk_gb=disk_gb,
+        )
 
-    def delete(self, *, vm_id: int) -> dict[str, Any]:
+    async def delete(self, *, vm_id: int) -> dict[str, Any]:
         """
         Delete a virtual machine from Proxmox and the database.
 
@@ -339,12 +331,78 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On Proxmox or database errors.
         """
-        with self._make_session() as db:
-            service = VmDeleteService(
-                db=db,
-                cmd_repo=VmCmdRepo(db),
-                query_repo=VmQueryRepo(db),
-                gateway=self._gateway,
-                dns=DnsService(settings=self._settings),
-            )
-            return service.delete(vm_id=vm_id)
+        service = VmDeleteService(
+            db=self._db,
+            cmd_repo=self._cmd_repo,
+            query_repo=self._query_repo,
+            gateway=self._gateway,
+            dns=DnsService(settings=self._settings),
+        )
+        return await service.delete(vm_id=vm_id)
+
+    async def allocate_and_assign_ipv4(self, *, vm_id: int) -> str:
+        """Validate, allocate, persist, and configure an IPv4 address for a VM.
+
+        :param vm_id: The target VM identifier.
+        :returns: The allocated IPv4 string.
+        :raises HTTPException: On every anticipated failure.
+        """
+        vm = await self._query_repo.get_vm(vm_id)
+        if vm is None:
+            await self._db.rollback()
+            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="VM not found")
+
+        if vm.get("ipv4") is not None:
+            await self._db.rollback()
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
+
+        await self._cmd_repo.lock_ipv4_allocation()
+        used_ipv4 = await self._query_repo.list_used_ipv4()
+        try:
+            ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
+        except ProxmoxConfigError as exc:
+            await self._db.rollback()
+            raise HTTPException(status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        except ProxmoxUnavailableError as exc:
+            await self._db.rollback()
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail="No available IPv4 address in configured subnet"
+            ) from exc
+
+        try:
+            await self._cmd_repo.update_vm_ipv4(vm_id, ipv4)
+        except IntegrityError as exc:
+            await self._db.rollback()
+            logger.warning("IPv4 allocation conflict for vm_id=%s ipv4=%s", vm_id, ipv4, exc_info=True)
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="IPv4 address conflict, please retry") from exc
+        except SQLAlchemyError as exc:
+            await self._db.rollback()
+            logger.exception("DB error updating IPv4 for vm_id=%s", vm_id)
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc
+
+        try:
+            await self._db.commit()
+        except SQLAlchemyError as exc:
+            await self._db.rollback()
+            logger.exception("DB commit failed after IPv4 update for vm_id=%s", vm_id)
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail="Database temporarily unavailable"
+            ) from exc
+
+        try:
+            await asyncio.to_thread(self._gateway.assign_vm_ipv4, vm_id=vm_id, vm_ipv4=ipv4)
+        except ProxmoxError as exc:
+            logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
+            ) from exc
+
+        try:
+            await asyncio.to_thread(self._gateway.restart_vm, vm_id=vm_id)
+        except ProxmoxError:
+            logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+
+        return ipv4

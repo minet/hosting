@@ -8,11 +8,12 @@ database removal fails, as that requires manual intervention.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
@@ -27,12 +28,12 @@ class VmDeleteService:
     """Service for deleting virtual machines from Proxmox and the database."""
 
     def __init__(
-        self, *, db: Session, cmd_repo: VmCmdRepo, query_repo: VmQueryRepo, gateway: ProxmoxGateway, dns: DnsService
+        self, *, db: AsyncSession, cmd_repo: VmCmdRepo, query_repo: VmQueryRepo, gateway: ProxmoxGateway, dns: DnsService
     ):
         """
         Initialise the VM deletion service.
 
-        :param db: Active SQLAlchemy database session.
+        :param db: Active SQLAlchemy async database session.
         :param cmd_repo: Repository for VM write operations.
         :param gateway: Proxmox API gateway.
         """
@@ -42,7 +43,7 @@ class VmDeleteService:
         self.gateway = gateway
         self.dns = dns
 
-    def delete(self, *, vm_id: int) -> dict:
+    async def delete(self, *, vm_id: int) -> dict:
         """
         Delete a VM from Proxmox and remove its database record.
 
@@ -57,19 +58,19 @@ class VmDeleteService:
         :raises HTTPException: On Proxmox errors, database errors, or when the
             VM is not found in the database.
         """
-        vm_row = self.query_repo.get_vm(vm_id)
-        vm_name = vm_row["name"] if vm_row else None
+        vm_row = await self.query_repo.get_vm(vm_id)
+        vm_name = vm_row["name"] if vm_row else None  # noqa: F841
 
         try:
-            self.gateway.delete_vm(vm_id=vm_id)
+            await asyncio.to_thread(self.gateway.delete_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to delete VM on Proxmox")
 
         try:
-            deleted = self.cmd_repo.delete_vm_with_related(vm_id)
-            self.db.commit()
+            deleted = await self.cmd_repo.delete_vm_with_related(vm_id)
+            await self.db.commit()
         except SQLAlchemyError as exc:
-            self.db.rollback()
+            await self.db.rollback()
             logger.critical(
                 "vm_delete_db_failed_after_proxmox_delete vm_id=%s — "
                 "VM removed from Proxmox but DB record remains. Manual cleanup required.",
@@ -84,6 +85,6 @@ class VmDeleteService:
         if not deleted:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
 
-        self.dns.delete_records(vm_id=vm_id)
+        await self.dns.delete_records(vm_id=vm_id)
 
         return {"vm_id": vm_id, "action": "delete", "status": "ok"}

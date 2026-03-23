@@ -11,12 +11,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
 from fastapi import status as http_status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
-from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_share_service
@@ -46,8 +45,7 @@ async def create_vm(
     """
     Create a new virtual machine from a template.
 
-    Requires the caller to be an active member (cotisant).  The VM is
-    provisioned asynchronously via the Proxmox executor.
+    Requires the caller to be an active member (cotisant).
 
     :param body: Creation parameters including name, template, resources, and guest credentials.
     :param ctx: Authenticated cotisant context (injected).
@@ -56,8 +54,7 @@ async def create_vm(
     :rtype: VMDetailResponse
     """
     return VMDetailResponse.model_validate(
-        await run_in_proxmox_executor(
-            cmd.create,
+        await cmd.create(
             ctx=ctx,
             name=body.name,
             template_id=body.template_id,
@@ -89,8 +86,8 @@ async def start_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.start, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMActionResponse.model_validate(await cmd.start(vm_id=vm_id))
 
 
 @router.post("/{vm_id}/stop", response_model=VMActionResponse)
@@ -111,8 +108,8 @@ async def stop_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.stop, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMActionResponse.model_validate(await cmd.stop(vm_id=vm_id))
 
 
 @router.post("/{vm_id}/restart", response_model=VMActionResponse)
@@ -133,8 +130,8 @@ async def restart_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.restart, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMActionResponse.model_validate(await cmd.restart(vm_id=vm_id))
 
 
 @router.get("/{vm_id}/onboot", response_model=VMOnbootResponse)
@@ -145,9 +142,8 @@ async def get_onboot(
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMOnbootResponse:
     """Get the start-at-boot setting for a VM."""
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
-    result = await run_in_proxmox_executor(cmd.get_onboot, vm_id=vm_id)
-    return VMOnbootResponse.model_validate(result)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
+    return VMOnbootResponse.model_validate(await cmd.get_onboot(vm_id=vm_id))
 
 
 @router.put("/{vm_id}/onboot", response_model=VMOnbootResponse)
@@ -158,9 +154,8 @@ async def set_onboot(
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> VMOnbootResponse:
     """Toggle start-at-boot for a VM (flips current value)."""
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    result = await run_in_proxmox_executor(cmd.toggle_onboot, vm_id=vm_id)
-    return VMOnbootResponse.model_validate(result)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMOnbootResponse.model_validate(await cmd.toggle_onboot(vm_id=vm_id))
 
 
 @router.patch("/{vm_id}", response_model=VMPatchResponse)
@@ -185,10 +180,9 @@ async def patch_vm(
     :rtype: VMPatchResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
     return VMPatchResponse.model_validate(
-        await run_in_proxmox_executor(
-            cmd.patch,
+        await cmd.patch(
             vm_id=vm_id,
             ctx=ctx,
             username=body.resource.username if body.resource else None,
@@ -202,37 +196,37 @@ async def patch_vm(
 
 
 @router.post("/{vm_id}/requests", response_model=VMRequestResponse, status_code=201)
-def create_request(
+async def create_request(
     vm_id: int,
     body: VMRequestCreateBody,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> VMRequestResponse:
     from app.db.repositories.vm import VmQueryRepo
 
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
     if body.type == "dns" and not body.dns_label:
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests"
         )
     repo = RequestRepo(db)
-    if body.type == "ipv4" and repo.exists_active(vm_id=vm_id, type="ipv4"):
+    if body.type == "ipv4" and await repo.exists_active(vm_id=vm_id, type="ipv4"):
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="A request of this type is already pending or approved for this VM",
         )
     if body.type == "ipv4":
-        vm = VmQueryRepo(db).get_vm(vm_id)
+        vm = await VmQueryRepo(db).get_vm(vm_id)
         if vm and vm.get("ipv4") is not None:
             raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="This VM already has an IPv4 address")
-    row = repo.create(vm_id=vm_id, user_id=ctx.user_id, type=body.type, dns_label=body.dns_label)
-    db.commit()
+    row = await repo.create(vm_id=vm_id, user_id=ctx.user_id, type=body.type, dns_label=body.dns_label)
+    await db.commit()
     return VMRequestResponse.from_row(row)
 
 
 @router.put("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
-def grant_access(
+async def grant_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
     ctx: AuthCtx = Depends(require_charter_signed),
@@ -242,8 +236,7 @@ def grant_access(
     """
     Grant shared access to a virtual machine for another user.
 
-    The caller must be the owner of the VM.  If the target user already has
-    access (or is the owner), the response reflects that without raising an error.
+    The caller must be the owner of the VM.
 
     :param vm_id: Numeric identifier of the target VM.
     :param user_id: Identifier of the user to whom access should be granted.
@@ -254,8 +247,8 @@ def grant_access(
     :rtype: VMAccessMutationResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMAccessMutationResponse.model_validate(share.grant_access(vm_id=vm_id, user_id=user_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=user_id))
 
 
 @router.delete("/{vm_id}", response_model=VMActionResponse)
@@ -268,8 +261,7 @@ async def delete_vm(
     """
     Permanently delete a virtual machine.
 
-    The caller must be the owner of the VM.  Deletion is executed
-    asynchronously via the Proxmox executor.
+    The caller must be the owner of the VM.
 
     :param vm_id: Numeric identifier of the VM to delete.
     :param ctx: Authenticated user context (injected).
@@ -279,12 +271,12 @@ async def delete_vm(
     :rtype: VMActionResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMActionResponse.model_validate(await run_in_proxmox_executor(cmd.delete, vm_id=vm_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMActionResponse.model_validate(await cmd.delete(vm_id=vm_id))
 
 
 @router.delete("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
-def revoke_access(
+async def revoke_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
     ctx: AuthCtx = Depends(require_charter_signed),
@@ -305,5 +297,5 @@ def revoke_access(
     :rtype: VMAccessMutationResponse
     :raises HTTPException: With status 403 if the caller does not own the VM.
     """
-    access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMAccessMutationResponse.model_validate(share.revoke_access(vm_id=vm_id, user_id=user_id))
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMAccessMutationResponse.model_validate(await share.revoke_access(vm_id=vm_id, user_id=user_id))

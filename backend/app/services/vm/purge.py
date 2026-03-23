@@ -8,17 +8,18 @@ Checks all VMs whose owner's membership (cotisation) has expired.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
 from app.services.dns import DnsService
-from app.services.email import send_email
+from app.services.email import send_email_async
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import ProxmoxGateway
 
@@ -114,9 +115,9 @@ def _build_warning_email(
     return subject, plain, html
 
 
-def run_purge(
+async def run_purge(
     *,
-    db: Session,
+    db: AsyncSession,
     gateway: ProxmoxGateway,
     settings: Settings,
 ) -> dict[str, Any]:
@@ -135,22 +136,22 @@ def run_purge(
     dns = DnsService(settings=settings)
 
     # Get expired users from Keycloak group
-    expired_members = fetch_keycloak_group_members("/hosting_ended")
+    expired_members = await fetch_keycloak_group_members_async("/hosting_ended")
     if not expired_members:
         logger.info("purge: no expired members found")
         return {"warned": 0, "deleted": 0}
 
     expired_ids = {m["id"] for m in expired_members if m.get("id")}
 
-    # Get all VMs with their owners
-    all_vms = query_repo.list_all_vms()
+    # Get only VMs owned by expired users
+    all_vms = await query_repo.list_vms_by_owners(expired_ids)
 
     warned = 0
     deleted = 0
 
     for vm in all_vms:
         owner_id = vm.get("owner_id")
-        if not owner_id or owner_id not in expired_ids:
+        if not owner_id:
             continue
 
         vm_id = vm["vm_id"]
@@ -161,12 +162,8 @@ def run_purge(
         if not member:
             continue
 
-        # We need to find when the cotisation expired.
-        # Use the Keycloak user profile to get cotise_end_ms.
-        from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
-
         username = member.get("username")
-        profile = fetch_keycloak_user_profile(username) if isinstance(username, str) else None
+        profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
 
         if cotise_end_ms is None:
@@ -209,23 +206,23 @@ def run_purge(
 <p style="font-size:15px;color:#374151;">Bonjour <strong>{prenom} {nom}</strong>,</p>
 <p style="font-size:15px;color:#374151;">Votre VM <strong>{vm_name}</strong> (#{vm_id}) a été supprimée après 6 mois de cotisation expirée.</p>
 </td></tr></table></td></tr></table></body></html>"""
-                send_email(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
+                await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
 
             try:
-                gateway.delete_vm(vm_id=vm_id)
+                await asyncio.to_thread(gateway.delete_vm, vm_id=vm_id)
             except ProxmoxError:
                 logger.exception("purge: failed to delete vm %s from Proxmox", vm_id)
                 continue
 
             try:
-                cmd_repo.delete_vm_with_related(vm_id)
-                db.commit()
+                await cmd_repo.delete_vm_with_related(vm_id)
+                await db.commit()
             except Exception:
-                db.rollback()
+                await db.rollback()
                 logger.exception("purge: failed to delete vm %s from DB (Proxmox already deleted)", vm_id)
                 continue
 
-            dns.delete_records(vm_id=vm_id)
+            await dns.delete_records(vm_id=vm_id)
             deleted += 1
 
         else:
@@ -240,7 +237,7 @@ def run_purge(
                     days_remaining=days_remaining,
                     settings=settings,
                 )
-                send_email(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
+                await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
                 warned += 1
                 logger.info(
                     "purge: warned user %s for vm %s (expired %d days, %d remaining)",

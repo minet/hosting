@@ -3,10 +3,7 @@ import Tooltip from './Tooltip'
 import { type VMDetail } from '../types/vm'
 import { vmFqdn } from './VMInfoCard'
 
-interface Props {
-  vm: VMDetail | null
-  running: boolean
-  isOwner: boolean
+export interface VMCredentials {
   credUsername: string
   setCredUsername: (v: string) => void
   credPassword: string
@@ -20,14 +17,22 @@ interface Props {
   doSaveCreds: () => void
 }
 
-export default function VMAccessCard({
-  vm, running, isOwner,
-  credUsername, setCredUsername,
-  credPassword, setCredPassword,
-  credSshKey, setCredSshKey,
-  showPassword, setShowPassword,
-  credSaving, credSuccess, doSaveCreds,
-}: Props) {
+interface Props {
+  vm: VMDetail | null
+  running: boolean
+  isOwner: boolean
+  creds: VMCredentials
+}
+
+export default function VMAccessCard({ vm, running, isOwner, creds }: Props) {
+  const {
+    credUsername, setCredUsername,
+    credPassword, setCredPassword,
+    credSshKey, setCredSshKey,
+    showPassword, setShowPassword,
+    credSaving, credSuccess, doSaveCreds,
+  } = creds
+
   return (
     <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 min-w-0 min-h-0 overflow-hidden">
       <div className="flex items-center justify-between mb-2 min-w-0 gap-2 shrink-0">

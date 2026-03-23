@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, memo } from 'react'
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from 'recharts'
 import { apiFetch } from '../api'
 
@@ -69,6 +69,20 @@ const TIMEFRAMES = [
   { key: 'year',  label: '1an' },
 ]
 
+const ChartTooltip = memo(function ChartTooltip({ active, payload, def }: { active?: boolean; payload?: { color: string; value: number }[]; def: MetricDef }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-white border border-neutral-200 rounded px-2 py-1 text-xs text-neutral-700 shadow flex flex-col gap-0.5">
+      {payload.map((p, i) => (
+        <span key={i} style={{ color: p.color }}>
+          {i === 0 && def.labelA ? `${def.labelA}: ` : i === 1 && def.labelB ? `${def.labelB}: ` : ''}
+          {def.format(p.value as number)}
+        </span>
+      ))}
+    </div>
+  )
+})
+
 interface Props {
   vmId: string
   className?: string
@@ -77,24 +91,29 @@ interface Props {
 export default function MetricChart({ vmId, className = '' }: Props) {
   const [selectedKey, setSelectedKey] = useState('cpu')
   const [timeframe, setTimeframe] = useState('hour')
-  const [data, setData] = useState<ChartPoint[]>([])
+  const [rawData, setRawData] = useState<MetricPoint[]>([])
   const [loading, setLoading] = useState(false)
 
   const def = METRICS.find(m => m.key === selectedKey) ?? METRICS[0]
 
+  // Only re-fetch when vmId or timeframe changes — not when switching metrics
   useEffect(() => {
     setLoading(true)
     apiFetch<{ items: MetricPoint[] }>(`/api/vms/${vmId}/metrics?timeframe=${timeframe}`)
-      .then(r => {
-        setData(r.items.map(p => ({
-          time: p.time,
-          a: def.extractA(p),
-          b: def.extractB ? def.extractB(p) : undefined,
-        })))
-      })
-      .catch(() => setData([]))
+      .then(r => setRawData(r.items))
+      .catch(() => setRawData([]))
       .finally(() => setLoading(false))
-  }, [vmId, selectedKey, timeframe])
+  }, [vmId, timeframe])
+
+  // Derive chart data from raw data + selected metric
+  const data: ChartPoint[] = useMemo(() =>
+    rawData.map(p => ({
+      time: p.time,
+      a: def.extractA(p),
+      b: def.extractB ? def.extractB(p) : undefined,
+    })),
+    [rawData, def]
+  )
 
   const filled = data.filter(d => d.a != null)
 
@@ -161,21 +180,7 @@ export default function MetricChart({ vmId, className = '' }: Props) {
               </defs>
               <XAxis dataKey="time" hide />
               <YAxis hide domain={[0, 'auto']} />
-              <Tooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
-                  return (
-                    <div className="bg-white border border-neutral-200 rounded px-2 py-1 text-xs text-neutral-700 shadow flex flex-col gap-0.5">
-                      {payload.map((p, i) => (
-                        <span key={i} style={{ color: p.color }}>
-                          {i === 0 && def.labelA ? `${def.labelA}: ` : i === 1 && def.labelB ? `${def.labelB}: ` : ''}
-                          {def.format(p.value as number)}
-                        </span>
-                      ))}
-                    </div>
-                  )
-                }}
-              />
+              <Tooltip content={<ChartTooltip def={def} />} />
               <Area type="monotone" dataKey="a" stroke={def.colorA} strokeWidth={2}
                 fill={`url(#grad-a-${def.key})`} dot={false} isAnimationActive={false} />
               {def.extractB && (

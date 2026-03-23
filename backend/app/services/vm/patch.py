@@ -8,11 +8,12 @@ and conflict detection.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
@@ -29,7 +30,7 @@ class VmPatchService:
     def __init__(
         self,
         *,
-        db: Session,
+        db: AsyncSession,
         cmd_repo: VmCmdRepo,
         query_repo: VmQueryRepo,
         gateway: ProxmoxGateway,
@@ -38,7 +39,7 @@ class VmPatchService:
         """
         Initialise the VM patch service.
 
-        :param db: Active SQLAlchemy database session.
+        :param db: Active SQLAlchemy async database session.
         :param cmd_repo: Repository for VM write operations.
         :param query_repo: Repository for VM read operations.
         :param gateway: Proxmox API gateway.
@@ -50,7 +51,7 @@ class VmPatchService:
         self.gateway = gateway
         self.settings = settings
 
-    def patch(
+    async def patch(
         self,
         *,
         vm_id: int,
@@ -102,7 +103,7 @@ class VmPatchService:
         target_disk = disk_gb
         current = None
         if wants_resize:
-            current = self._get_vm_or_404(vm_id=vm_id)
+            current = await self._get_vm_or_404(vm_id=vm_id)
             target_cpu = target_cpu if target_cpu is not None else int(current["cpu_cores"])
             target_ram_mb = target_ram_mb if target_ram_mb is not None else int(current["ram_mb"])
             target_disk = target_disk if target_disk is not None else int(current["disk_gb"])
@@ -114,8 +115,8 @@ class VmPatchService:
                     target_disk_gb=target_disk,
                 )
             if not is_admin:
-                self.cmd_repo.lock_user_quota(user_id)
-                self._check_quota_after_resize(
+                await self.cmd_repo.lock_user_quota(user_id)
+                await self._check_quota_after_resize(
                     user_id=user_id,
                     current_cpu=int(current["cpu_cores"]),
                     current_ram_mb=int(current["ram_mb"]),
@@ -135,7 +136,8 @@ class VmPatchService:
                     target_ram_mb,
                     target_disk,
                 )
-                self.gateway.update_vm_resources(
+                await asyncio.to_thread(
+                    self.gateway.update_vm_resources,
                     vm_id=vm_id,
                     cpu_cores=target_cpu,
                     ram_mb=target_ram_mb,
@@ -144,7 +146,8 @@ class VmPatchService:
             if wants_cloudinit:
                 assert username is not None
                 logger.info("vm_patch_proxmox_cloudinit vm_id=%s username=%s", vm_id, username)
-                self.gateway.update_vm_cloudinit(
+                await asyncio.to_thread(
+                    self.gateway.update_vm_cloudinit,
                     vm_id=vm_id,
                     username=username,
                     password=password,
@@ -157,31 +160,31 @@ class VmPatchService:
         try:
             if wants_resize:
                 assert target_cpu is not None and target_ram_mb is not None and target_disk is not None
-                updated_vm = self.cmd_repo.update_vm_resources(
+                updated_vm = await self.cmd_repo.update_vm_resources(
                     vm_id=vm_id,
                     cpu_cores=target_cpu,
                     ram_mb=target_ram_mb,
                     disk_gb=target_disk,
                 )
                 if not updated_vm:
-                    self.db.rollback()
+                    await self.db.rollback()
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM changed concurrently")
             if wants_cloudinit:
                 assert username is not None
-                updated_resource = self.cmd_repo.update_resource(
+                updated_resource = await self.cmd_repo.update_resource(
                     vm_id=vm_id,
                     username=username,
                     ssh_public_key=ssh_public_key,
                 )
                 if not updated_resource:
-                    self.db.rollback()
+                    await self.db.rollback()
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM resource changed concurrently")
-            self.db.commit()
+            await self.db.commit()
             logger.info("vm_patch_done vm_id=%s", vm_id)
         except HTTPException:
             raise
         except SQLAlchemyError as exc:
-            self.db.rollback()
+            await self.db.rollback()
             logger.exception("vm_patch_db_error vm_id=%s", vm_id)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -197,7 +200,7 @@ class VmPatchService:
             }
         return result
 
-    def _get_vm_or_404(self, *, vm_id: int) -> dict:
+    async def _get_vm_or_404(self, *, vm_id: int) -> dict:
         """
         Fetch a VM record from the database or raise HTTP 404.
 
@@ -208,7 +211,7 @@ class VmPatchService:
             errors.
         """
         try:
-            vm = self.query_repo.get_vm(vm_id)
+            vm = await self.query_repo.get_vm(vm_id)
         except SQLAlchemyError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -241,7 +244,7 @@ class VmPatchService:
         if target_disk_gb < current_disk_gb:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Disk shrink is not supported")
 
-    def _check_quota_after_resize(
+    async def _check_quota_after_resize(
         self,
         *,
         user_id: str,
@@ -269,7 +272,7 @@ class VmPatchService:
             configured maximum, 503 on database errors.
         """
         try:
-            usage = self.query_repo.get_owned_totals(user_id)
+            usage = await self.query_repo.get_owned_totals(user_id)
         except SQLAlchemyError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

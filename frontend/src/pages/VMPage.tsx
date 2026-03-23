@@ -12,6 +12,7 @@ import { useVMCredentials } from '../hooks/useVMCredentials'
 import { useVMShare } from '../hooks/useVMShare'
 import { useVMRequests } from '../hooks/useVMRequests'
 import { useVMResources } from '../hooks/useVMResources'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import DestroyModal from '../components/DestroyModal'
 import ShareModal from '../components/ShareModal'
 import RequestModal from '../components/RequestModal'
@@ -31,12 +32,12 @@ export default function VMPage() {
   const resources = useResources()
   const me = useUser()
   const vmStatusEntry = useVMStatus(Number(vmId))
+  const isDesktop = useMediaQuery('(min-width: 768px)')
 
   const [vm, setVm] = useState<VMDetail | null>(null)
   const [tasks, setTasks] = useState<VMTask[]>([])
   const [mobileTermOpen, setMobileTermOpen] = useState(false)
   const [overlayHeight, setOverlayHeight] = useState(0)
-  const isDesktop = useState(() => window.innerWidth >= 768)[0]
   const [onboot, setOnboot] = useState<boolean | null>(null)
 
   const running = vmStatusEntry?.status === 'running'
@@ -51,22 +52,27 @@ export default function VMPage() {
   const req = useVMRequests(vmId)
   const res = useVMResources(vmId, vm, resources, (updated) => setVm(v => v ? { ...v, ...updated } : v))
 
+  // Fetch VM detail + onboot in parallel on mount
   useEffect(() => {
     if (!vmId) return
-    apiFetch<VMDetail>(`/api/vms/${vmId}`)
-      .then(setVm)
-      .catch((res) => { if (res?.status === 403) navigate('/') })
+    Promise.all([
+      apiFetch<VMDetail>(`/api/vms/${vmId}`),
+      apiFetch<{ onboot: boolean }>(`/api/vms/${vmId}/onboot`).catch(() => null),
+      apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`).catch(() => ({ items: [] })),
+    ]).then(([vmData, onbootData, tasksData]) => {
+      setVm(vmData)
+      if (onbootData) setOnboot(onbootData.onboot)
+      setTasks(tasksData.items)
+    }).catch((err) => {
+      if (err?.status === 403) navigate('/')
+    })
   }, [vmId])
 
+  // Refresh tasks when status changes
   useEffect(() => {
-    if (!vmId) return
+    if (!vmId || !vmStatusEntry?.status) return
     apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`).then(r => setTasks(r.items)).catch(() => null)
-  }, [vmId, vmStatusEntry?.status])
-
-  useEffect(() => {
-    if (!vmId) return
-    apiFetch<{ onboot: boolean }>(`/api/vms/${vmId}/onboot`).then(r => setOnboot(r.onboot)).catch(() => null)
-  }, [vmId])
+  }, [vmStatusEntry?.status])
 
   async function toggleOnboot() {
     if (!vmId) return
@@ -223,17 +229,7 @@ export default function VMPage() {
         vm={vm}
         running={running}
         isOwner={isOwner}
-        credUsername={creds.credUsername}
-        setCredUsername={creds.setCredUsername}
-        credPassword={creds.credPassword}
-        setCredPassword={creds.setCredPassword}
-        credSshKey={creds.credSshKey}
-        setCredSshKey={creds.setCredSshKey}
-        showPassword={creds.showPassword}
-        setShowPassword={creds.setShowPassword}
-        credSaving={creds.credSaving}
-        credSuccess={creds.credSuccess}
-        doSaveCreds={creds.doSaveCreds}
+        creds={creds}
       />
 
       <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from proxmoxer import ProxmoxAPI
 
 from app.core.config import get_settings
+
+# TTL cache for VM → node mapping to avoid repeated cluster/resources calls.
+_vm_node_cache: dict[int, tuple[str, float]] = {}
+_VM_NODE_TTL: float = 60.0  # seconds
 
 
 def task_node() -> str:
@@ -120,7 +125,7 @@ def vm_node_from_cluster(*, client: ProxmoxAPI, vm_id: int) -> str | None:
 
 
 def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
-    """Return the node hosting a VM, falling back to any online node.
+    """Return the node hosting a VM, with a short TTL cache.
 
     :param client: Proxmox API client instance.
     :param vm_id: The VMID of the virtual machine.
@@ -130,8 +135,16 @@ def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     """
     from app.services.proxmox.errors import ProxmoxError
 
+    now = time.monotonic()
+    cached = _vm_node_cache.get(vm_id)
+    if cached is not None:
+        node, ts = cached
+        if (now - ts) < _VM_NODE_TTL:
+            return node
+
     node = vm_node_from_cluster(client=client, vm_id=vm_id)
     if node:
+        _vm_node_cache[vm_id] = (node, now)
         return node
     node = _any_online_node(client=client)
     if node:

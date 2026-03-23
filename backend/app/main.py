@@ -2,7 +2,7 @@
 FastAPI application entry point.
 
 Configures the ASGI application with CORS middleware, lifespan management
-for the database engine and Proxmox executor, and registers the API router.
+for the database engine, and registers the API router.
 """
 
 import asyncio
@@ -16,7 +16,6 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.db.core import close_db_engine, open_db_engine
-from app.services.proxmox.executor import close_proxmox_executor
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +46,8 @@ async def _purge_loop() -> None:
             if not settings.proxmox_configured:
                 logger.debug("purge_loop: Proxmox not configured, skipping")
             else:
-                session = get_session_factory()()
-                try:
-                    run_purge(db=session, gateway=get_proxmox_gateway(), settings=settings)
-                finally:
-                    session.close()
+                async with get_session_factory()() as session:
+                    await run_purge(db=session, gateway=get_proxmox_gateway(), settings=settings)
         except Exception:
             logger.exception("purge_loop: unhandled error")
         await asyncio.sleep(24 * 3600)  # run once per day
@@ -66,7 +62,6 @@ async def lifespan(_: FastAPI):
         yield
     finally:
         purge_task.cancel()
-        close_proxmox_executor()
         close_db_engine()
 
 

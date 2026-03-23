@@ -5,20 +5,30 @@ Provides helpers to fetch and update user profiles from Keycloak.
 Uses admin username/password when configured (KEYCLOAK_ADMIN_USERNAME /
 KEYCLOAK_ADMIN_PASSWORD), which grants full rights to update user attributes
 regardless of federation restrictions. Falls back to client credentials.
+
+Sync functions are kept for use in thread-pool contexts (gateway, purge).
+Async wrappers (``_async`` suffix) delegate to asyncio.to_thread() for use
+in async endpoints.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+_admin_instance = None
+_admin_created_at: float = 0.0
+_ADMIN_TTL: float = 240.0  # seconds — below Keycloak's default 300s token lifespan
+
 
 def _make_admin():
-    """Create a KeycloakAdmin instance.
+    """Return a cached KeycloakAdmin instance, recreating it when the TTL expires.
 
     Prefers realm admin credentials (username/password) over client credentials
     because a realm admin can write user attributes even when a custom federation
@@ -26,26 +36,36 @@ def _make_admin():
 
     :returns: An authenticated KeycloakAdmin instance.
     """
+    global _admin_instance, _admin_created_at
+
+    now = time.monotonic()
+    if _admin_instance is not None and (now - _admin_created_at) < _ADMIN_TTL:
+        return _admin_instance
+
     from keycloak import KeycloakAdmin
 
     settings = get_settings()
 
     if settings.keycloak_admin_username and settings.keycloak_admin_password:
-        return KeycloakAdmin(
+        admin = KeycloakAdmin(
             server_url=settings.keycloak_server_url,
             realm_name=settings.keycloak_realm,
             username=settings.keycloak_admin_username,
             password=settings.keycloak_admin_password,
             verify=settings.keycloak_verify_tls,
         )
+    else:
+        admin = KeycloakAdmin(
+            server_url=settings.keycloak_server_url,
+            realm_name=settings.keycloak_realm,
+            client_id=settings.keycloak_client_id,
+            client_secret_key=settings.keycloak_client_secret,
+            verify=settings.keycloak_verify_tls,
+        )
 
-    return KeycloakAdmin(
-        server_url=settings.keycloak_server_url,
-        realm_name=settings.keycloak_realm,
-        client_id=settings.keycloak_client_id,
-        client_secret_key=settings.keycloak_client_secret,
-        verify=settings.keycloak_verify_tls,
-    )
+    _admin_instance = admin
+    _admin_created_at = now
+    return admin
 
 
 def _extract_cotise_end_ms(attributes: dict[str, Any], claim_key: str) -> int | None:
@@ -205,3 +225,19 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
     except Exception:
         logger.exception("fetch_keycloak_user_profile failed for username=%s", username)
         return None
+
+
+async def fetch_keycloak_user_by_id_async(user_id: str) -> dict[str, Any] | None:
+    return await asyncio.to_thread(fetch_keycloak_user_by_id, user_id)
+
+
+async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, Any]]:
+    return await asyncio.to_thread(fetch_keycloak_group_members, group_path)
+
+
+async def set_date_signed_hosting_async(user_id: str, date_iso: str) -> bool:
+    return await asyncio.to_thread(set_date_signed_hosting, user_id, date_iso)
+
+
+async def fetch_keycloak_user_profile_async(username: str) -> dict[str, Any] | None:
+    return await asyncio.to_thread(fetch_keycloak_user_profile, username)

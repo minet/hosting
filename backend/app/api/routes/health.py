@@ -5,6 +5,7 @@ Provides basic liveness probes and Proxmox connectivity diagnostics
 accessible to administrators.
 """
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,6 @@ from fastapi.responses import PlainTextResponse
 from app.auth import AuthCtx, require_admin
 from app.core.config import Settings, get_settings
 from app.services.proxmox.errors import ProxmoxError
-from app.services.proxmox.executor import run_in_proxmox_executor
 from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.errors import raise_proxmox_as_http
 
@@ -37,18 +37,18 @@ def _require_proxmox(settings: Settings) -> None:
 
 async def _run_proxmox(fn: Any, *, settings: Settings) -> Any:
     """
-    Execute a Proxmox gateway call inside the Proxmox executor.
+    Execute a synchronous Proxmox gateway call in a thread pool.
 
     Catches :class:`ProxmoxError` and re-raises it as an appropriate
     HTTP exception, optionally including debug details.
 
-    :param fn: Callable to run inside the Proxmox executor.
+    :param fn: Callable to run in a thread pool.
     :param settings: Application settings, used to determine debug mode.
     :returns: The result of *fn*.
     :raises HTTPException: When a Proxmox error occurs.
     """
     try:
-        return await run_in_proxmox_executor(fn)
+        return await asyncio.to_thread(fn)
     except ProxmoxError as exc:
         unavailable = "Unable to reach Proxmox API"
         if settings.app_debug:
