@@ -161,7 +161,7 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
-    ) -> str | None:
+    ) -> str:
         """Clone a template and configure a new VM with the supplied parameters.
 
         :param vm_id: VMID to assign to the new VM.
@@ -173,8 +173,8 @@ class ProxmoxGateway:
         :param username: Cloud-init username.
         :param password: Cloud-init password, or ``None`` to omit.
         :param ssh_public_key: SSH public key to inject via cloud-init.
-        :returns: The VM's MAC address, or ``None`` if it could not be resolved.
-        :rtype: str | None
+        :returns: The Proxmox node name hosting the new VM.
+        :rtype: str
         :raises ProxmoxError: On API, configuration, or task failures.
         """
         return self._guard(
@@ -203,11 +203,11 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
-    ) -> str | None:
+    ) -> str:
         """Internal implementation of VM creation.
 
         Clones the template, waits for completion, applies cloud-init settings,
-        and returns the resulting VM's MAC address.
+        and returns the node hosting the new VM.
 
         :param vm_id: VMID for the new VM.
         :param template_vmid: Source template VMID.
@@ -218,8 +218,8 @@ class ProxmoxGateway:
         :param username: Cloud-init username.
         :param password: Cloud-init password or ``None``.
         :param ssh_public_key: SSH public key for cloud-init.
-        :returns: MAC address string or ``None``.
-        :rtype: str | None
+        :returns: The Proxmox node name hosting the new VM.
+        :rtype: str
         """
         clone_node = clone_node_for_template(client=self._client, template_vmid=template_vmid)
         target_node = least_loaded_node(client=self._client) or clone_node
@@ -247,8 +247,7 @@ class ProxmoxGateway:
         )
         self._client.nodes(target_node).qemu(vm_id).config.post(**payload)
 
-        vm_config = self._get_config(node=target_node, vm_id=vm_id)
-        return resolve_vm_mac(vm_config)
+        return target_node
 
     def assign_vm_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
         """Inject an IPv4 address into the VM's cloud-init network configuration.
@@ -285,42 +284,44 @@ class ProxmoxGateway:
             ipv4_gateway=gw4,
         )
 
-    def setup_vm_firewall(self, *, vm_id: int, vm_ipv6: str) -> None:
+    def setup_vm_firewall(self, *, vm_id: int, vm_ipv6: str, node: str) -> None:
         """Enable the Proxmox firewall and IPv6 IP-set filter on a VM.
 
         :param vm_id: VMID of the target VM.
         :param vm_ipv6: IPv6 address to allow through the filter.
+        :param node: Proxmox node hosting the VM.
         :raises ProxmoxError: On API or configuration failures.
         """
-        self._guard(lambda: self._do_setup_firewall(vm_id=vm_id, vm_ipv6=vm_ipv6))
+        self._guard(lambda: self._do_setup_firewall(vm_id=vm_id, vm_ipv6=vm_ipv6, node=node))
 
-    def _do_setup_firewall(self, *, vm_id: int, vm_ipv6: str) -> None:
+    def _do_setup_firewall(self, *, vm_id: int, vm_ipv6: str, node: str) -> None:
         """Internal implementation of firewall setup.
 
         :param vm_id: VMID of the target VM.
         :param vm_ipv6: IPv6 address to allow.
+        :param node: Proxmox node hosting the VM.
         """
-        node = node_for_vm(client=self._client, vm_id=vm_id)
         vm_config = self._get_config(node=node, vm_id=vm_id)
         self._cloudinit.enable_vm_ipv6_ipfilter(node=node, vm_id=vm_id, vm_ipv6=vm_ipv6, vm_config=vm_config)
 
-    def resize_vm_disk(self, *, vm_id: int, disk_gb: int) -> None:
+    def resize_vm_disk(self, *, vm_id: int, disk_gb: int, node: str) -> None:
         """Resize the root disk of a VM to at least *disk_gb* gigabytes.
 
         :param vm_id: VMID of the target VM.
         :param disk_gb: Desired disk size in gigabytes.
+        :param node: Proxmox node hosting the VM.
         :raises ProxmoxInvalidDiskSize: If *disk_gb* is below the current disk size.
         :raises ProxmoxError: On API or configuration failures.
         """
-        self._guard(lambda: self._do_resize_disk(vm_id=vm_id, disk_gb=disk_gb))
+        self._guard(lambda: self._do_resize_disk(vm_id=vm_id, disk_gb=disk_gb, node=node))
 
-    def _do_resize_disk(self, *, vm_id: int, disk_gb: int) -> None:
+    def _do_resize_disk(self, *, vm_id: int, disk_gb: int, node: str) -> None:
         """Internal implementation of disk resizing.
 
         :param vm_id: VMID of the target VM.
         :param disk_gb: Target disk size in gigabytes.
+        :param node: Proxmox node hosting the VM.
         """
-        node = node_for_vm(client=self._client, vm_id=vm_id)
         timeout = task_timeout_seconds()
         vm_config = self._get_config(node=node, vm_id=vm_id)
         self._resize_disk_if_needed(

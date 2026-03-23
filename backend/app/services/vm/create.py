@@ -222,11 +222,11 @@ class VmCreateService:
         :raises HTTPException: On any Proxmox provisioning failure; compensating
             cleanup is attempted before raising.
         """
-        await self._clone_vm(ctx=ctx, cmd=cmd, res=res)
-        await self._setup_firewall(ctx=ctx, res=res)
-        await self._resize_disk(ctx=ctx, cmd=cmd, res=res)
+        node = await self._clone_vm(ctx=ctx, cmd=cmd, res=res)
+        await self._setup_firewall(ctx=ctx, res=res, node=node)
+        await self._resize_disk(ctx=ctx, cmd=cmd, res=res, node=node)
 
-    async def _clone_vm(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _clone_vm(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> str:
         """
         Clone the template VM on Proxmox and apply initial configuration.
 
@@ -234,11 +234,13 @@ class VmCreateService:
         :param cmd: Creation command containing template ID and cloud-init
             credentials.
         :param res: Database reservation with the allocated VM ID and IPv6.
+        :returns: The Proxmox node name hosting the new VM.
+        :rtype: str
         :raises HTTPException: On clone failure after compensating DB cleanup.
         """
         try:
             logger.info("vm_create_proxmox_clone user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-            await asyncio.to_thread(
+            node = await asyncio.to_thread(
                 self.gateway.create_vm,
                 vm_id=res.vm_id,
                 template_vmid=cmd.template_id,
@@ -250,9 +252,11 @@ class VmCreateService:
                 password=cmd.resource.password,
                 ssh_public_key=cmd.resource.ssh_public_key,
             )
-            logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
+            logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s node=%s", ctx.user_id, res.vm_id, node)
+            return node
         except ProxmoxError as exc:
             await self._handle_clone_failure(ctx=ctx, res=res, exc=exc)
+            raise  # unreachable, _handle_clone_failure always raises
 
     async def _handle_clone_failure(self, *, ctx: AuthCtx, res: _DbReservation, exc: ProxmoxError) -> None:
         """
@@ -284,7 +288,7 @@ class VmCreateService:
 
         logger.warning("vm_create_proxmox_exists_after_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
 
-    async def _setup_firewall(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
+    async def _setup_firewall(self, *, ctx: AuthCtx, res: _DbReservation, node: str) -> None:
         """
         Configure the Proxmox firewall for the newly cloned VM.
 
@@ -292,17 +296,18 @@ class VmCreateService:
 
         :param ctx: Authentication context used for logging.
         :param res: Database reservation identifying the VM and its IPv6.
+        :param node: Proxmox node hosting the VM.
         :raises HTTPException: On firewall configuration failure after cleanup.
         """
         try:
-            await asyncio.to_thread(self.gateway.setup_vm_firewall, vm_id=res.vm_id, vm_ipv6=res.vm_ipv6)
+            await asyncio.to_thread(self.gateway.setup_vm_firewall, vm_id=res.vm_id, vm_ipv6=res.vm_ipv6, node=node)
             logger.info("vm_create_firewall_ok user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
         except ProxmoxError as exc:
             logger.exception("vm_create_firewall_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
             await self._compensate(vm_id=res.vm_id)
             raise_proxmox_as_http(exc, unavailable="Unable to configure VM firewall on Proxmox")
 
-    async def _resize_disk(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _resize_disk(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation, node: str) -> None:
         """
         Resize the VM root disk to the requested size on Proxmox.
 
@@ -311,10 +316,11 @@ class VmCreateService:
         :param ctx: Authentication context used for logging.
         :param cmd: Creation command containing the target disk size.
         :param res: Database reservation identifying the VM.
+        :param node: Proxmox node hosting the VM.
         :raises HTTPException: On disk resize failure after cleanup.
         """
         try:
-            await asyncio.to_thread(self.gateway.resize_vm_disk, vm_id=res.vm_id, disk_gb=cmd.disk_gb)
+            await asyncio.to_thread(self.gateway.resize_vm_disk, vm_id=res.vm_id, disk_gb=cmd.disk_gb, node=node)
             logger.info("vm_create_disk_resize_ok user_id=%s vm_id=%s disk_gb=%s", ctx.user_id, res.vm_id, cmd.disk_gb)
         except ProxmoxError as exc:
             logger.exception("vm_create_disk_resize_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
