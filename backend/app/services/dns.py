@@ -78,9 +78,19 @@ class DnsService:
         return f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}."
 
     async def _ensure_zone(self, client: httpx.AsyncClient) -> None:
-        """Create the zone in PowerDNS if it does not already exist."""
+        """Create the zone in PowerDNS if it does not already exist.
+
+        Sets ``SOA-EDIT-API`` to ``EPOCH`` so that every API change bumps
+        the SOA serial, which is required for secondary nameservers to
+        pick up updates via AXFR/IXFR after a NOTIFY.
+        """
         resp = await client.get(self._zone_url())
         if resp.status_code == 200:
+            # Ensure SOA-EDIT-API metadata is set on existing zones
+            meta_url = f"{self._zone_url()}/metadata/SOA-EDIT-API"
+            meta_resp = await client.get(meta_url)
+            if meta_resp.status_code != 200 or not meta_resp.json().get("metadata"):
+                await client.put(meta_url, json={"metadata": ["EPOCH"]})
             return
         await client.post(
             f"{self._api_url}/api/v1/servers/localhost/zones",
@@ -88,6 +98,7 @@ class DnsService:
                 "name": f"{self._zone}.",
                 "kind": "Master",
                 "nameservers": self._nameservers,
+                "soa_edit_api": "EPOCH",
             },
         )
 
@@ -225,7 +236,9 @@ class DnsService:
 
     async def _notify_zone(self, client: httpx.AsyncClient) -> None:
         """Trigger a NOTIFY to all zone secondaries so they pick up the change."""
-        await client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
+        resp = await client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
+        if resp.status_code >= 300:
+            logger.warning("dns_notify_failed zone=%s status=%s", self._zone, resp.status_code)
 
     async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.

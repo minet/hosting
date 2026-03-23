@@ -324,6 +324,8 @@ async def assign_vm_ipv4(
     :rtype: VMAssignIPv4Response
     """
     ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=vm_id)
+    dns_svc = DnsService(settings=get_settings())
+    await dns_svc.create_records(vm_id=vm_id, ipv4=ipv4, ipv6=None)
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 
