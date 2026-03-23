@@ -146,10 +146,13 @@ def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     if node:
         _vm_node_cache[vm_id] = (node, now)
         return node
-    node = _any_online_node(client=client)
-    if node:
+
+    # Return stale cache entry rather than guessing a random node.
+    if cached is not None:
+        node, _ = cached
         return node
-    raise ProxmoxError(f"Cannot resolve node for VM {vm_id}: no online nodes found")
+
+    raise ProxmoxError(f"Cannot resolve node for VM {vm_id}: VM not found in cluster resources")
 
 
 def least_loaded_node(*, client: ProxmoxAPI) -> str | None:

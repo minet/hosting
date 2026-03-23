@@ -262,31 +262,17 @@ class VmCreateService:
         """
         Handle a Proxmox clone error with best-effort compensating cleanup.
 
-        Probes whether the VM actually exists on Proxmox and either performs
-        full compensation (Proxmox + DB deletion) or raises a 503 if the state
-        is unknown.
+        Always attempts compensating cleanup (Proxmox + DB deletion) regardless
+        of whether the VM probe succeeds, fails, or is indeterminate.
 
         :param ctx: Authentication context used for logging.
         :param res: Database reservation identifying the VM.
         :param exc: The Proxmox error that triggered the failure.
-        :raises HTTPException: Always — translated from ``exc`` or as 503 when
-            the VM state is unknown.
+        :raises HTTPException: Always — translated from ``exc``.
         """
         logger.exception("vm_create_proxmox_clone_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-        vm_exists = await self._probe_vm_exists(res.vm_id)
-
-        if vm_exists is False:
-            await self._compensate(vm_id=res.vm_id)
-            raise_proxmox_as_http(exc, unavailable="Unable to create VM on Proxmox")
-
-        if vm_exists is None:
-            logger.warning("vm_create_proxmox_unknown_state user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Unable to create VM on Proxmox (status unknown; DB reservation kept)",
-            ) from exc
-
-        logger.warning("vm_create_proxmox_exists_after_error user_id=%s vm_id=%s", ctx.user_id, res.vm_id)
+        await self._compensate(vm_id=res.vm_id)
+        raise_proxmox_as_http(exc, unavailable="Unable to create VM on Proxmox")
 
     async def _setup_firewall(self, *, ctx: AuthCtx, res: _DbReservation, node: str) -> None:
         """
