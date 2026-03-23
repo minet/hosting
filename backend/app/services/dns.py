@@ -86,11 +86,9 @@ class DnsService:
         """
         resp = await client.get(self._zone_url())
         if resp.status_code == 200:
-            # Ensure SOA-EDIT-API metadata is set on existing zones
-            meta_url = f"{self._zone_url()}/metadata/SOA-EDIT-API"
-            meta_resp = await client.get(meta_url)
-            if meta_resp.status_code != 200 or not meta_resp.json().get("metadata"):
-                await client.put(meta_url, json={"metadata": ["EPOCH"]})
+            zone = resp.json()
+            if zone.get("soa_edit_api") != "INCREASE":
+                await client.put(self._zone_url(), json={"kind": "Master", "soa_edit_api": "INCREASE"})
             return
         await client.post(
             f"{self._api_url}/api/v1/servers/localhost/zones",
@@ -98,7 +96,7 @@ class DnsService:
                 "name": f"{self._zone}.",
                 "kind": "Master",
                 "nameservers": self._nameservers,
-                "soa_edit_api": "EPOCH",
+                "soa_edit_api": "INCREASE",
             },
         )
 
