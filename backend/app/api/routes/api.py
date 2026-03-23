@@ -26,7 +26,7 @@ router.include_router(vms_router)
 
 
 @router.get("/templates", tags=["vms"], response_model=TemplateListResponse)
-def list_templates(
+async def list_templates(
     _: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> TemplateListResponse:
@@ -38,11 +38,11 @@ def list_templates(
     :returns: List of VM templates with their count.
     :rtype: TemplateListResponse
     """
-    return TemplateListResponse.model_validate(query.list_templates())
+    return TemplateListResponse.model_validate(await query.list_templates())
 
 
 @router.get("/users/me/resources", tags=["vms"], response_model=ResourcesResponse)
-def get_my_resources(
+async def get_my_resources(
     ctx: AuthCtx = Depends(require_charter_signed),
     query: VmQueryService = Depends(get_vm_query_service),
 ) -> ResourcesResponse:
@@ -58,7 +58,7 @@ def get_my_resources(
         {
             "scope": "me",
             "user_id": ctx.user_id,
-            **query.get_resources(user_id=ctx.user_id),
+            **await query.get_resources(user_id=ctx.user_id),
         }
     )
 

@@ -21,7 +21,10 @@ from app.auth import AuthCtx, require_user
 from app.core.config import Settings, get_settings
 from app.core.sessions import get_refresh_token, set_token_cookies
 from app.services.auth.helpers import refresh_access_token
-from app.services.auth.keycloak_admin import fetch_keycloak_user_by_id, set_date_signed_hosting
+from app.services.auth.keycloak_admin import (
+    fetch_keycloak_user_by_id_async,
+    set_date_signed_hosting_async,
+)
 from app.services.auth.service import current_user_claims
 from app.services.charter import generate_charter_pdf
 
@@ -190,7 +193,7 @@ def _refresh_session_token(request: Request, response: Response, settings: Setti
 
 
 @router.post("/sign")
-def sign_charter(
+async def sign_charter(
     request: Request,
     response: Response,
     ctx: AuthCtx = Depends(require_user),
@@ -216,7 +219,7 @@ def sign_charter(
 
     # Fallback: fetch email from Keycloak admin if absent from token
     if not email:
-        kc_profile = fetch_keycloak_user_by_id(user_id)
+        kc_profile = await fetch_keycloak_user_by_id_async(user_id)
         if kc_profile:
             email = kc_profile.get("email") or ""
 
@@ -224,7 +227,7 @@ def sign_charter(
     signed_at_ms = int(now.timestamp() * 1000)
     signed_at = now.isoformat()
 
-    ok = set_date_signed_hosting(user_id=user_id, date_iso=str(signed_at_ms))
+    ok = await set_date_signed_hosting_async(user_id=user_id, date_iso=str(signed_at_ms))
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
