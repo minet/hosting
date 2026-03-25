@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import ssl
 from urllib.parse import quote, urlparse
 
@@ -268,15 +269,23 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
                 except Exception as exc:
                     logger.debug("terminal_ws vm=%s from_client closed: %s", vm_id, exc)
 
+            _lone_lf = re.compile(rb'(?<!\r)\n')
+
             async def from_proxmox() -> None:
                 """
                 Receive raw bytes from the Proxmox WebSocket and forward them to the
                 browser wrapped in a channel-0 mux frame so the client decoder works
                 consistently.
+
+                Bare ``\\n`` bytes (not preceded by ``\\r``) are normalised to
+                ``\\r\\n`` so that xterm renders line breaks correctly — Proxmox
+                termproxy protocol messages (``OK``, ``starting serial …``) use
+                bare LF.
                 """
                 try:
                     async for msg in prox_ws:
                         payload = msg if isinstance(msg, bytes) else msg.encode()
+                        payload = _lone_lf.sub(b'\r\n', payload)
                         await websocket.send_bytes(_mux_encode(0, payload))
                 except Exception as exc:
                     logger.debug("terminal_ws vm=%s from_proxmox closed: %s", vm_id, exc)

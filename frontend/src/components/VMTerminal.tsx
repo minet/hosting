@@ -200,7 +200,7 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
     return () => {
       observer.disconnect()
       ws.close()
-      term.dispose()
+      try { term.dispose() } catch { /* WebGL context cleanup can throw */ }
       termRef.current = null
       wsRef.current = null
     }

@@ -38,7 +38,7 @@ function PageFallback() {
 
 function RouteBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
-  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
 }
 
 export default function App() {
