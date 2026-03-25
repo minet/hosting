@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useMe } from './useMe'
 import { loginUrl } from './api'
 import Layout from './components/Layout'
@@ -36,6 +36,11 @@ function PageFallback() {
   return <div className="flex items-center justify-center h-full text-xs text-neutral-400">Chargement…</div>
 }
 
+function RouteBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>
+}
+
 export default function App() {
   const auth = useMe()
 
@@ -60,7 +65,7 @@ export default function App() {
           <VMStatusProvider>
             <BrowserRouter>
               <AdminLayout>
-                <ErrorBoundary>
+                <RouteBoundary>
                   <Suspense fallback={<PageFallback />}>
                     <Routes>
                       <Route path="/admin" element={<AdminPage />} />
@@ -68,7 +73,7 @@ export default function App() {
                       <Route path="*" element={<Navigate to="/admin" replace />} />
                     </Routes>
                   </Suspense>
-                </ErrorBoundary>
+                </RouteBoundary>
               </AdminLayout>
             </BrowserRouter>
           </VMStatusProvider>
@@ -84,7 +89,7 @@ export default function App() {
         <VMStatusProvider>
           <BrowserRouter>
             <Layout>
-              <ErrorBoundary>
+              <RouteBoundary>
                 <Suspense fallback={<PageFallback />}>
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
@@ -92,7 +97,7 @@ export default function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Suspense>
-              </ErrorBoundary>
+              </RouteBoundary>
             </Layout>
           </BrowserRouter>
         </VMStatusProvider>

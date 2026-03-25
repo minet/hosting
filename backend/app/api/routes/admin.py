@@ -308,6 +308,22 @@ async def get_cluster_status(
     return {"nodes": nodes, "storages": storages, "version": version}
 
 
+@router.get("/cluster/nodes/{node}/metrics")
+async def get_node_metrics(
+    node: str,
+    timeframe: str = Query(default="hour"),
+    cf: str = Query(default="AVERAGE"),
+    _: AuthCtx = Depends(require_admin),
+) -> dict[str, Any]:
+    """Return historical RRD metrics for a Proxmox node (admin only)."""
+    gw = get_proxmox_gateway()
+    try:
+        items = await asyncio.to_thread(gw.node_rrddata, node=node, timeframe=timeframe, cf=cf)
+    except ProxmoxError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    return {"items": items}
+
+
 @router.post("/vms/{vm_id}/ipv4", response_model=VMAssignIPv4Response, status_code=201)
 async def assign_vm_ipv4(
     vm_id: int,

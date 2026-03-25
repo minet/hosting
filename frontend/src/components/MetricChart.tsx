@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, memo } from 'react'
+import { useState, useEffect, useMemo, memo, useCallback } from 'react'
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from 'recharts'
+import { RefreshCw } from 'lucide-react'
 import { apiFetch } from '../api'
 
 interface MetricPoint {
@@ -31,6 +32,13 @@ interface MetricDef {
   format: (v: number) => string
 }
 
+function formatRate(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} Go/s`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} Mo/s`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} Ko/s`
+  return `${bytes.toFixed(0)} o/s`
+}
+
 const METRICS: MetricDef[] = [
   {
     key: 'cpu',    label: 'CPU',       colorA: '#8b5cf6',
@@ -44,20 +52,20 @@ const METRICS: MetricDef[] = [
   },
   {
     key: 'diskread',  label: 'Disk Read',  colorA: '#10b981',
-    extractA: p => p.diskread != null ? p.diskread / 1024 : null,
-    format: v => `${v.toFixed(0)} KB/s`,
+    extractA: p => p.diskread,
+    format: formatRate,
   },
   {
     key: 'diskwrite', label: 'Disk Write', colorA: '#f59e0b',
-    extractA: p => p.diskwrite != null ? p.diskwrite / 1024 : null,
-    format: v => `${v.toFixed(0)} KB/s`,
+    extractA: p => p.diskwrite,
+    format: formatRate,
   },
   {
     key: 'net', label: 'Réseau', colorA: '#06b6d4', colorB: '#ec4899',
     labelA: 'In', labelB: 'Out',
-    extractA: p => p.netin  != null ? p.netin  / 1024 : null,
-    extractB: p => p.netout != null ? p.netout / 1024 : null,
-    format: v => `${v.toFixed(0)} KB/s`,
+    extractA: p => p.netin,
+    extractB: p => p.netout,
+    format: formatRate,
   },
 ]
 
@@ -93,8 +101,11 @@ export default function MetricChart({ vmId, className = '' }: Props) {
   const [timeframe, setTimeframe] = useState('hour')
   const [rawData, setRawData] = useState<MetricPoint[]>([])
   const [loading, setLoading] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const def = METRICS.find(m => m.key === selectedKey) ?? METRICS[0]
+
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
 
   // Only re-fetch when vmId or timeframe changes — not when switching metrics
   useEffect(() => {
@@ -103,7 +114,7 @@ export default function MetricChart({ vmId, className = '' }: Props) {
       .then(r => setRawData(r.items))
       .catch(() => setRawData([]))
       .finally(() => setLoading(false))
-  }, [vmId, timeframe])
+  }, [vmId, timeframe, refreshKey])
 
   // Derive chart data from raw data + selected metric
   const data: ChartPoint[] = useMemo(() =>
@@ -121,7 +132,16 @@ export default function MetricChart({ vmId, className = '' }: Props) {
     <div className={`border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col ${className}`}>
       {/* Titre + timeframe */}
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">{def.label}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">{def.label}</p>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="text-neutral-300 hover:text-neutral-500 transition-colors cursor-pointer disabled:opacity-40"
+          >
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
         <div className="flex gap-1">
           {TIMEFRAMES.map(tf => (
             <button

@@ -496,6 +496,25 @@ class ProxmoxGateway:
             return []
         return [item for item in raw if isinstance(item, dict)]
 
+    def node_rrddata(self, *, node: str, timeframe: str = "hour", cf: str = "AVERAGE") -> list[dict[str, Any]]:
+        """Return historical RRD metrics for a Proxmox node.
+
+        :param node: Name of the Proxmox node.
+        :param timeframe: Time range — ``"hour"``, ``"day"``, ``"week"``,
+            ``"month"``, or ``"year"``.
+        :param cf: Consolidation function — ``"AVERAGE"`` or ``"MAX"``.
+        :returns: List of data-point dicts with ``time`` and metric fields.
+        :rtype: list[dict[str, Any]]
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._node_rrddata(node=node, timeframe=timeframe, cf=cf))
+
+    def _node_rrddata(self, *, node: str, timeframe: str, cf: str) -> list[dict[str, Any]]:
+        raw = self._client.nodes(node).rrddata.get(timeframe=timeframe, cf=cf)
+        if not isinstance(raw, list):
+            return []
+        return [item for item in raw if isinstance(item, dict)]
+
     def list_vm_tasks(self, *, vm_id: int, limit: int = 20) -> list[dict[str, Any]]:
         """Return recent task records for a VM, sorted newest first.
 
@@ -704,7 +723,7 @@ class ProxmoxGateway:
         :raises ProxmoxInvalidResponse: If the Proxmox response is not a dict.
         """
         node = node_for_vm(client=self._client, vm_id=vm_id)
-        result = self._client.nodes(node).qemu(vm_id).termproxy.post()
+        result = self._client.nodes(node).qemu(vm_id).termproxy.post(serial="serial0")
         if not isinstance(result, dict):
             raise ProxmoxInvalidResponse("Invalid termproxy response from Proxmox")
         return {
@@ -754,7 +773,8 @@ class ProxmoxGateway:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-        req = urllib.request.Request(url, data=b"", method="POST")
+        body = urllib.parse.urlencode({"serial": "serial0"}).encode()
+        req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("Cookie", f"{service}AuthCookie={pve_ticket}")
         req.add_header("CSRFPreventionToken", csrf_token)
         with urllib.request.urlopen(req, timeout=self._settings.proxmox_timeout_seconds, context=ctx) as resp:
