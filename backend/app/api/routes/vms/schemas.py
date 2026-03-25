@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-_VM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*$")
+_VM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 _USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
 _SSH_KEY_RE = re.compile(r"^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)) ")
 
@@ -291,7 +291,7 @@ class VMCreateResourceBody(BaseModel):
 class VMCreateBody(BaseModel):
     """Request body for creating a new virtual machine."""
 
-    name: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=10)
     template_id: int = Field(ge=1)
     cpu_cores: int = Field(ge=1)
     ram_gb: int = Field(ge=1)
@@ -311,7 +311,7 @@ class VMCreateBody(BaseModel):
         """
         if not _VM_NAME_RE.match(v):
             raise ValueError(
-                "name must start with alphanumeric and contain only alphanumeric, dots, hyphens, underscores"
+                "name must start with alphanumeric and contain only alphanumeric characters and hyphens"
             )
         return v
 

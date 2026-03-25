@@ -40,9 +40,15 @@ export default function CreateVMModal({ onClose }: Props) {
     if (templates.length > 0 && templateId === '') setTemplateId(templates[0].template_id)
   }, [templates])
 
-  const [cpu, setCpu] = useState(2)
-  const [ram, setRam] = useState(2)
-  const [disk, setDisk] = useState(10)
+  const [cpu, setCpu] = useState<number | ''>(2)
+  const [ram, setRam] = useState<number | ''>(2)
+  const [disk, setDisk] = useState<number | ''>(10)
+
+  useEffect(() => {
+    setCpu(prev => prev === '' ? minCpu : Math.max(prev, minCpu))
+    setRam(prev => prev === '' ? minRam : Math.max(prev, minRam))
+    setDisk(prev => prev === '' ? minDisk : Math.max(prev, minDisk))
+  }, [minCpu, minRam, minDisk])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [sshKey, setSshKey] = useState('')
@@ -97,9 +103,13 @@ export default function CreateVMModal({ onClose }: Props) {
     taskPollRef.current = setInterval(poll, 2000)
   }
 
+  const VM_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!templateId) return
+    if (cpu === '' || ram === '' || disk === '') return
+    if (!VM_NAME_RE.test(name) || name.length > 10) return
     setCreating(true)
     setError(null)
     setDone(false)
@@ -122,9 +132,9 @@ export default function CreateVMModal({ onClose }: Props) {
       body: JSON.stringify({
         name,
         template_id: templateId,
-        cpu_cores: cpu,
-        ram_gb: ram,
-        disk_gb: disk,
+        cpu_cores: cpu as number,
+        ram_gb: ram as number,
+        disk_gb: disk as number,
         resource: { username, password: password || null, ssh_public_key: sshKey },
       }),
     })
@@ -224,8 +234,20 @@ export default function CreateVMModal({ onClose }: Props) {
             <section className="flex flex-col gap-4">
               <h3 className="text-sm font-bold text-neutral-700 border-l-2 border-blue-400 pl-2">{name || 'Nouvelle VM'}</h3>
               <div className="flex flex-col gap-1">
-                <label className={labelClass}>Nom</label>
-                <input className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="ma-vm" required />
+                <label className={labelClass}>Nom <span className="normal-case font-normal text-neutral-400">(max 10 car., lettres, chiffres, tirets)</span></label>
+                <input
+                  className={inputClass}
+                  value={name}
+                  onChange={e => setName(e.target.value.slice(0, 10))}
+                  placeholder="ma-vm"
+                  maxLength={10}
+                  pattern="^[a-zA-Z0-9][a-zA-Z0-9-]*$"
+                  title="Lettres, chiffres et tirets uniquement, commence par un caractère alphanumerique"
+                  required
+                />
+                {name && !/^[a-zA-Z0-9][a-zA-Z0-9-]*$/.test(name) && (
+                  <p className="text-xs text-red-500">Lettres, chiffres et tirets uniquement</p>
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 <label className={labelClass}>Template</label>
@@ -239,15 +261,15 @@ export default function CreateVMModal({ onClose }: Props) {
               <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>CPU <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxCpu})</span></label>
-                  <input className={inputClass} type="number" min={minCpu} max={maxCpu} value={cpu} onChange={e => setCpu(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minCpu} max={maxCpu} value={cpu} onChange={e => setCpu(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>RAM Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxRam})</span></label>
-                  <input className={inputClass} type="number" min={minRam} max={maxRam} value={ram} onChange={e => setRam(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minRam} max={maxRam} value={ram} onChange={e => setRam(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>Disque Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxDisk})</span></label>
-                  <input className={inputClass} type="number" min={minDisk} max={maxDisk} value={disk} onChange={e => setDisk(Number(e.target.value))} required />
+                  <input className={inputClass} type="number" min={minDisk} max={maxDisk} value={disk} onChange={e => setDisk(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
               </div>
             </section>

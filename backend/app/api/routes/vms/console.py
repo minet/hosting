@@ -4,6 +4,12 @@ VM console endpoints (termproxy and WebSocket terminal proxy).
 Provides a REST endpoint to obtain a Proxmox termproxy ticket and a
 WebSocket endpoint that bidirectionally proxies the VNC-over-WebSocket
 terminal stream between the browser client and the Proxmox node.
+
+Client ↔ backend uses a simple mux framing: ``channel:len:payload``
+  - channel 0 = terminal data
+  - channel 1 = resize (cols:rows), not forwarded to Proxmox
+
+Backend ↔ Proxmox uses raw bytes (Proxmox vncwebsocket protocol).
 """
 
 from __future__ import annotations
@@ -14,6 +20,30 @@ import ssl
 from urllib.parse import quote, urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def _mux_encode(channel: int, payload: bytes) -> bytes:
+    """Encode a mux frame: ``channel:len:payload``."""
+    return f"{channel}:{len(payload)}:".encode() + payload
+
+
+def _mux_decode(data: bytes) -> tuple[int, bytes] | None:
+    """Decode one mux frame from *data*. Returns ``(channel, payload)`` or ``None``."""
+    c1 = data.find(b":")
+    if c1 == -1:
+        return None
+    c2 = data.find(b":", c1 + 1)
+    if c2 == -1:
+        return None
+    try:
+        channel = int(data[:c1])
+        length = int(data[c1 + 1 : c2])
+    except ValueError:
+        return None
+    start = c2 + 1
+    if start + length > len(data):
+        return None
+    return channel, data[start : start + length]
 
 import websockets
 import websockets.exceptions
@@ -173,9 +203,8 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
         await websocket.close(code=4403, reason="Forbidden")
         return
 
-    current_user = _active_terminals.get(vm_id)
-    if current_user and current_user != ctx.user_id:
-        await websocket.close(code=4409, reason="Console already in use by another user")
+    if vm_id in _active_terminals:
+        await websocket.close(code=4409, reason="Console already in use")
         return
 
     _active_terminals[vm_id] = ctx.user_id
@@ -222,30 +251,33 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
 
             async def from_client() -> None:
                 """
-                Forward raw bytes from the browser client to the Proxmox WebSocket.
-
-                Runs until the client WebSocket closes or an exception occurs.
+                Receive mux-framed bytes from the browser, unwrap them, and forward
+                channel-0 payloads (keyboard data) to the Proxmox WebSocket.
+                Channel-1 frames (resize) are intentionally ignored — Proxmox
+                termproxy does not support in-band resize over the WebSocket.
                 """
                 try:
                     async for data in websocket.iter_bytes():
-                        await prox_ws.send(data)
+                        frame = _mux_decode(data)
+                        if frame is None:
+                            # Not a valid mux frame — forward as-is (fallback)
+                            await prox_ws.send(data)
+                        elif frame[0] == 0:
+                            await prox_ws.send(frame[1])
+                        # channel 1 (resize) — ignored
                 except Exception as exc:
                     logger.debug("terminal_ws vm=%s from_client closed: %s", vm_id, exc)
 
             async def from_proxmox() -> None:
                 """
-                Forward messages from the Proxmox WebSocket to the browser client.
-
-                Binary messages are forwarded as bytes; text messages are forwarded
-                as text.  Runs until the Proxmox WebSocket closes or an exception
-                occurs.
+                Receive raw bytes from the Proxmox WebSocket and forward them to the
+                browser wrapped in a channel-0 mux frame so the client decoder works
+                consistently.
                 """
                 try:
                     async for msg in prox_ws:
-                        if isinstance(msg, bytes):
-                            await websocket.send_bytes(msg)
-                        else:
-                            await websocket.send_text(msg)
+                        payload = msg if isinstance(msg, bytes) else msg.encode()
+                        await websocket.send_bytes(_mux_encode(0, payload))
                 except Exception as exc:
                     logger.debug("terminal_ws vm=%s from_proxmox closed: %s", vm_id, exc)
 
