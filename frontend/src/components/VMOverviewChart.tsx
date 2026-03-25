@@ -42,7 +42,7 @@ export default function VMOverviewChart({ vmId, name }: Props) {
   return (
     <Link
       to={`/vm/${vmId}`}
-      className="md:col-span-3 xl:col-span-2 border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col h-32 xl:h-full hover:border-neutral-300 transition-colors"
+      className="border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col h-32 hover:border-neutral-300 transition-colors"
     >
       <div className="flex items-center gap-2 mb-2">
         <span className={`w-2 h-2 rounded-full shrink-0 ${running ? 'bg-emerald-400' : 'bg-red-400'}`} />

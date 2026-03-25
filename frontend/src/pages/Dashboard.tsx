@@ -42,7 +42,7 @@ export default function Dashboard() {
 
         {/* Gauges — sur md+ : une par cellule */}
         {(gaugeConfig ?? [{ label: 'RAM' }, { label: 'Disque' }, { label: 'CPU' }]).map(g => (
-          <div key={g.label} className="hidden md:flex border border-neutral-100 shadow-md rounded-sm bg-white h-32 items-center justify-center p-2">
+          <div key={g.label} className="hidden md:flex border border-neutral-100 shadow-md rounded-sm bg-white items-center justify-center p-2">
             {'used' in g ? <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} /> : null}
           </div>
         ))}
