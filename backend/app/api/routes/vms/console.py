@@ -5,11 +5,13 @@ The backend maintains ONE Proxmox connection per VM.  Browser clients
 attach/detach from that shared session so that Proxmox always sees a
 single consumer on serial0.
 
-Client ↔ backend uses a simple mux framing: ``channel:len:payload``
-  - channel 0 = terminal data
-  - channel 1 = resize (cols:rows), not forwarded to Proxmox
+Proxmox termproxy protocol (asymmetric):
+  Client → Proxmox: mux-framed (``0:len:data``, ``1:cols:rows:``, ``2`` keepalive)
+  Proxmox → Client: raw bytes (no framing)
 
-Backend ↔ Proxmox uses raw bytes (Proxmox vncwebsocket protocol).
+Browser ↔ backend uses the same mux framing so the backend forwards
+client frames as-is to Proxmox and wraps Proxmox output in mux frames
+before sending to the browser.
 """
 
 from __future__ import annotations
@@ -86,13 +88,14 @@ class _VmSession:
     prox_ws: websockets.WebSocketClientProtocol
     clients: set[WebSocket] = field(default_factory=set)
     _reader_task: asyncio.Task | None = None
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    _keepalive_task: asyncio.Task | None = None
 
-    def start_reader(self) -> None:
+    def start(self) -> None:
         self._reader_task = asyncio.create_task(self._broadcast_from_proxmox())
+        self._keepalive_task = asyncio.create_task(self._keepalive())
 
     async def _broadcast_from_proxmox(self) -> None:
-        """Read from Proxmox and broadcast to every attached client."""
+        """Read raw bytes from Proxmox and broadcast as mux-framed to clients."""
         try:
             async for msg in self.prox_ws:
                 payload = msg if isinstance(msg, bytes) else msg.encode()
@@ -109,12 +112,23 @@ class _VmSession:
         except Exception as exc:
             logger.warning("_VmSession vm=%s proxmox reader stopped: %s", self.vm_id, exc)
 
+    async def _keepalive(self) -> None:
+        """Send Proxmox-level keepalive ('2') every 30 seconds."""
+        try:
+            while True:
+                await asyncio.sleep(30)
+                await self.prox_ws.send(b"2")
+        except Exception:
+            pass
+
     async def send_to_proxmox(self, data: bytes) -> None:
+        """Forward raw mux-framed data from client directly to Proxmox."""
         await self.prox_ws.send(data)
 
     async def close(self) -> None:
-        if self._reader_task:
-            self._reader_task.cancel()
+        for task in (self._reader_task, self._keepalive_task):
+            if task:
+                task.cancel()
         try:
             await self.prox_ws.close()
         except Exception:
@@ -187,7 +201,7 @@ async def _get_or_create_session(vm_id: int) -> _VmSession:
         await prox_ws.send(f"{username}:{ticket}\n".encode())
 
         session = _VmSession(vm_id=vm_id, prox_ws=prox_ws)
-        session.start_reader()
+        session.start()
         _sessions[vm_id] = session
         return session
 
@@ -291,12 +305,9 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
 
     try:
         async for data in websocket.iter_bytes():
-            frame = _mux_decode(data)
-            if frame is None:
-                await session.send_to_proxmox(data)
-            elif frame[0] == 0:
-                await session.send_to_proxmox(frame[1])
-            # channel 1 (resize) — ignored
+            # Forward mux-framed data as-is to Proxmox termproxy.
+            # Proxmox expects: 0:len:data (input), 1:cols:rows: (resize), 2 (keepalive)
+            await session.send_to_proxmox(data)
     except Exception as exc:
         logger.debug("terminal_ws vm=%s client disconnected: %s", vm_id, exc)
     finally:

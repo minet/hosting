@@ -107,8 +107,8 @@ class VmCreateService:
 
         self._validate_limits(cmd)
         reservation = await self._reserve_db_slot(ctx=ctx, cmd=cmd)
-        await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
-        await self._finalize_db(ctx=ctx, res=reservation)
+        node = await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
+        await self._finalize_db(ctx=ctx, res=reservation, node=node)
 
         result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
         await self.dns.create_records(
@@ -212,19 +212,22 @@ class VmCreateService:
         logger.info("vm_create_reserved user_id=%s vm_id=%s ipv6=%s", ctx.user_id, vm_id, vm_ipv6)
         return _DbReservation(vm_id=vm_id, vm_ipv6=vm_ipv6, ram_mb=ram_mb)
 
-    async def _provision_on_proxmox(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> None:
+    async def _provision_on_proxmox(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> str:
         """
         Run the three-step Proxmox provisioning sequence: clone, firewall, disk resize.
 
         :param ctx: Authentication context used for logging.
         :param cmd: Creation command containing resource specifications.
         :param res: Database reservation carrying the allocated VM ID and IPv6.
+        :returns: The Proxmox node hosting the new VM.
+        :rtype: str
         :raises HTTPException: On any Proxmox provisioning failure; compensating
             cleanup is attempted before raising.
         """
         node = await self._clone_vm(ctx=ctx, cmd=cmd, res=res)
         await self._setup_firewall(ctx=ctx, res=res, node=node)
         await self._resize_disk(ctx=ctx, cmd=cmd, res=res, node=node)
+        return node
 
     async def _clone_vm(self, *, ctx: AuthCtx, cmd: VmCreateCmd, res: _DbReservation) -> str:
         """
@@ -313,15 +316,16 @@ class VmCreateService:
             await self._compensate(vm_id=res.vm_id)
             raise_proxmox_as_http(exc, unavailable="Unable to resize VM disk on Proxmox")
 
-    async def _finalize_db(self, *, ctx: AuthCtx, res: _DbReservation) -> None:
+    async def _finalize_db(self, *, ctx: AuthCtx, res: _DbReservation, node: str) -> None:
         """
         Probe the VM MAC address from Proxmox and persist it to the database.
 
         :param ctx: Authentication context used for logging.
         :param res: Database reservation identifying the VM.
+        :param node: The Proxmox node hosting the VM (avoids cluster/resources lookup race).
         :raises HTTPException: 503 on database write failure.
         """
-        mac = await self._probe_vm_mac(res.vm_id)
+        mac = await self._probe_vm_mac(res.vm_id, node=node)
         logger.info("vm_create_mac_probe user_id=%s vm_id=%s mac=%s", ctx.user_id, res.vm_id, mac)
         try:
             await self.cmd_repo.update_vm_mac(res.vm_id, mac)
@@ -447,15 +451,19 @@ class VmCreateService:
         except ProxmoxError:
             return None
 
-    async def _probe_vm_mac(self, vm_id: int) -> str | None:
+    async def _probe_vm_mac(self, vm_id: int, *, node: str | None = None) -> str | None:
         """
         Retrieve the MAC address of a VM from Proxmox, returning ``None`` on failure.
 
         :param vm_id: Proxmox VM identifier.
+        :param node: If provided, query this node directly instead of resolving
+            via cluster/resources (avoids race after cross-node clone).
         :returns: MAC address string, or ``None`` if it cannot be retrieved.
         :rtype: str | None
         """
         try:
+            if node:
+                return await asyncio.to_thread(self.gateway.get_vm_mac_on_node, vm_id=vm_id, node=node)
             return await asyncio.to_thread(self.gateway.get_vm_mac, vm_id=vm_id)
         except ProxmoxError:
             logger.warning("vm_create_probe_mac_failed vm_id=%s", vm_id)

@@ -441,6 +441,19 @@ class ProxmoxGateway:
         """
         return self._guard(lambda: self._mac(vm_id=vm_id))
 
+    def get_vm_mac_on_node(self, *, vm_id: int, node: str) -> str | None:
+        """Return the MAC address by querying a specific node directly.
+
+        Avoids the cluster/resources lookup which can race after cross-node clones.
+
+        :param vm_id: VMID of the target VM.
+        :param node: Proxmox node to query.
+        :returns: Lowercase MAC address string, or ``None`` if not found.
+        :rtype: str | None
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._mac_on_node(vm_id=vm_id, node=node))
+
     def _status(self, *, vm_id: int) -> dict[str, Any]:
         """Internal implementation of VM status retrieval.
 
@@ -464,6 +477,11 @@ class ProxmoxGateway:
         :rtype: str | None
         """
         node = node_for_vm(client=self._client, vm_id=vm_id)
+        vm_config = self._get_config(node=node, vm_id=vm_id)
+        return resolve_vm_mac(vm_config)
+
+    def _mac_on_node(self, *, vm_id: int, node: str) -> str | None:
+        """MAC address lookup on a specific node (no cluster/resources resolution)."""
         vm_config = self._get_config(node=node, vm_id=vm_id)
         return resolve_vm_mac(vm_config)
 
