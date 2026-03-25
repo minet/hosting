@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
+import { WebglAddon } from 'xterm-addon-webgl'
+import { CanvasAddon } from 'xterm-addon-canvas'
 import 'xterm/css/xterm.css'
 import { API_BASE } from '../api'
 
@@ -120,6 +122,13 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
     term.loadAddon(fit)
     term.open(containerRef.current)
     fit.fit()
+    try {
+      const webgl = new WebglAddon()
+      webgl.onContextLoss(() => webgl.dispose())
+      term.loadAddon(webgl)
+    } catch {
+      term.loadAddon(new CanvasAddon())
+    }
 
     const wsBase = API_BASE.replace(/^http/, 'ws')
     const ws = new WebSocket(`${wsBase}/api/vms/${vmId}/terminal`, ['binary'])
