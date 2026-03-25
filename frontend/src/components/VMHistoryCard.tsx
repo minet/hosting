@@ -19,7 +19,7 @@ export default function VMHistoryCard({ tasks }: Props) {
   const filtered = tasks.filter(t => t.type !== 'vncproxy')
 
   return (
-    <div className="md:col-span-2 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col min-w-0 overflow-hidden max-h-64 md:max-h-none">
+    <div className="md:col-span-2 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col min-w-0 overflow-hidden max-h-64 md:max-h-72 self-start">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 mb-3">Historique</p>
       {filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-neutral-300 text-xs">Aucune action récente</div>

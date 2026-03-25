@@ -155,66 +155,99 @@ def _parse_used_ipv6(*, used_ipv6: set[str], network: IPv6Network) -> set[IPv6Ad
     return parsed
 
 
-def ipv4_network_settings() -> tuple[IPv4Network, IPv4Address, int]:
+def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
     """Read and validate the IPv4 subnet configuration from settings.
 
-    :returns: A tuple of (network, gateway address, prefix length).
-    :rtype: tuple[IPv4Network, IPv4Address, int]
-    :raises ProxmoxConfigError: If ``VM_IPV4_SUBNET`` is not configured or invalid.
+    Supports multiple comma-separated subnets in ``VM_IPV4_SUBNETS`` with
+    matching gateway host indices in ``VM_IPV4_GATEWAY_HOSTS``.
+
+    :returns: A list of (network, gateway address, prefix length) tuples.
+    :rtype: list[tuple[IPv4Network, IPv4Address, int]]
+    :raises ProxmoxConfigError: If ``VM_IPV4_SUBNETS`` is not configured or invalid.
     """
     settings = get_settings()
-    if not settings.vm_ipv4_subnet:
-        raise ProxmoxConfigError("VM_IPV4_SUBNET is not configured")
-    try:
-        network = IPv4Network(settings.vm_ipv4_subnet, strict=False)
-    except ValueError as exc:
-        raise ProxmoxConfigError("Invalid VM_IPV4_SUBNET configuration") from exc
+    if not settings.vm_ipv4_subnets:
+        raise ProxmoxConfigError("VM_IPV4_SUBNETS is not configured")
 
-    host_space = (1 << (32 - network.prefixlen)) - 1
-    gateway_host = max(int(settings.vm_ipv4_gateway_host), 1)
-    if gateway_host > host_space:
-        raise ProxmoxConfigError("Invalid VM_IPV4_GATEWAY_HOST for subnet")
+    raw_subnets = [s.strip() for s in settings.vm_ipv4_subnets.split(",") if s.strip()]
+    raw_gateways = [g.strip() for g in settings.vm_ipv4_gateway_hosts.split(",") if g.strip()]
 
-    gateway_ip = network.network_address + gateway_host
-    return network, IPv4Address(gateway_ip), int(network.prefixlen)
+    if not raw_subnets:
+        raise ProxmoxConfigError("VM_IPV4_SUBNETS is empty")
+
+    # If fewer gateway values than subnets, repeat the last one
+    while len(raw_gateways) < len(raw_subnets):
+        raw_gateways.append(raw_gateways[-1] if raw_gateways else "1")
+
+    results: list[tuple[IPv4Network, IPv4Address, int]] = []
+    for i, raw_subnet in enumerate(raw_subnets):
+        try:
+            network = IPv4Network(raw_subnet, strict=False)
+        except ValueError as exc:
+            raise ProxmoxConfigError(f"Invalid VM_IPV4_SUBNETS entry: {raw_subnet}") from exc
+
+        host_space = (1 << (32 - network.prefixlen)) - 1
+        try:
+            gateway_host = max(int(raw_gateways[i]), 1)
+        except ValueError as exc:
+            raise ProxmoxConfigError(f"Invalid VM_IPV4_GATEWAY_HOSTS entry: {raw_gateways[i]}") from exc
+        if gateway_host > host_space:
+            raise ProxmoxConfigError(f"Invalid gateway host {gateway_host} for subnet {raw_subnet}")
+
+        gateway_ip = network.network_address + gateway_host
+        results.append((network, IPv4Address(gateway_ip), int(network.prefixlen)))
+
+    return results
+
+
+def ipv4_network_settings_for_ip(vm_ipv4: str) -> tuple[IPv4Network, IPv4Address, int]:
+    """Find the subnet settings that contain the given IPv4 address.
+
+    :param vm_ipv4: The IPv4 address to look up.
+    :returns: A tuple of (network, gateway address, prefix length).
+    :raises ProxmoxConfigError: If no configured subnet contains the address.
+    """
+    addr = IPv4Address(vm_ipv4)
+    for network, gateway_ip, prefix in ipv4_network_settings():
+        if addr in network:
+            return network, gateway_ip, prefix
+    raise ProxmoxConfigError(f"No configured subnet contains {vm_ipv4}")
 
 
 def allocate_next_vm_ipv4(*, used_ipv4: set[str]) -> str:
-    """Allocate the next free IPv4 address in the configured subnet.
+    """Allocate the next free IPv4 address across all configured subnets.
 
-    Skips the network address, gateway, and broadcast address.
+    Iterates through subnets in order, skipping network address, gateway,
+    and broadcast address in each.
 
     :param used_ipv4: Set of IPv4 address strings already in use.
     :type used_ipv4: set[str]
     :returns: The allocated IPv4 address as a string.
     :rtype: str
-    :raises ProxmoxConfigError: If ``VM_IPV4_SUBNET`` is not configured or invalid.
-    :raises ProxmoxUnavailableError: If no addresses remain in the subnet.
+    :raises ProxmoxConfigError: If ``VM_IPV4_SUBNETS`` is not configured or invalid.
+    :raises ProxmoxUnavailableError: If no addresses remain in any subnet.
     """
-    network, gateway_ip, _ = ipv4_network_settings()
-    # host_space excludes network address; broadcast is the last host
-    host_space = (1 << (32 - network.prefixlen)) - 2
-    broadcast = network.broadcast_address
-    used_addresses = _parse_used_ipv4(used_ipv4=used_ipv4, network=network)
+    all_used = _parse_all_used_ipv4(used_ipv4=used_ipv4)
 
-    for host in range(2, host_space + 1):
-        candidate = IPv4Address(int(network.network_address) + host)
-        if candidate in (gateway_ip, broadcast):
-            continue
-        if candidate not in used_addresses:
-            return str(candidate)
+    for network, gateway_ip, _ in ipv4_network_settings():
+        host_space = (1 << (32 - network.prefixlen)) - 2
+        broadcast = network.broadcast_address
 
-    raise ProxmoxUnavailableError("No available IPv4 in configured subnet")
+        for host in range(2, host_space + 1):
+            candidate = IPv4Address(int(network.network_address) + host)
+            if candidate in (gateway_ip, broadcast):
+                continue
+            if candidate not in all_used:
+                return str(candidate)
+
+    raise ProxmoxUnavailableError("No available IPv4 in any configured subnet")
 
 
-def _parse_used_ipv4(*, used_ipv4: set[str], network: IPv4Network) -> set[IPv4Address]:
-    """Parse raw IPv4 strings and keep only those belonging to *network*.
+def _parse_all_used_ipv4(*, used_ipv4: set[str]) -> set[IPv4Address]:
+    """Parse raw IPv4 strings into a set of addresses.
 
     :param used_ipv4: Raw IPv4 address strings.
-    :type used_ipv4: set[str]
-    :param network: The IPv4 network to filter against.
-    :type network: IPv4Network
-    :returns: Set of parsed addresses that fall within *network*.
+    :returns: Set of parsed IPv4 addresses.
     :rtype: set[IPv4Address]
     """
     parsed: set[IPv4Address] = set()
@@ -223,7 +256,7 @@ def _parse_used_ipv4(*, used_ipv4: set[str], network: IPv4Network) -> set[IPv4Ad
             value = ip_address(raw)
         except ValueError:
             continue
-        if isinstance(value, IPv4Address) and value in network:
+        if isinstance(value, IPv4Address):
             parsed.add(value)
     return parsed
 
@@ -234,6 +267,7 @@ __all__ = [
     "allocate_next_vm_ipv6",
     "allocate_vm_id",
     "ipv4_network_settings",
+    "ipv4_network_settings_for_ip",
     "ipv6_network_settings",
     "vm_id_min",
 ]

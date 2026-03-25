@@ -272,9 +272,9 @@ class ProxmoxGateway:
         :param vm_ipv4: IPv4 address string to assign.
         :type vm_ipv4: str
         """
-        from app.services.proxmox.allocation import ipv4_network_settings
+        from app.services.proxmox.allocation import ipv4_network_settings_for_ip
 
-        _, gw4, prefix = ipv4_network_settings()
+        _, gw4, prefix = ipv4_network_settings_for_ip(vm_ipv4)
         node = node_for_vm(client=self._client, vm_id=vm_id)
         self._cloudinit.assign_vm_ipv4(
             node=node,

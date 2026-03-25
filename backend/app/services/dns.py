@@ -78,23 +78,18 @@ class DnsService:
         return f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}."
 
     async def _ensure_zone(self, client: httpx.AsyncClient) -> None:
-        """Create the zone in PowerDNS if it does not already exist.
-
-        Sets ``SOA-EDIT-API`` to ``EPOCH`` so that every API change bumps
-        the SOA serial, which is required for secondary nameservers to
-        pick up updates via AXFR/IXFR after a NOTIFY.
-        """
+        """Create the zone in PowerDNS if it does not already exist."""
         resp = await client.get(self._zone_url())
         if resp.status_code == 200:
             zone = resp.json()
             if zone.get("soa_edit_api") != "INCREASE":
-                await client.put(self._zone_url(), json={"kind": "Master", "soa_edit_api": "INCREASE"})
+                await client.put(self._zone_url(), json={"kind": "Native", "soa_edit_api": "INCREASE"})
             return
         await client.post(
             f"{self._api_url}/api/v1/servers/localhost/zones",
             json={
                 "name": f"{self._zone}.",
-                "kind": "Master",
+                "kind": "Native",
                 "nameservers": self._nameservers,
                 "soa_edit_api": "INCREASE",
             },
@@ -128,7 +123,6 @@ class DnsService:
             await self._ensure_zone(c)
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
-            await self._notify_zone(c)
             logger.info("dns_create_ok fqdn=%s", fqdn)
         except Exception:
             logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
@@ -160,7 +154,6 @@ class DnsService:
             await self._ensure_zone(c)
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
-            await self._notify_zone(c)
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
         except Exception:
             logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
@@ -188,7 +181,6 @@ class DnsService:
             c = self._get_client()
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
-            await self._notify_zone(c)
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
         except Exception:
             logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
@@ -232,12 +224,6 @@ class DnsService:
                 expected_name,
             )
 
-    async def _notify_zone(self, client: httpx.AsyncClient) -> None:
-        """Trigger a NOTIFY to all zone secondaries so they pick up the change."""
-        resp = await client.put(f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}./notify")
-        if resp.status_code >= 300:
-            logger.warning("dns_notify_failed zone=%s status=%s", self._zone, resp.status_code)
-
     async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
 
@@ -266,7 +252,6 @@ class DnsService:
                                 rrsets.append({"name": rrset["name"], "type": "CNAME", "changetype": "DELETE"})
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
-            await self._notify_zone(c)
             logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
         except Exception:
             logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)

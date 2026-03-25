@@ -11,7 +11,7 @@ interface Props {
 
 export default function VMResourcesCard({ vm, running, isOwner, onOpenResModal }: Props) {
   return (
-    <div className="border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col justify-between min-w-0 overflow-hidden">
+    <div className="border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col min-w-0 overflow-hidden self-start">
       <div className="flex items-center justify-between mb-3 min-w-0 gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 truncate">Ressources allouées</p>
         <div className="flex items-center gap-1.5 shrink-0">

@@ -34,7 +34,7 @@ export default function VMAccessCard({ vm, running, isOwner, creds }: Props) {
   } = creds
 
   return (
-    <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 min-w-0 min-h-0 overflow-hidden">
+    <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 min-w-0 min-h-0 overflow-visible">
       <div className="flex items-center justify-between mb-2 min-w-0 gap-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 shrink-0">Accès VM</p>
