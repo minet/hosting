@@ -210,37 +210,38 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
 
     _active_terminals[vm_id] = ctx.user_id
 
-    settings = get_settings()
-    gateway = get_proxmox_gateway()
-
     try:
-        info = await asyncio.to_thread(gateway.termproxy_with_ticket, vm_id=vm_id)
-    except ProxmoxError as exc:
-        await websocket.close(code=4503, reason=str(exc))
-        return
+        settings = get_settings()
+        gateway = get_proxmox_gateway()
 
-    node = info["node"]
-    port = info["port"]
-    ticket = info["ticket"]
-    username = info["username"]
-    pve_ticket = info["pve_ticket"]
+        try:
+            info = await asyncio.to_thread(gateway.termproxy_with_ticket, vm_id=vm_id)
+        except ProxmoxError as exc:
+            logger.warning("terminal_ws vm=%s termproxy failed: %s", vm_id, exc)
+            await websocket.close(code=4503, reason=str(exc))
+            return
 
-    encoded_ticket = quote(ticket, safe="")
-    parsed = urlparse(settings.proxmox_base_url)
-    ws_scheme = "wss" if parsed.scheme == "https" else "ws"
-    host_port = parsed.hostname
-    if parsed.port:
-        host_port = f"{host_port}:{parsed.port}"
-    wss_url = f"{ws_scheme}://{host_port}/api2/json/nodes/{node}/qemu/{vm_id}/vncwebsocket?port={port}&vncticket={encoded_ticket}"
+        node = info["node"]
+        port = info["port"]
+        ticket = info["ticket"]
+        username = info["username"]
+        pve_ticket = info["pve_ticket"]
 
-    ssl_ctx = _proxmox_ssl_context(settings.proxmox_verify_tls)
+        encoded_ticket = quote(ticket, safe="")
+        parsed = urlparse(settings.proxmox_base_url)
+        ws_scheme = "wss" if parsed.scheme == "https" else "ws"
+        host_port = parsed.hostname
+        if parsed.port:
+            host_port = f"{host_port}:{parsed.port}"
+        wss_url = f"{ws_scheme}://{host_port}/api2/json/nodes/{node}/qemu/{vm_id}/vncwebsocket?port={port}&vncticket={encoded_ticket}"
 
-    service = settings.proxmox_service or "PVE"
-    ws_auth_headers = {"Cookie": f"{service}AuthCookie={pve_ticket}"}
+        ssl_ctx = _proxmox_ssl_context(settings.proxmox_verify_tls)
 
-    logger.info("terminal_ws vm=%s proxmox_node=%s port=%s", vm_id, node, port)
+        service = settings.proxmox_service or "PVE"
+        ws_auth_headers = {"Cookie": f"{service}AuthCookie={pve_ticket}"}
 
-    try:
+        logger.info("terminal_ws vm=%s proxmox_node=%s port=%s", vm_id, node, port)
+
         async with websockets.connect(
             wss_url,
             ssl=ssl_ctx,
@@ -251,44 +252,26 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
             await prox_ws.send(f"{username}:{ticket}\n".encode())
 
             async def from_client() -> None:
-                """
-                Receive mux-framed bytes from the browser, unwrap them, and forward
-                channel-0 payloads (keyboard data) to the Proxmox WebSocket.
-                Channel-1 frames (resize) are intentionally ignored — Proxmox
-                termproxy does not support in-band resize over the WebSocket.
-                """
                 try:
                     async for data in websocket.iter_bytes():
                         frame = _mux_decode(data)
                         if frame is None:
-                            # Not a valid mux frame — forward as-is (fallback)
                             await prox_ws.send(data)
                         elif frame[0] == 0:
                             await prox_ws.send(frame[1])
-                        # channel 1 (resize) — ignored
                 except Exception as exc:
                     logger.debug("terminal_ws vm=%s from_client closed: %s", vm_id, exc)
 
             _lone_lf = re.compile(rb'(?<!\r)\n')
 
             async def from_proxmox() -> None:
-                """
-                Receive raw bytes from the Proxmox WebSocket and forward them to the
-                browser wrapped in a channel-0 mux frame so the client decoder works
-                consistently.
-
-                Bare ``\\n`` bytes (not preceded by ``\\r``) are normalised to
-                ``\\r\\n`` so that xterm renders line breaks correctly — Proxmox
-                termproxy protocol messages (``OK``, ``starting serial …``) use
-                bare LF.
-                """
                 try:
                     async for msg in prox_ws:
                         payload = msg if isinstance(msg, bytes) else msg.encode()
                         payload = _lone_lf.sub(b'\r\n', payload)
                         await websocket.send_bytes(_mux_encode(0, payload))
                 except Exception as exc:
-                    logger.debug("terminal_ws vm=%s from_proxmox closed: %s", vm_id, exc)
+                    logger.warning("terminal_ws vm=%s from_proxmox error: %s", vm_id, exc)
 
             t1 = asyncio.create_task(from_client())
             t2 = asyncio.create_task(from_proxmox())
