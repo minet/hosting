@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Loader, Trash2 } from 'lucide-react'
+import { Loader, Trash2, RefreshCw } from 'lucide-react'
 import { apiFetch } from '../../api'
 import { useToast } from '../../contexts/ToastContext'
 
@@ -16,6 +16,7 @@ export default function DnsTab() {
   const [records, setRecords] = useState<DnsRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [revoking, setRevoking] = useState<number | null>(null)
+  const [notifying, setNotifying] = useState(false)
   const { toast } = useToast()
 
   const refresh = useCallback(async () => {
@@ -43,13 +44,35 @@ export default function DnsTab() {
     }
   }
 
+  async function handleNotify() {
+    setNotifying(true)
+    try {
+      await apiFetch('/api/dns/notify', { method: 'POST' })
+      toast('NOTIFY envoyé aux secondaires')
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Échec du NOTIFY')
+    } finally {
+      setNotifying(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 h-full">
       <div className="flex items-center justify-between shrink-0">
         <h1 className="text-base font-semibold text-neutral-800">Enregistrements DNS</h1>
-        <span className="text-xs text-neutral-400 font-mono">
-          {loading ? 'Chargement…' : `${records.length} enregistrement${records.length !== 1 ? 's' : ''}`}
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleNotify}
+            disabled={notifying}
+            className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md bg-neutral-900 text-white hover:bg-neutral-700 transition-colors disabled:opacity-40 cursor-pointer"
+          >
+            {notifying ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Forcer NOTIFY
+          </button>
+          <span className="text-xs text-neutral-400 font-mono">
+            {loading ? 'Chargement…' : `${records.length} enregistrement${records.length !== 1 ? 's' : ''}`}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 shadow-sm">
