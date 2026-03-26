@@ -11,8 +11,11 @@ block VM creation or deletion.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import socket
+import struct
 
 import httpx
 
@@ -124,6 +127,7 @@ class DnsService:
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
             logger.info("dns_create_ok fqdn=%s", fqdn)
+            await self.notify()
         except Exception:
             logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
 
@@ -155,6 +159,7 @@ class DnsService:
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
+            await self.notify()
         except Exception:
             logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
             if raise_on_error:
@@ -182,6 +187,7 @@ class DnsService:
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
+            await self.notify()
         except Exception:
             logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
             if raise_on_error:
@@ -225,16 +231,21 @@ class DnsService:
             )
 
     async def notify(self) -> None:
-        """Send a DNS NOTIFY to all secondaries for the managed zone."""
+        """Send DNS NOTIFY packets directly to BIND secondaries via UDP."""
         if not self._enabled:
             return
-        try:
-            c = self._get_client()
-            resp = await c.put(f"{self._zone_url()}/notify")
-            resp.raise_for_status()
-            logger.info("dns_notify_ok zone=%s", self._zone)
-        except Exception:
-            logger.warning("dns_notify_failed zone=%s", self._zone, exc_info=True)
+        targets = _nameserver_ips(self._nameservers)
+        if not targets:
+            logger.warning("dns_notify_no_targets zone=%s", self._zone)
+            return
+        packet = _build_notify_packet(self._zone)
+        loop = asyncio.get_running_loop()
+        for ip in targets:
+            try:
+                await loop.run_in_executor(None, _send_udp, ip, 53, packet)
+                logger.info("dns_notify_sent zone=%s target=%s", self._zone, ip)
+            except Exception:
+                logger.warning("dns_notify_failed zone=%s target=%s", self._zone, ip, exc_info=True)
 
     async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
@@ -265,8 +276,44 @@ class DnsService:
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
             logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
+            await self.notify()
         except Exception:
             logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)
+
+
+def _nameserver_ips(nameservers: list[str]) -> list[str]:
+    """Extract IPs from nameserver FQDNs by resolving them."""
+    ips = []
+    for ns in nameservers:
+        ns = ns.rstrip(".")
+        try:
+            results = socket.getaddrinfo(ns, None, socket.AF_INET, socket.SOCK_DGRAM)
+            for _, _, _, _, addr in results:
+                if addr[0] not in ips:
+                    ips.append(addr[0])
+        except socket.gaierror:
+            logger.warning("dns_notify_resolve_failed ns=%s", ns)
+    return ips
+
+
+def _build_notify_packet(zone: str) -> bytes:
+    """Build a minimal DNS NOTIFY packet for the given zone."""
+    # Header: ID=0x1234, flags=0x2400 (opcode NOTIFY + AA), QDCOUNT=1
+    header = struct.pack("!HHHHHH", 0x1234, 0x2400, 1, 0, 0, 0)
+    # Question: zone name, type SOA (6), class IN (1)
+    qname = b""
+    for label in zone.split("."):
+        qname += struct.pack("!B", len(label)) + label.encode()
+    qname += b"\x00"
+    question = qname + struct.pack("!HH", 6, 1)
+    return header + question
+
+
+def _send_udp(ip: str, port: int, data: bytes) -> None:
+    """Send a UDP packet."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(2)
+        sock.sendto(data, (ip, port))
 
 
 def _rrset(name: str, rtype: str, content: str, ttl: int = 300) -> dict:
