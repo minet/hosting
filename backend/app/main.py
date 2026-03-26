@@ -58,6 +58,13 @@ async def lifespan(_: FastAPI):
     """Manage startup and shutdown of shared resources around the application lifetime."""
     await open_db_engine()
     purge_task = asyncio.create_task(_purge_loop())
+
+    # Notify BIND secondaries on startup
+    from app.services.dns import DnsService
+    dns = DnsService(settings=get_settings())
+    await dns.notify()
+    await dns.close()
+
     try:
         yield
     finally:

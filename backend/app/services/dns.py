@@ -224,6 +224,18 @@ class DnsService:
                 expected_name,
             )
 
+    async def notify(self) -> None:
+        """Send a DNS NOTIFY to all secondaries for the managed zone."""
+        if not self._enabled:
+            return
+        try:
+            c = self._get_client()
+            resp = await c.put(f"{self._zone_url()}/notify")
+            resp.raise_for_status()
+            logger.info("dns_notify_ok zone=%s", self._zone)
+        except Exception:
+            logger.warning("dns_notify_failed zone=%s", self._zone, exc_info=True)
+
     async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
 

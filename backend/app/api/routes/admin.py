@@ -391,6 +391,18 @@ async def delete_template(
         ) from exc
 
 
+@router.post("/dns/notify", status_code=204)
+async def trigger_dns_notify(
+    _: AuthCtx = Depends(require_admin),
+) -> None:
+    """Force a DNS NOTIFY to all BIND secondaries (admin only)."""
+    dns_svc = DnsService(settings=get_settings())
+    try:
+        await dns_svc.notify()
+    finally:
+        await dns_svc.close()
+
+
 @router.post("/purge", status_code=200)
 async def trigger_purge(
     _: AuthCtx = Depends(require_admin),
