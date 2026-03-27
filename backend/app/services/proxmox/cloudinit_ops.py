@@ -41,6 +41,7 @@ class CloudInitService:
         vm_ipv6: str,
         ipv6_prefix: int,
         ipv6_gateway: IPv6Address,
+        tags: str | None = None,
     ) -> dict[str, Any]:
         """Build the cloud-init configuration payload for a freshly cloned VM.
 
@@ -65,6 +66,8 @@ class CloudInitService:
         }
         if ci_password:
             payload["cipassword"] = ci_password
+        if tags:
+            payload["tags"] = tags
         return payload
 
     def update_vm_cloudinit(

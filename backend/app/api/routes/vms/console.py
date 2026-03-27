@@ -136,7 +136,6 @@ class _VmSession:
             pass
 
 
-# vm_id -> session  (process-local, single worker)
 _sessions: dict[int, _VmSession] = {}
 _sessions_lock = asyncio.Lock()
 

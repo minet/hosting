@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 
 type Request = { id: number; type: string; dns_label: string | null; status: string; created_at: string }
 
@@ -19,6 +19,11 @@ export default function RequestModal({ vmNetwork, requests, reqType, setReqType,
   const hasActiveDns = requests.some(r => r.type === 'dns' && r.status !== 'rejected')
   const canRequest = (reqType === 'ipv4' && !hasActiveIpv4) || (reqType === 'dns' && !hasActiveDns)
 
+  function handleRetry(r: Request) {
+    setReqType(r.type as 'ipv4' | 'dns')
+    if (r.type === 'dns' && r.dns_label) setReqDnsLabel(r.dns_label)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl p-6 flex flex-col gap-4 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
@@ -32,10 +37,20 @@ export default function RequestModal({ vmNetwork, requests, reqType, setReqType,
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">Demandes précédentes</p>
             {requests.map(r => {
               const statusColor = r.status === 'approved' ? 'text-emerald-600 bg-emerald-50' : r.status === 'rejected' ? 'text-red-500 bg-red-50' : 'text-amber-600 bg-amber-50'
+              const canRetry = r.status === 'rejected'
               return (
                 <div key={r.id} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-50 border border-neutral-100 text-xs">
                   <span className="flex-1 text-neutral-600">{r.type === 'ipv4' ? 'IPv4' : `DNS : ${r.dns_label}`}</span>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusColor}`}>{r.status}</span>
+                  {canRetry && (
+                    <button
+                      onClick={() => handleRetry(r)}
+                      className="text-neutral-400 hover:text-blue-500 transition-colors cursor-pointer"
+                      title="Réessayer avec ces paramètres"
+                    >
+                      <RotateCcw size={12} />
+                    </button>
+                  )}
                 </div>
               )
             })}

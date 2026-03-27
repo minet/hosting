@@ -58,6 +58,7 @@ class VMTemplateResponse(BaseModel):
 
     template_id: int
     name: str
+    is_active: bool = True
 
 
 class VMNetworkResponse(BaseModel):
@@ -479,3 +480,9 @@ class AdminTemplateCreateBody(BaseModel):
 
     template_id: int = Field(ge=1001, le=1999)
     name: str = Field(min_length=1, max_length=128)
+
+
+class AdminTemplateActiveBody(BaseModel):
+    """Request body for toggling a template's active state (admin only)."""
+
+    is_active: bool

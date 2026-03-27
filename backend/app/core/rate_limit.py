@@ -15,12 +15,8 @@ Old entries are lazily purged on each check, and stale IPs are evicted
 periodically to prevent unbounded memory growth.
 """
 
-from __future__ import annotations
-
 import time
 from collections import defaultdict
-from typing import Any
-
 from fastapi import HTTPException, Request, status
 
 # Maximum number of distinct bucket keys before a full eviction pass is forced.

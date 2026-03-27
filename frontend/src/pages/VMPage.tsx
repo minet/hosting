@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Play, TerminalSquare } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Play, TerminalSquare } from 'lucide-react'
 import { apiFetch, ApiError } from '../api'
 
 const VMTerminal = lazy(() => import('../components/VMTerminal'))
@@ -40,10 +40,12 @@ export default function VMPage() {
   const [mobileTermOpen, setMobileTermOpen] = useState(false)
   const [overlayHeight, setOverlayHeight] = useState(0)
   const [onboot, setOnboot] = useState<boolean | null>(null)
+  const [deprecatedBannerDismissed, setDeprecatedBannerDismissed] = useState(false)
 
   const running = vmStatusEntry?.status === 'running'
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
   const canAccessConsole = !me.is_admin || (vm?.current_user_role === 'owner')
+  const templateDeprecated = vm !== null && vm.template.is_active === false
   const uptime = vmStatusEntry?.uptime ?? null
   const realmPrefix = me.user_id ? me.user_id.split(':').slice(0, 2).join(':') : null
 
@@ -91,6 +93,18 @@ export default function VMPage() {
 
   return (
     <>
+    {templateDeprecated && !deprecatedBannerDismissed && (
+      <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium rounded-b-xl shadow-sm">
+        <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+        <span className="flex-1">Votre VM utilise une template dépréciée. Il vous est conseillé de la recréer avec une template à jour. La modification des ressources et le terminal sont désactivés.</span>
+        <button
+          onClick={() => setDeprecatedBannerDismissed(true)}
+          className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-700 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+        >
+          OK
+        </button>
+      </div>
+    )}
     {showDestroyModal && (
       <DestroyModal
         vmName={vm?.name}
@@ -182,7 +196,7 @@ export default function VMPage() {
       />
 
       {/* Bouton terminal mobile */}
-      {vmId && running && canAccessConsole && (
+      {vmId && running && canAccessConsole && !templateDeprecated && (
         <button
           onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
           className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-white text-sm font-semibold transition-colors cursor-pointer h-12"
@@ -195,15 +209,22 @@ export default function VMPage() {
       {/* Terminal — tablette & desktop uniquement */}
       {vmId && isDesktop && (
         <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 shadow-md rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
-          {running && canAccessConsole && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
-          {running && !canAccessConsole && (
+          {running && canAccessConsole && !templateDeprecated && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
+          {templateDeprecated && (
+            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+              <AlertTriangle size={24} className="text-amber-500" />
+              <p className="text-sm text-white/70 font-medium">Template dépréciée</p>
+              <p className="text-xs text-neutral-500 text-center px-6">Le terminal est désactivé. Recréez votre VM avec une template à jour.</p>
+            </div>
+          )}
+          {!templateDeprecated && running && !canAccessConsole && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <TerminalSquare size={24} className="text-neutral-500" />
               <p className="text-sm text-white/70 font-medium">Console non disponible</p>
               <p className="text-xs text-neutral-500 text-center px-6">En tant qu'administrateur, vous ne pouvez pas accéder à la console des VMs d'autres utilisateurs.</p>
             </div>
           )}
-          {!running && (
+          {!templateDeprecated && !running && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <p className="text-sm text-white/70 font-medium">La VM est éteinte</p>
               <button
@@ -219,14 +240,16 @@ export default function VMPage() {
         </div>
       )}
 
-      <VMResourcesCard
-        vm={vm}
-        running={running}
-        isOwner={isOwner}
-        onOpenResModal={() => res.setResModalOpen(true)}
-      />
-
-      <VMHistoryCard tasks={tasks} />
+      <div className="md:col-span-3 xl:col-span-3 flex gap-2 self-start overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
+        <VMResourcesCard
+          vm={vm}
+          running={running}
+          isOwner={isOwner}
+          templateDeprecated={templateDeprecated}
+          onOpenResModal={() => res.setResModalOpen(true)}
+        />
+        <VMHistoryCard tasks={tasks} />
+      </div>
 
       <VMAccessCard
         vm={vm}

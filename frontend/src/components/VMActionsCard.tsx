@@ -21,7 +21,7 @@ export default function VMActionsCard({ running, isOwner, loadingAction, onboot,
           <button
             onClick={onToggleOnboot}
             disabled={!!loadingAction || !isOwner || onboot === null}
-            className="w-full h-full flex items-center justify-center gap-2 rounded-md bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-xs font-semibold text-neutral-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer py-2.5"
+            className={`w-full h-full flex items-center justify-center gap-2 rounded-md border text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer py-2.5 ${onboot ? 'bg-violet-50 hover:bg-violet-100 border-violet-300 text-violet-700' : 'bg-neutral-50 hover:bg-neutral-100 border-neutral-200 text-neutral-600'}`}
           >
             <span>Auto-start</span>
             <span className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors ${onboot ? 'bg-violet-500' : 'bg-neutral-300'}`}>

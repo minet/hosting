@@ -26,11 +26,8 @@ const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
   .map((r: string) => r.trim().replace(/^\//, ''))
   .filter(Boolean)
 
-const DEV_MODE = import.meta.env.DEV
-
-function isAccessDenied(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): boolean {
+function isAccessDenied(me: { is_admin: boolean; groups: string[] }): boolean {
   if (me.is_admin) return false
-  if (DEV_MODE && !me.ldap_login) return true
   return RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))
 }
 

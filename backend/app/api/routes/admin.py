@@ -21,8 +21,10 @@ from app.api.routes.vms.schemas import (
     AdminRequestListResponse,
     AdminRequestResponse,
     AdminRequestUpdateBody,
+    AdminTemplateActiveBody,
     AdminTemplateCreateBody,
     ResourcesResponse,
+    TemplateListResponse,
     VMAssignIPv4Response,
     VMCreateBody,
     VMDetailResponse,
@@ -32,7 +34,7 @@ from app.auth import AuthCtx, require_admin
 from app.core.config import get_settings
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
-from app.db.repositories.vm import VmCmdRepo
+from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.auth.keycloak_admin import (
     fetch_keycloak_group_members_async,
     fetch_keycloak_user_by_id_async,
@@ -301,8 +303,8 @@ async def get_cluster_status(
     Combines node resources, storage resources, and Proxmox version
     into a single response.
     """
-    gw = get_proxmox_gateway()
     try:
+        gw = get_proxmox_gateway()
         nodes, storages, version = await asyncio.gather(
             asyncio.to_thread(gw.cluster_resources, type="node"),
             asyncio.to_thread(gw.cluster_resources, type="storage"),
@@ -321,8 +323,8 @@ async def get_node_metrics(
     _: AuthCtx = Depends(require_admin),
 ) -> dict[str, Any]:
     """Return historical RRD metrics for a Proxmox node (admin only)."""
-    gw = get_proxmox_gateway()
     try:
+        gw = get_proxmox_gateway()
         items = await asyncio.to_thread(gw.node_rrddata, node=node, timeframe=timeframe, cf=cf)
     except ProxmoxError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
@@ -350,7 +352,18 @@ async def assign_vm_ipv4(
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 
-@router.post("/templates", response_model=VMTemplateResponse, status_code=201)
+@router.get("/admin/templates", response_model=TemplateListResponse)
+async def list_templates_admin(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TemplateListResponse:
+    """List all templates including inactive ones (admin only)."""
+    repo = VmQueryRepo(db)
+    rows = await repo.list_templates(active_only=False)
+    return TemplateListResponse.model_validate({"items": rows, "count": len(rows)})
+
+
+@router.post("/admin/templates", response_model=VMTemplateResponse, status_code=201)
 async def create_template(
     body: AdminTemplateCreateBody,
     _: AuthCtx = Depends(require_admin),
@@ -370,10 +383,27 @@ async def create_template(
             status_code=status.HTTP_409_CONFLICT,
             detail="Template with this ID or name already exists",
         ) from exc
-    return VMTemplateResponse(template_id=body.template_id, name=body.name)
+    return VMTemplateResponse(template_id=body.template_id, name=body.name, is_active=True)
 
 
-@router.delete("/templates/{template_id}", status_code=204)
+@router.patch("/admin/templates/{template_id}/active", response_model=VMTemplateResponse)
+async def set_template_active(
+    template_id: int,
+    body: AdminTemplateActiveBody,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> VMTemplateResponse:
+    """Toggle the ``is_active`` flag of a template (admin only)."""
+    cmd_repo = VmCmdRepo(db)
+    query_repo = VmQueryRepo(db)
+    if not await cmd_repo.set_template_active(template_id=template_id, is_active=body.is_active):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    await db.commit()
+    row = await query_repo.get_template(template_id)
+    return VMTemplateResponse.model_validate(row)
+
+
+@router.delete("/admin/templates/{template_id}", status_code=204)
 async def delete_template(
     template_id: int,
     _: AuthCtx = Depends(require_admin),
@@ -394,15 +424,6 @@ async def delete_template(
             status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete template: VMs still reference it",
         ) from exc
-
-
-@router.post("/dns/notify", status_code=204)
-async def trigger_dns_notify(
-    _: AuthCtx = Depends(require_admin),
-) -> None:
-    """Force a DNS NOTIFY to all BIND secondaries (admin only)."""
-    async with DnsService(settings=get_settings()) as dns_svc:
-        await dns_svc.notify()
 
 
 @router.post("/purge", status_code=200)

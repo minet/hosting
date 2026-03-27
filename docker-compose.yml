@@ -36,7 +36,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -71,7 +71,7 @@ services:
       AUTH_ADMIN_GROUPS: ${AUTH_ADMIN_GROUPS:-admin}
       AUTH_USER_GROUPS: ${AUTH_USER_GROUPS:-cluster-dev}
       # Proxmox — defaults to luna.priv.minet.net, TOKEN_ID/SECRET in backend/.env
-      PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://luna.priv.minet.net:8006}
+      PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://192.168.103.59:8006}
       PROXMOX_VERIFY_TLS: ${PROXMOX_VERIFY_TLS:-false}
       # PowerDNS
       PDNS_API_URL: ${PDNS_API_URL:-http://pdns:8081}

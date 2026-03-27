@@ -254,6 +254,7 @@ class VmCreateService:
                 username=cmd.resource.username,
                 password=cmd.resource.password,
                 ssh_public_key=cmd.resource.ssh_public_key,
+                tags=f"{self.settings.app_env}-hosting",
             )
             logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s node=%s", ctx.user_id, res.vm_id, node)
             return node

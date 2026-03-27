@@ -161,6 +161,7 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
+        tags: str | None = None,
     ) -> str:
         """Clone a template and configure a new VM with the supplied parameters.
 
@@ -188,6 +189,7 @@ class ProxmoxGateway:
                 username=username,
                 password=password,
                 ssh_public_key=ssh_public_key,
+                tags=tags,
             )
         )
 
@@ -203,6 +205,7 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
+        tags: str | None = None,
     ) -> str:
         """Internal implementation of VM creation.
 
@@ -244,6 +247,7 @@ class ProxmoxGateway:
             vm_ipv6=vm_ipv6,
             ipv6_prefix=prefix,
             ipv6_gateway=gw6,
+            tags=tags,
         )
         self._client.nodes(target_node).qemu(vm_id).config.post(**payload)
 

@@ -16,8 +16,14 @@
   },
   "roles": {
     "realm": [
-      { "name": "user", "description": "Regular user" },
-      { "name": "admin", "description": "Administrator" }
+      {
+        "name": "user",
+        "description": "Regular user"
+      },
+      {
+        "name": "admin",
+        "description": "Administrator"
+      }
     ]
   },
   "groups": [
@@ -40,12 +46,23 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "admin", "temporary": false }
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
       ],
-      "groups": ["/cluster-dev", "/admin"],
+      "groups": [
+        "/cluster-dev",
+        "/admin"
+      ],
       "attributes": {
-        "cotise_end": ["4102444800000"],
-        "dateSignedHosting": ["2025-01-01"]
+        "cotise_end": [
+          "4102444800000"
+        ],
+        "dateSignedHosting": [
+          "2025-01-01"
+        ]
       }
     },
     {
@@ -56,12 +73,22 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "user", "temporary": false }
+        {
+          "type": "password",
+          "value": "user",
+          "temporary": false
+        }
       ],
-      "groups": ["/cluster-dev"],
+      "groups": [
+        "/cluster-dev"
+      ],
       "attributes": {
-        "cotise_end": ["4102444800000"],
-        "dateSignedHosting": ["2025-01-01"]
+        "cotise_end": [
+          "4102444800000"
+        ],
+        "dateSignedHosting": [
+          "2025-01-01"
+        ]
       }
     },
     {
@@ -72,11 +99,19 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "newuser", "temporary": false }
+        {
+          "type": "password",
+          "value": "newuser",
+          "temporary": false
+        }
       ],
-      "groups": ["/cluster-dev"],
+      "groups": [
+        "/cluster-dev"
+      ],
       "attributes": {
-        "cotise_end": ["4102444800000"]
+        "cotise_end": [
+          "4102444800000"
+        ]
       }
     },
     {
@@ -87,12 +122,22 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "expired", "temporary": false }
+        {
+          "type": "password",
+          "value": "expired",
+          "temporary": false
+        }
       ],
-      "groups": ["/cluster-dev"],
+      "groups": [
+        "/cluster-dev"
+      ],
       "attributes": {
-        "cotise_end": ["1704067200000"],
-        "dateSignedHosting": ["2025-01-01"]
+        "cotise_end": [
+          "1704067200000"
+        ],
+        "dateSignedHosting": [
+          "2025-01-01"
+        ]
       }
     },
     {
@@ -103,12 +148,46 @@
       "enabled": true,
       "emailVerified": true,
       "credentials": [
-        { "type": "password", "value": "outsider", "temporary": false }
+        {
+          "type": "password",
+          "value": "outsider",
+          "temporary": false
+        }
       ],
       "groups": [],
       "attributes": {
-        "cotise_end": ["4102444800000"],
-        "dateSignedHosting": ["2025-01-01"]
+        "cotise_end": [
+          "4102444800000"
+        ],
+        "dateSignedHosting": [
+          "2025-01-01"
+        ]
+      }
+    },
+    {
+      "username": "recently_expired",
+      "email": "recently_expired@dev.local",
+      "firstName": "Recently",
+      "lastName": "Expired",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "recently_expired",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/cluster-dev"
+      ],
+      "attributes": {
+        "cotise_end": [
+          "1767225600000"
+        ],
+        "dateSignedHosting": [
+          "2025-01-01"
+        ]
       }
     }
   ],

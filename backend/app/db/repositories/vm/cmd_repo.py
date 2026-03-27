@@ -190,8 +190,22 @@ class VmCmdRepo:
         :param template_id: Proxmox VMID of the template.
         :param name: Human-readable name.
         """
-        self.db.add(Template(template_id=template_id, name=name))
+        self.db.add(Template(template_id=template_id, name=name, is_active=True))
         await self.db.flush()
+
+    async def set_template_active(self, *, template_id: int, is_active: bool) -> bool:
+        """Set the ``is_active`` flag on a template.
+
+        :param template_id: The template identifier.
+        :param is_active: New value for the flag.
+        :returns: ``True`` if the template was found and updated, ``False`` otherwise.
+        """
+        tpl = await self.db.get(Template, template_id)
+        if tpl is None:
+            return False
+        tpl.is_active = is_active
+        await self.db.flush()
+        return True
 
     async def delete_template(self, template_id: int) -> bool:
         """Delete a template by its ID.

@@ -148,8 +148,8 @@ class VmQueryService:
         :rtype: dict[str, Any]
         :raises HTTPException: 503 on database errors.
         """
-        rows = await self._db_call(self.repo.list_templates())
-        items = [{"template_id": row["template_id"], "name": row["name"]} for row in rows]
+        rows = await self._db_call(self.repo.list_templates(active_only=True))
+        items = [{"template_id": row["template_id"], "name": row["name"], "is_active": row["is_active"]} for row in rows]
         return {"items": items, "count": len(items)}
 
     async def get_resources(self, *, user_id: str) -> dict[str, Any]:
@@ -237,7 +237,7 @@ class VmQueryService:
             "cpu_cores": row["cpu_cores"],
             "ram_mb": row["ram_mb"],
             "disk_gb": row["disk_gb"],
-            "template": {"template_id": row["template_id"], "name": row["template_name"]},
+            "template": {"template_id": row["template_id"], "name": row["template_name"], "is_active": row.get("template_is_active", True)},
             "network": {"ipv4": row["ipv4"], "ipv6": row["ipv6"], "mac": row["mac"]},
             "current_user_role": role,
             "username": row.get("username") if role in ("owner", "admin") else None,
