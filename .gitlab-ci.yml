@@ -2,6 +2,9 @@ stages:
   - docker
   - deploy
 
+variables:
+  IMAGE_REGISTRY_BASE: $CI_REGISTRY_IMAGE
+
 # ── Helper ────────────────────────────────────────────────────────────────────
 
 .kaniko_auth: &kaniko_auth
@@ -114,7 +117,7 @@ deploy_prod:
     strategy: depend
     inputs:
       folder_name: hosting.minet.net
-      image_registry: $IMAGE_REGISTRY_BASE
+      image_registry: $CI_REGISTRY_IMAGE
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
@@ -126,6 +129,6 @@ deploy_preprod:
     strategy: depend
     inputs:
       folder_name: hosting-dev.minet.net
-      image_registry: $IMAGE_REGISTRY_BASE
+      image_registry: $CI_REGISTRY_IMAGE
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
