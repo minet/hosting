@@ -22,10 +22,10 @@ docker_backend:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/backend"
       --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile"
-      --destination "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_REF_SLUG"
-      --destination "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA"
+      --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_REF_SLUG"
+      --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
       --cache=true
-      --cache-repo "$CI_REGISTRY_IMAGE/backend/cache"
+      --cache-repo "$IMAGE_REGISTRY_BASE/backend/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
@@ -46,13 +46,13 @@ docker_frontend_prod:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/frontend"
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
-      --destination "$CI_REGISTRY_IMAGE/frontend:main"
-      --destination "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:main"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
       --build-arg "VITE_API_URL=https://hosting.minet.net"
       --build-arg "VITE_DNS_ZONE=h.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
       --cache=true
-      --cache-repo "$CI_REGISTRY_IMAGE/frontend/cache"
+      --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
@@ -70,13 +70,13 @@ docker_frontend_preprod:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/frontend"
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
-      --destination "$CI_REGISTRY_IMAGE/frontend:pre-prod"
-      --destination "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:pre-prod"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
       --build-arg "VITE_API_URL=https://hosting-dev.minet.net"
       --build-arg "VITE_DNS_ZONE=hdev.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
       --cache=true
-      --cache-repo "$CI_REGISTRY_IMAGE/frontend/cache"
+      --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
@@ -92,10 +92,10 @@ docker_pdns:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/pdns"
       --dockerfile "$CI_PROJECT_DIR/pdns/Dockerfile"
-      --destination "$CI_REGISTRY_IMAGE/pdns:$CI_COMMIT_REF_SLUG"
-      --destination "$CI_REGISTRY_IMAGE/pdns:$CI_COMMIT_SHORT_SHA"
+      --destination "$IMAGE_REGISTRY_BASE/pdns:$CI_COMMIT_REF_SLUG"
+      --destination "$IMAGE_REGISTRY_BASE/pdns:$CI_COMMIT_SHORT_SHA"
       --cache=true
-      --cache-repo "$CI_REGISTRY_IMAGE/pdns/cache"
+      --cache-repo "$IMAGE_REGISTRY_BASE/pdns/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
@@ -114,7 +114,7 @@ deploy_prod:
     strategy: depend
     inputs:
       folder_name: hosting.minet.net
-      image_registry: $CI_REGISTRY_IMAGE
+      image_registry: $IMAGE_REGISTRY_BASE
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
@@ -126,6 +126,6 @@ deploy_preprod:
     strategy: depend
     inputs:
       folder_name: hosting-dev.minet.net
-      image_registry: $CI_REGISTRY_IMAGE
+      image_registry: $IMAGE_REGISTRY_BASE
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
