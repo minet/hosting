@@ -95,7 +95,7 @@ export default function Dashboard() {
 
       {/* VM section */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-3 gap-3 pb-3">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 pb-3">
           {vmsLoading ? (
             <>
               <ChartCardSkeleton className="h-32" />
