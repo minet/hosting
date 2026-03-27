@@ -58,6 +58,7 @@ docker_frontend_prod:
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
       --use-new-run
+      --compressed-caching=false
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
@@ -83,6 +84,7 @@ docker_frontend_preprod:
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
       --use-new-run
+      --compressed-caching=false
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
