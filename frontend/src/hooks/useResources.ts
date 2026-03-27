@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
-import { ResourcesSchema, type Resources } from '../schemas'
+import { ResourcesSchema } from '../schemas'
 
 export function useResources() {
   const { data } = useQuery({
