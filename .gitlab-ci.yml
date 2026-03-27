@@ -81,8 +81,6 @@ docker_frontend_preprod:
       --use-new-run
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
-      changes:
-        - frontend/**/*
 
 docker_pdns:
   stage: docker
