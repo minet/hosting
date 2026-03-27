@@ -178,7 +178,7 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     date_signed_hosting = _get("dateSignedHosting")
     ldap_login = _get("ldapLogin")
 
-    if not nom or not prenom or cotise_end is None or date_signed_hosting is None or ldap_login is None:
+    if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
         profile = fetch_keycloak_user_profile(username) if username else None
         if profile:
             nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
@@ -186,7 +186,6 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
             departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
             date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
-            ldap_login = ldap_login or profile.get("ldapLogin")
 
     return {
         "sub": payload.get("sub"),
