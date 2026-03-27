@@ -26,9 +26,13 @@ const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
   .map((r: string) => r.trim().replace(/^\//, ''))
   .filter(Boolean)
 
-function isAccessDenied(me: { is_admin: boolean; groups: string[] }): boolean {
-  if (me.is_admin) return false
-  return RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))
+const IS_PREPROD = import.meta.env.VITE_APP_ENV === 'preprod'
+
+function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): 'preprod' | 'restricted' | null {
+  if (me.is_admin) return null
+  if (IS_PREPROD && !me.ldap_login) return 'preprod'
+  if (RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))) return 'restricted'
+  return null
 }
 
 function PageFallback() {
@@ -51,7 +55,8 @@ export default function App() {
 
   if (auth.status !== 'authenticated') return null
 
-  if (isAccessDenied(auth.me)) return <AccessDenied />
+  const denied = accessDeniedReason(auth.me)
+  if (denied) return <AccessDenied reason={denied} />
 
   if (!auth.me.is_admin && !auth.me.date_signed_hosting) {
     return <CharterPage onSigned={auth.refresh} />

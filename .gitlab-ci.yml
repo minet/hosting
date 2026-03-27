@@ -78,6 +78,7 @@ docker_frontend_preprod:
       --build-arg "VITE_API_URL=https://hosting-dev.minet.net"
       --build-arg "VITE_DNS_ZONE=hdev.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
+      --build-arg "VITE_APP_ENV=preprod"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
