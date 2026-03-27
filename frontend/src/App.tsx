@@ -27,7 +27,7 @@ const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
   .map((r: string) => r.trim().replace(/^\//, ''))
   .filter(Boolean)
 
-const IS_PREPROD = import.meta.env.VITE_APP_ENV === 'preprod' || import.meta.env.DEV
+const IS_PREPROD = import.meta.env.VITE_APP_ENV === 'preprod'
 
 function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): 'preprod' | 'restricted' | null {
   if (me.is_admin) return null

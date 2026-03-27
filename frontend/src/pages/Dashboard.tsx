@@ -70,11 +70,6 @@ export default function Dashboard() {
           <WelcomeCard />
         </div>
 
-        {/* Titre gauges */}
-        <div className="hidden md:flex md:col-span-3 xl:col-span-3 items-center justify-center px-3 py-2 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900">
-          <span className="text-sm font-semibold text-neutral-600 dark:text-neutral-400">{t('resourceUsage')}</span>
-        </div>
-
         {/* Gauges — mobile */}
         <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 h-32 grid grid-cols-3 md:hidden p-2">
           {gaugeConfig ? gaugeConfig.map(g => (
@@ -82,12 +77,19 @@ export default function Dashboard() {
           )) : <div className="col-span-3 flex items-center justify-center"><div className="h-16 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 animate-pulse" /></div>}
         </div>
 
-        {/* Gauges — md+ */}
-        {(gaugeConfig ?? [{ label: 'RAM' }, { label: 'Disk' }, { label: 'CPU' }]).map(g => (
-          <div key={g.label} className="hidden md:flex border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 items-center justify-center p-2">
-            {'used' in g ? <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} /> : null}
+        {/* Titre + Gauges — md+ */}
+        <div className="hidden md:flex md:col-span-3 xl:col-span-3 md:row-span-2 flex-col gap-1.5">
+          <div className="flex items-center px-3 py-1 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900">
+            <span className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('resourceUsage')}</span>
           </div>
-        ))}
+          <div className="grid grid-cols-3 gap-3 flex-1">
+            {(gaugeConfig ?? [{ label: 'RAM' }, { label: 'Disk' }, { label: 'CPU' }]).map(g => (
+              <div key={g.label} className="flex border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 items-center justify-center p-2">
+                {'used' in g ? <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} /> : null}
+              </div>
+            ))}
+          </div>
+        </div>
 
       </div>
 
