@@ -27,8 +27,6 @@ export default function ResourceGauge({ label, used, total, unit, color = 'blue'
   const trackColor = isDark ? '#334155' : '#e2e8f0'
   const textColor = isDark ? '#e2e8f0' : '#1e293b'
   const mutedColor = isDark ? '#64748b' : '#94a3b8'
-  const labelColor = isDark ? '#d4d4d8' : undefined
-
   // Mobile: compact semicircle
   if (!isMd) {
     return (
