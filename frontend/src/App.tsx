@@ -36,7 +36,7 @@ function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_logi
 }
 
 function PageFallback() {
-  return <div className="flex items-center justify-center h-full text-xs text-neutral-400">Chargement…</div>
+  return <div className="flex items-center justify-center h-full text-xs text-neutral-400 dark:text-neutral-500">Chargement…</div>
 }
 
 function RouteBoundary({ children }: { children: ReactNode }) {

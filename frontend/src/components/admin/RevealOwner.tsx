@@ -34,10 +34,10 @@ export default function RevealOwner({ ownerId }: { ownerId: string }) {
   return (
     <div className="flex flex-col gap-0.5" title={ownerId}>
       {name
-        ? <span className="text-xs font-medium text-neutral-700">{name}</span>
-        : <span className="font-mono text-xs text-neutral-500">{ownerId}</span>
+        ? <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">{name}</span>
+        : <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">{ownerId}</span>
       }
-      {identity?.email && <span className="text-xs text-neutral-400">{identity.email}</span>}
+      {identity?.email && <span className="text-xs text-neutral-400 dark:text-neutral-500">{identity.email}</span>}
     </div>
   )
 }

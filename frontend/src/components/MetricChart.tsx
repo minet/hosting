@@ -80,7 +80,7 @@ const TIMEFRAMES = [
 const ChartTooltip = memo(function ChartTooltip({ active, payload, def }: { active?: boolean; payload?: { color: string; value: number }[]; def: MetricDef }) {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-white border border-neutral-200 rounded px-2 py-1 text-xs text-neutral-700 shadow flex flex-col gap-0.5">
+    <div className="bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded px-2 py-1 text-xs text-neutral-700 dark:text-neutral-300 shadow flex flex-col gap-0.5">
       {payload.map((p, i) => (
         <span key={i} style={{ color: p.color }}>
           {i === 0 && def.labelA ? `${def.labelA}: ` : i === 1 && def.labelB ? `${def.labelB}: ` : ''}
@@ -129,15 +129,15 @@ export default function MetricChart({ vmId, className = '' }: Props) {
   const filled = data.filter(d => d.a != null)
 
   return (
-    <div className={`border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col overflow-hidden ${className}`}>
+    <div className={`border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-4 py-3 flex flex-col overflow-hidden ${className}`}>
       {/* Titre + timeframe */}
       <div className="flex items-center justify-between mb-1.5 min-w-0 gap-2">
         <div className="flex items-center gap-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">{def.label}</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{def.label}</p>
           <button
             onClick={refresh}
             disabled={loading}
-            className="text-neutral-300 hover:text-neutral-500 transition-colors cursor-pointer disabled:opacity-40"
+            className="text-neutral-300 dark:text-neutral-600 hover:text-neutral-500 dark:hover:text-neutral-400 transition-colors cursor-pointer disabled:opacity-40"
           >
             <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -149,8 +149,8 @@ export default function MetricChart({ vmId, className = '' }: Props) {
               onClick={() => setTimeframe(tf.key)}
               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer ${
                 timeframe === tf.key
-                  ? 'bg-neutral-900 text-white'
-                  : 'text-neutral-400 hover:text-neutral-600'
+                  ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900'
+                  : 'text-neutral-400 dark:text-neutral-500 hover:text-neutral-600 dark:hover:text-neutral-300'
               }`}
             >
               {tf.label}
@@ -168,7 +168,7 @@ export default function MetricChart({ vmId, className = '' }: Props) {
             className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors cursor-pointer border ${
               selectedKey === m.key
                 ? 'text-white border-transparent'
-                : 'text-neutral-400 border-neutral-200 hover:border-neutral-300'
+                : 'text-neutral-400 dark:text-neutral-500 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600'
             }`}
             style={selectedKey === m.key ? { backgroundColor: m.colorA, borderColor: m.colorA } : {}}
           >
@@ -179,9 +179,9 @@ export default function MetricChart({ vmId, className = '' }: Props) {
 
       {/* Graphe */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-neutral-300 text-xs">Chargement…</div>
+        <div className="flex-1 flex items-center justify-center text-neutral-300 dark:text-neutral-600 text-xs">Chargement…</div>
       ) : filled.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-neutral-300 text-xs">Aucune donnée</div>
+        <div className="flex-1 flex items-center justify-center text-neutral-300 dark:text-neutral-600 text-xs">Aucune donnée</div>
       ) : (
         <div className="flex-1 min-h-0">
           <ResponsiveContainer width="100%" height="100%">

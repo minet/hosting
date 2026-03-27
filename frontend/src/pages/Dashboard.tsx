@@ -63,25 +63,25 @@ export default function Dashboard() {
       <div className="flex flex-col gap-3 md:grid md:grid-cols-3 xl:grid-cols-6 shrink-0">
 
         {/* Welcome */}
-        <div className="border border-neutral-100 shadow-md rounded-sm bg-white md:h-64 md:row-span-2 md:col-span-3 xl:col-span-3">
+        <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 md:h-64 md:row-span-2 md:col-span-3 xl:col-span-3">
           <WelcomeCard />
         </div>
 
         {/* Titre gauges — masqué sur mobile */}
-        <div className="hidden md:flex md:col-span-3 xl:col-span-3 items-center justify-center px-3 py-2 border border-neutral-100 shadow-md rounded-sm bg-white">
-          <span className="text-sm font-semibold text-neutral-600">Utilisation de vos ressources allouées</span>
+        <div className="hidden md:flex md:col-span-3 xl:col-span-3 items-center justify-center px-3 py-2 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900">
+          <span className="text-sm font-semibold text-neutral-600 dark:text-neutral-400">Utilisation de vos ressources allouées</span>
         </div>
 
         {/* Gauges — sur mobile : 3 en une ligne */}
-        <div className="border border-neutral-100 shadow-md rounded-sm bg-white h-32 grid grid-cols-3 md:hidden p-2">
+        <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 h-32 grid grid-cols-3 md:hidden p-2">
           {gaugeConfig ? gaugeConfig.map(g => (
             <ResourceGauge key={g.label} label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} />
-          )) : <div className="col-span-3 flex items-center justify-center"><div className="h-16 w-16 rounded-full bg-neutral-100 animate-pulse" /></div>}
+          )) : <div className="col-span-3 flex items-center justify-center"><div className="h-16 w-16 rounded-full bg-neutral-100 dark:bg-neutral-800 animate-pulse" /></div>}
         </div>
 
         {/* Gauges — sur md+ : une par cellule */}
         {(gaugeConfig ?? [{ label: 'RAM' }, { label: 'Disque' }, { label: 'CPU' }]).map(g => (
-          <div key={g.label} className="hidden md:flex border border-neutral-100 shadow-md rounded-sm bg-white items-center justify-center p-2">
+          <div key={g.label} className="hidden md:flex border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 items-center justify-center p-2">
             {'used' in g ? <ResourceGauge label={g.label} used={g.used} total={g.total} unit={g.unit} color={g.color} /> : null}
           </div>
         ))}

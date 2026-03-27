@@ -15,7 +15,7 @@ export default function Layout({ children }: Props) {
 
   return (
     <VMModalContext.Provider value={() => setVmModalOpen(true)}>
-      <div className="flex flex-col h-screen bg-white text-neutral-900 overflow-x-hidden">
+      <div className="flex flex-col h-screen bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 overflow-x-hidden">
         <Header onBurgerClick={() => setMobileOpen((o) => !o)} />
         <div className="flex-1 overflow-hidden relative">
           <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} onCreateVM={() => setVmModalOpen(true)} />

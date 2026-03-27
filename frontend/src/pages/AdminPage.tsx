@@ -143,7 +143,7 @@ export default function AdminPage() {
     <div className="flex items-center gap-2">
       {(['vms', 'templates', 'dns', 'proxmox'] as Tab[]).map(t => (
         <button key={t} onClick={() => setTab(t)}
-          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-100'}`}>
+          className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === t ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
           {t === 'vms' ? 'Machines virtuelles' : t === 'templates' ? 'Templates' : t === 'dns' ? 'DNS' : 'Proxmox'}
         </button>
       ))}
@@ -153,7 +153,7 @@ export default function AdminPage() {
   if (tab === 'templates') {
     return (
       <div className="flex flex-col gap-3 h-full">
-        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <TemplatesTab />
       </div>
     )
@@ -162,7 +162,7 @@ export default function AdminPage() {
   if (tab === 'dns') {
     return (
       <div className="flex flex-col gap-3 h-full">
-        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <DnsTab />
       </div>
     )
@@ -171,7 +171,7 @@ export default function AdminPage() {
   if (tab === 'proxmox') {
     return (
       <div className="flex flex-col gap-3 h-full">
-        <div className="shrink-0 border-b border-neutral-200 pb-2">{tabBar}</div>
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <ProxmoxTab />
       </div>
     )
@@ -180,7 +180,7 @@ export default function AdminPage() {
   return (
     <div className="flex flex-col gap-3 h-full">
       <div className="flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 border-b border-neutral-200 pb-2 w-full justify-between">
+        <div className="flex items-center gap-2 border-b border-neutral-200 dark:border-neutral-700 pb-2 w-full justify-between">
           {tabBar}
           <div className="flex items-center gap-3">
             {hasFilters && (
@@ -188,16 +188,16 @@ export default function AdminPage() {
                 <X size={11} /> Effacer les filtres
               </button>
             )}
-            <span className="text-xs text-neutral-400 font-mono">
+            <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
               {loading ? 'Chargement…' : `${sorted.length} / ${vms.length}`}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 shadow-sm">
+      <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 dark:border-neutral-700 shadow-sm">
         <table className="text-sm border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: Object.values(colWidths).reduce((a, b) => a + b, 0) }}>
-          <thead className="sticky top-0 z-10 border-b border-neutral-200">
+          <thead className="sticky top-0 z-10 border-b border-neutral-200 dark:border-neutral-700">
             <tr>
               <Th col="vm_id"        label="ID"           width={colWidths.vm_id}        {...thProps} />
               <Th col="status"       label="Statut"       width={colWidths.status}       {...thProps}
@@ -221,9 +221,9 @@ export default function AdminPage() {
               <Th col="cotise"       label="Cotisation"   width={colWidths.cotise}      {...thProps} />
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-neutral-100">
+          <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
             {!loading && sorted.length === 0 && (
-              <tr><td colSpan={12} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucune VM</td></tr>
+              <tr><td colSpan={12} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500 text-xs">Aucune VM</td></tr>
             )}
             {sorted.map(vm => (
               <VMTableRow
@@ -241,7 +241,7 @@ export default function AdminPage() {
         </table>
       </div>
 
-      <div className="text-xs text-neutral-400 text-right font-mono shrink-0">
+      <div className="text-xs text-neutral-400 dark:text-neutral-500 text-right font-mono shrink-0">
         Rows: {sorted.length}&nbsp;&nbsp;Total Rows: {vms.length}
       </div>
     </div>

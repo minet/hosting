@@ -11,7 +11,7 @@ function VMSidebarItem({ vm, expanded, onMobileClose }: { vm: { vm_id: number; n
     <Link
       to={`/vm/${vm.vm_id}`}
       onClick={onMobileClose}
-      className={`relative flex items-center py-2 rounded-sm text-neutral-600 hover:bg-neutral-50 overflow-hidden ${expanded ? 'gap-3 px-2 pl-3' : 'justify-center'}`}
+      className={`relative flex items-center py-2 rounded-sm text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 overflow-hidden ${expanded ? 'gap-3 px-2 pl-3' : 'justify-center'}`}
     >
       <span className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-full ${running ? 'bg-emerald-500' : 'bg-red-400'}`} />
       <Monitor size={16} className="shrink-0 ml-1" />
@@ -50,7 +50,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
 
       <aside
         className={`
-          fixed top-0 bottom-0 left-0 z-30 bg-white flex flex-col transition-all duration-200 ease-in-out shadow-[4px_0_12px_rgba(0,0,0,0.12)]
+          fixed top-0 bottom-0 left-0 z-30 bg-white dark:bg-neutral-900 flex flex-col transition-all duration-200 ease-in-out shadow-[4px_0_12px_rgba(0,0,0,0.12)] dark:shadow-[4px_0_12px_rgba(0,0,0,0.4)]
           ${mobileOpen ? 'translate-x-0 w-52' : '-translate-x-full md:translate-x-0'}
           ${hovered ? 'md:w-52' : 'md:w-14'}
         `}
@@ -62,7 +62,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
           {/* Section VMs */}
           <Link
             to="/"
-            className={`flex items-center py-2 rounded-sm text-neutral-500 border-b border-neutral-200 ${expanded ? 'gap-3 px-2' : 'justify-center'}`}
+            className={`flex items-center py-2 rounded-sm text-neutral-500 dark:text-neutral-400 border-b border-neutral-200 dark:border-neutral-700 ${expanded ? 'gap-3 px-2' : 'justify-center'}`}
           >
             <Monitor size={18} className="shrink-0" />
             <span className={`text-sm whitespace-nowrap overflow-hidden transition-all duration-200 ${expanded ? 'opacity-100 max-w-xs' : 'opacity-0 max-w-0'}`}>
@@ -75,10 +75,10 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
           ))}
 
           {/* Séparateur + bouton créer */}
-          <div className={vms.length > 0 ? 'border-t border-neutral-200 mt-1 pt-1' : ''}>
+          <div className={vms.length > 0 ? 'border-t border-neutral-200 dark:border-neutral-700 mt-1 pt-1' : ''}>
             <button
               onClick={onCreateVM}
-              className={`w-full flex items-center py-2 rounded-sm text-neutral-900 ${expanded ? 'gap-3 px-2' : 'justify-center'} cursor-pointer`}
+              className={`w-full flex items-center py-2 rounded-sm text-neutral-900 dark:text-neutral-100 ${expanded ? 'gap-3 px-2' : 'justify-center'} cursor-pointer`}
             >
               <Plus size={18} strokeWidth={3} className="shrink-0" />
               <span className={`text-sm font-semibold whitespace-nowrap overflow-hidden transition-all duration-200 ${expanded ? 'opacity-100 max-w-xs' : 'opacity-0 max-w-0'}`}>
@@ -93,7 +93,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
             href="https://github.com/andinox/hosting"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-2 text-xs px-3 py-2 border border-neutral-200 rounded-sm text-neutral-500"
+            className="flex items-center gap-2 text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-700 rounded-sm text-neutral-500 dark:text-neutral-400"
           >
             <span className="flex"><Star size={13} className="text-yellow-400 fill-yellow-400" /></span>
             Star on GitHub

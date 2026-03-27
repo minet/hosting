@@ -16,8 +16,8 @@ interface TaskItem {
   endtime: number | null
 }
 
-const inputClass = "w-full border border-neutral-200 rounded-md px-3 py-2 text-sm text-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 bg-white"
-const labelClass = "text-xs font-semibold text-neutral-500 uppercase tracking-wide"
+const inputClass = "w-full border border-neutral-200 dark:border-neutral-600 rounded-md px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 bg-white dark:bg-neutral-800"
+const labelClass = "text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide"
 
 
 export default function CreateVMModal({ onClose }: Props) {
@@ -176,19 +176,19 @@ export default function CreateVMModal({ onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={creating ? undefined : onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-neutral-100">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-3">
             <img src="/assets/pinguins/PenguinHeureux.svg" alt="Penguin" className="h-10 w-auto" />
             <div>
-              <h2 className="text-lg font-bold text-neutral-800 select-none">Créer une VM</h2>
-              <p className="text-xs text-neutral-400 select-none">Configurez votre nouvelle machine virtuelle</p>
+              <h2 className="text-lg font-bold text-neutral-800 dark:text-neutral-200 select-none">Créer une VM</h2>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 select-none">Configurez votre nouvelle machine virtuelle</p>
             </div>
           </div>
           {!creating && (
-            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 transition-colors cursor-pointer">
+            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 transition-colors cursor-pointer">
               <X size={20} />
             </button>
           )}
@@ -199,10 +199,10 @@ export default function CreateVMModal({ onClose }: Props) {
           <div className="flex flex-col items-center justify-center gap-4 py-12 px-6 text-center">
             <img src="/assets/pinguins/PinguinTriste.svg" alt="Triste" className="h-24 w-auto" />
             <div>
-              <p className="text-base font-bold text-neutral-800">Quota épuisé</p>
-              <p className="text-sm text-neutral-500 mt-1">Vous avez utilisé toutes vos ressources allouées. Supprimez une VM pour en créer une nouvelle.</p>
+              <p className="text-base font-bold text-neutral-800 dark:text-neutral-200">Quota épuisé</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">Vous avez utilisé toutes vos ressources allouées. Supprimez une VM pour en créer une nouvelle.</p>
             </div>
-            <button onClick={onClose} className="mt-2 px-5 py-2 text-sm font-semibold bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-md transition-colors cursor-pointer">
+            <button onClick={onClose} className="mt-2 px-5 py-2 text-sm font-semibold bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-md transition-colors cursor-pointer">
               Fermer
             </button>
           </div>
@@ -218,12 +218,12 @@ export default function CreateVMModal({ onClose }: Props) {
               style={{ animationDuration: '2s' }}
             />
             <div className="text-center">
-              <p className="text-sm font-semibold text-neutral-700">{statusText}</p>
+              <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{statusText}</p>
             </div>
             {error && (
               <div className="w-full">
-                <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-md text-center">{error}</p>
-                <button onClick={onClose} className="mt-3 w-full text-sm text-neutral-500 hover:text-neutral-700 cursor-pointer">Fermer</button>
+                <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950 px-3 py-2 rounded-md text-center">{error}</p>
+                <button onClick={onClose} className="mt-3 w-full text-sm text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer">Fermer</button>
               </div>
             )}
           </div>
@@ -232,9 +232,9 @@ export default function CreateVMModal({ onClose }: Props) {
 
             {/* Machine */}
             <section className="flex flex-col gap-4">
-              <h3 className="text-sm font-bold text-neutral-700 border-l-2 border-blue-400 pl-2">{name || 'Nouvelle VM'}</h3>
+              <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300 border-l-2 border-blue-400 pl-2">{name || 'Nouvelle VM'}</h3>
               <div className="flex flex-col gap-1">
-                <label className={labelClass}>Nom <span className="normal-case font-normal text-neutral-400">(max 10 car., lettres, chiffres, tirets)</span></label>
+                <label className={labelClass}>Nom <span className="normal-case font-normal text-neutral-400 dark:text-neutral-500">(max 10 car., lettres, chiffres, tirets)</span></label>
                 <input
                   className={inputClass}
                   value={name}
@@ -260,15 +260,15 @@ export default function CreateVMModal({ onClose }: Props) {
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className={labelClass}>CPU <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxCpu})</span></label>
+                  <label className={labelClass}>CPU <span className="block sm:inline normal-case font-normal text-neutral-400 dark:text-neutral-500">(max {maxCpu})</span></label>
                   <input className={inputClass} type="number" min={minCpu} max={maxCpu} value={cpu} onChange={e => setCpu(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className={labelClass}>RAM Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxRam})</span></label>
+                  <label className={labelClass}>RAM Go <span className="block sm:inline normal-case font-normal text-neutral-400 dark:text-neutral-500">(max {maxRam})</span></label>
                   <input className={inputClass} type="number" min={minRam} max={maxRam} value={ram} onChange={e => setRam(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className={labelClass}>Disque Go <span className="block sm:inline normal-case font-normal text-neutral-400">(max {maxDisk})</span></label>
+                  <label className={labelClass}>Disque Go <span className="block sm:inline normal-case font-normal text-neutral-400 dark:text-neutral-500">(max {maxDisk})</span></label>
                   <input className={inputClass} type="number" min={minDisk} max={maxDisk} value={disk} onChange={e => setDisk(e.target.value === '' ? '' : Number(e.target.value))} required />
                 </div>
               </div>
@@ -276,7 +276,7 @@ export default function CreateVMModal({ onClose }: Props) {
 
             {/* Accès */}
             <section className="flex flex-col gap-4">
-              <h3 className="text-sm font-bold text-neutral-700 border-l-2 border-blue-400 pl-2">Accès SSH</h3>
+              <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300 border-l-2 border-blue-400 pl-2">Accès SSH</h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className={labelClass}>Nom d'utilisateur</label>
@@ -298,11 +298,11 @@ export default function CreateVMModal({ onClose }: Props) {
               </div>
             </section>
 
-            {error && <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-md">{error}</p>}
+            {error && <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950 px-3 py-2 rounded-md">{error}</p>}
 
             {/* Actions */}
             <div className="flex gap-3 justify-end pt-1">
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-neutral-600 hover:text-neutral-800 transition-colors cursor-pointer">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors cursor-pointer">
                 Annuler
               </button>
               <button type="submit" className="px-5 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors cursor-pointer">

@@ -94,12 +94,12 @@ export default function VMPage() {
   return (
     <>
     {templateDeprecated && !deprecatedBannerDismissed && (
-      <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium rounded-b-xl shadow-sm">
+      <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-b-xl shadow-sm">
         <AlertTriangle size={13} className="shrink-0 text-amber-500" />
         <span className="flex-1">Votre VM utilise une template dépréciée. Il vous est conseillé de la recréer avec une template à jour. La modification des ressources et le terminal sont désactivés.</span>
         <button
           onClick={() => setDeprecatedBannerDismissed(true)}
-          className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 hover:bg-neutral-700 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+          className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[11px] font-semibold transition-colors cursor-pointer"
         >
           OK
         </button>
@@ -160,7 +160,7 @@ export default function VMPage() {
     {me.is_admin && (
       <button
         onClick={() => navigate('/admin')}
-        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 transition-colors mb-1 cursor-pointer"
+        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors mb-1 cursor-pointer"
       >
         <ArrowLeft size={13} />
         Retour au tableau admin
@@ -199,7 +199,7 @@ export default function VMPage() {
       {vmId && running && canAccessConsole && !templateDeprecated && (
         <button
           onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
-          className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-white text-sm font-semibold transition-colors cursor-pointer h-12"
+          className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 border border-neutral-700 dark:border-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors cursor-pointer h-12"
         >
           <TerminalSquare size={15} className="shrink-0" />
           Lancer le terminal
@@ -208,7 +208,7 @@ export default function VMPage() {
 
       {/* Terminal — tablette & desktop uniquement */}
       {vmId && isDesktop && (
-        <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 shadow-md rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
+        <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
           {running && canAccessConsole && !templateDeprecated && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
           {templateDeprecated && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">

@@ -1,9 +1,9 @@
 import { useToast } from '../contexts/ToastContext'
 
 const typeStyles = {
-  error: 'bg-red-50 border-red-200 text-red-700',
-  success: 'bg-emerald-50 border-emerald-200 text-emerald-700',
-  info: 'bg-blue-50 border-blue-200 text-blue-700',
+  error: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300',
+  success: 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300',
+  info: 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300',
 }
 
 export default function ToastContainer() {

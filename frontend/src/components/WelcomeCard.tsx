@@ -38,30 +38,30 @@ export default function WelcomeCard() {
       <div className="flex items-center gap-3">
         <img src="/assets/logo/icon_hosting_light.svg" alt="Hosting" className="h-8 md:h-8 xl:h-9" />
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-lg md:text-base xl:text-lg font-semibold text-neutral-800">
+          <span className="text-lg md:text-base xl:text-lg font-semibold text-neutral-800 dark:text-neutral-200">
             Bienvenue {name} sur Hosting !
           </span>
           {adhId && (
             <span className="flex items-center gap-1">
-              <span className="text-xs font-mono text-neutral-400">#{adhId}</span>
-              <button onClick={copyId} className="text-neutral-300 hover:text-neutral-500 transition-colors cursor-pointer">
+              <span className="text-xs font-mono text-neutral-400 dark:text-neutral-500">#{adhId}</span>
+              <button onClick={copyId} className="text-neutral-300 dark:text-neutral-600 hover:text-neutral-500 dark:hover:text-neutral-400 transition-colors cursor-pointer">
                 {copied ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
               </button>
             </span>
           )}
         </div>
       </div>
-      <div className="border-l-2 border-neutral-200 pl-3 flex flex-col gap-3">
-        <p className="text-sm md:text-xs xl:text-xs text-neutral-500 leading-relaxed">
+      <div className="border-l-2 border-neutral-200 dark:border-neutral-700 pl-3 flex flex-col gap-3">
+        <p className="text-sm md:text-xs xl:text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
           Ce service est gratuit si vous possédez déjà un compte MiNET avec une cotisation. Il vous permet de créer des machines virtuelles et de vous amuser dessus.
           {limits && (
-            <> Vous disposez d'un maximum de <span className="text-neutral-700 font-medium">{limits.cpu_cores} cœurs</span>, <span className="text-neutral-700 font-medium">{limits.ram_mb / 1024} Go de RAM</span> et <span className="text-neutral-700 font-medium">{limits.disk_gb} Go de disque</span> à répartir à votre guise sur des machines.</>
+            <> Vous disposez d'un maximum de <span className="text-neutral-700 dark:text-neutral-300 font-medium">{limits.cpu_cores} cœurs</span>, <span className="text-neutral-700 dark:text-neutral-300 font-medium">{limits.ram_mb / 1024} Go de RAM</span> et <span className="text-neutral-700 dark:text-neutral-300 font-medium">{limits.disk_gb} Go de disque</span> à répartir à votre guise sur des machines.</>
           )}
         </p>
         {me.cotise_end_ms && (
-          <p className="text-sm md:text-xs xl:text-xs text-neutral-500">
+          <p className="text-sm md:text-xs xl:text-xs text-neutral-500 dark:text-neutral-400">
             Votre cotisation expire dans{' '}
-            <span className="text-neutral-700 font-medium">
+            <span className="text-neutral-700 dark:text-neutral-300 font-medium">
               {(() => {
                 const diff = me.cotise_end_ms - Date.now()
                 const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -73,11 +73,11 @@ export default function WelcomeCard() {
           </p>
         )}
       </div>
-<button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 shadow-sm hover:shadow-md text-blue-700 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
+<button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 dark:border-blue-700 shadow-sm hover:shadow-md text-blue-700 dark:text-blue-300 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
         <img src="/assets/pinguins/PinguinFiere.svg" alt="Pinguin fière" className="h-[90%] w-auto" />
         <div className="flex flex-col items-start flex-1">
           <span className="font-semibold text-sm md:text-base xl:text-base">Créer une VM</span>
-          <span className="hidden md:block text-xs text-blue-500 font-normal">Créez et configurez votre machine</span>
+          <span className="hidden md:block text-xs text-blue-500 dark:text-blue-400 font-normal">Créez et configurez votre machine</span>
         </div>
         <ArrowRight className="h-5 w-5 text-blue-400" />
       </button>

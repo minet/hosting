@@ -30,15 +30,15 @@ interface Props {
 
 export default function VMInfoCard({ vm, status, loadingAction, running, isOwner, uptime, onOpenDnsRequest, onOpenIpRequest }: Props) {
   return (
-    <div className="md:col-span-2 xl:col-span-2 border border-neutral-100 shadow-md rounded-sm bg-white px-5 py-4 flex flex-col gap-4 min-w-0 overflow-hidden">
-      <div className="flex items-center gap-2 pb-3 border-b border-neutral-100 min-w-0">
+    <div className="md:col-span-2 xl:col-span-2 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col gap-4 min-w-0 overflow-hidden">
+      <div className="flex items-center gap-2 pb-3 border-b border-neutral-100 dark:border-neutral-800 min-w-0">
         {loadingAction ? (
-          <span className="w-2.5 h-2.5 shrink-0 rounded-full border-2 border-neutral-300 border-t-neutral-600 animate-spin" />
+          <span className="w-2.5 h-2.5 shrink-0 rounded-full border-2 border-neutral-300 dark:border-neutral-600 border-t-neutral-600 dark:border-t-neutral-300 animate-spin" />
         ) : (
           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${running ? 'bg-emerald-400' : 'bg-red-400'}`} />
         )}
-        <h1 className="text-base font-bold text-neutral-800 tracking-tight truncate">{vm.name}</h1>
-        <span className="text-sm text-neutral-400 font-medium shrink-0">#{vm.vm_id}</span>
+        <h1 className="text-base font-bold text-neutral-800 dark:text-neutral-200 tracking-tight truncate">{vm.name}</h1>
+        <span className="text-sm text-neutral-400 dark:text-neutral-500 font-medium shrink-0">#{vm.vm_id}</span>
         {isOwner ? (
           <Crown size={13} className="text-amber-400 shrink-0" fill="currentColor" strokeWidth={0} />
         ) : (
@@ -46,43 +46,43 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
             <Share2 size={13} className="text-blue-400" />
           </Tooltip>
         )}
-        <span className={`ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${running ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+        <span className={`ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${running ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400'}`}>
           {status ?? '…'}
         </span>
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-6 gap-y-4 w-full flex-1">
         <div className="min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">DNS</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">DNS</p>
             {isOwner && (
-              <button onClick={onOpenDnsRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[10px] font-semibold transition-colors cursor-pointer">
+              <button onClick={onOpenDnsRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-[10px] font-semibold transition-colors cursor-pointer">
                 <Pencil size={9} />
                 Demander
               </button>
             )}
           </div>
-          <p className="text-sm font-mono font-semibold text-neutral-800 leading-snug break-all">{vmFqdn(vm)}</p>
+          <p className="text-sm font-mono font-semibold text-neutral-800 dark:text-neutral-200 leading-snug break-all">{vmFqdn(vm)}</p>
         </div>
         <div className="min-w-0 overflow-hidden">
-          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 mb-1">Template</p>
-          <p className="text-sm font-semibold text-neutral-700 break-all">{vm.template.name}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-1">Template</p>
+          <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 break-all">{vm.template.name}</p>
         </div>
         <div className="min-w-0 overflow-hidden">
-          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 mb-1">Uptime</p>
-          <p className="text-sm font-semibold text-neutral-700">{formatUptime(uptime)}</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-1">Uptime</p>
+          <p className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">{formatUptime(uptime)}</p>
         </div>
         <div className="min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400">IP</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">IP</p>
             {isOwner && (
-              <button onClick={onOpenIpRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 text-[10px] font-semibold transition-colors cursor-pointer">
+              <button onClick={onOpenIpRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-[10px] font-semibold transition-colors cursor-pointer">
                 <Pencil size={9} />
                 Demander
               </button>
             )}
           </div>
-          <p className="text-sm font-mono font-semibold text-neutral-700 leading-snug break-all">{vm.network.ipv6 ?? '—'}</p>
-          {vm.network.ipv4 && <p className="text-sm font-mono font-semibold text-neutral-700 leading-snug break-all">{vm.network.ipv4}</p>}
+          <p className="text-sm font-mono font-semibold text-neutral-700 dark:text-neutral-300 leading-snug break-all">{vm.network.ipv6 ?? '—'}</p>
+          {vm.network.ipv4 && <p className="text-sm font-mono font-semibold text-neutral-700 dark:text-neutral-300 leading-snug break-all">{vm.network.ipv4}</p>}
         </div>
       </div>
     </div>
