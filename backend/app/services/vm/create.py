@@ -77,7 +77,6 @@ class VmCreateService:
         self.query_service = query_service
         self.gateway = gateway
         self.settings = settings
-        self.dns = DnsService(settings=settings)
 
     async def create(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> dict:
         """
@@ -111,11 +110,12 @@ class VmCreateService:
         await self._finalize_db(ctx=ctx, res=reservation, node=node)
 
         result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
-        await self.dns.create_records(
-            vm_id=reservation.vm_id,
-            ipv4=result.get("network", {}).get("ipv4"),
-            ipv6=reservation.vm_ipv6,
-        )
+        async with DnsService(settings=self.settings) as dns:
+            await dns.create_records(
+                vm_id=reservation.vm_id,
+                ipv4=result.get("network", {}).get("ipv4"),
+                ipv6=reservation.vm_ipv6,
+            )
         logger.info("vm_create_done user_id=%s vm_id=%s", ctx.user_id, reservation.vm_id)
         return result
 

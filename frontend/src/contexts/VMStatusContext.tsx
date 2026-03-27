@@ -82,6 +82,7 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
   const [vms, setVms] = useState<VMListItem[]>([])
   const knownIdsRef = useRef<Set<number>>(new Set())
   const esRef = useRef<EventSource | null>(null)
+  const retriesRef = useRef(0)
   const { toast } = useToast()
 
   async function refreshVMs() {
@@ -123,12 +124,18 @@ export function VMStatusProvider({ children }: { children: ReactNode }) {
       } catch { /* ignore */ }
     })
 
+    es.onopen = () => {
+      retriesRef.current = 0
+    }
+
     es.onerror = () => {
       es.close()
       esRef.current = null
+      const attempt = retriesRef.current++
+      const delay = Math.min(30_000, 1000 * Math.pow(2, attempt) + Math.random() * 500)
       setTimeout(() => {
         refreshVMs().then(ok => { if (ok) openStream() })
-      }, 3000)
+      }, delay)
     }
   }
 

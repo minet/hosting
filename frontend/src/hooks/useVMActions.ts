@@ -1,23 +1,31 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
+import { useMutationWithToast } from './useMutationWithToast'
 
 export function useVMActions(vmId: string | undefined) {
   const navigate = useNavigate()
-  const { toast } = useToast()
   const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const [showDestroyModal, setShowDestroyModal] = useState(false)
+
+  const actionMutation = useMutationWithToast<string>({
+    mutationFn: (action) =>
+      apiFetch(`/api/vms/${vmId}/${action}`, { method: action === 'destroy' ? 'DELETE' : 'POST' }),
+    invalidate: [['vms']],
+    fallbackError: "Échec de l'action",
+  })
+
+  const destroyMutation = useMutationWithToast({
+    mutationFn: () => apiFetch(`/api/vms/${vmId}`, { method: 'DELETE' }),
+    invalidate: [['vms']],
+    onSuccess: () => navigate('/'),
+    fallbackError: 'Échec de la suppression',
+  })
 
   async function doAction(action: 'start' | 'stop' | 'restart') {
     if (!vmId || loadingAction) return
     setLoadingAction(action)
-    try {
-      await apiFetch(`/api/vms/${vmId}/${action}`, { method: 'POST' })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : `Échec de l'action ${action}`
-      toast(msg)
-    }
+    await actionMutation.mutateAsync(action).catch(() => {})
     setLoadingAction(null)
   }
 
@@ -25,13 +33,7 @@ export function useVMActions(vmId: string | undefined) {
     if (!vmId || loadingAction) return
     setShowDestroyModal(false)
     setLoadingAction('destroy')
-    try {
-      await apiFetch(`/api/vms/${vmId}`, { method: 'DELETE' })
-      navigate('/')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Échec de la suppression'
-      toast(msg)
-    }
+    await destroyMutation.mutateAsync().catch(() => {})
     setLoadingAction(null)
   }
 

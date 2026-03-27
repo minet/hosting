@@ -13,6 +13,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -217,7 +218,7 @@ async def run_purge(
             try:
                 await cmd_repo.delete_vm_with_related(vm_id)
                 await db.commit()
-            except Exception:
+            except (SQLAlchemyError, OSError):
                 await db.rollback()
                 logger.exception("purge: failed to delete vm %s from DB (Proxmox already deleted)", vm_id)
                 continue
@@ -247,6 +248,7 @@ async def run_purge(
                     days_remaining,
                 )
 
+    await dns.close()
     result = {"warned": warned, "deleted": deleted}
     logger.info("purge: done — %s", result)
     return result

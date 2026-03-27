@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address
+
+logger = logging.getLogger(__name__)
 
 from proxmoxer import ProxmoxAPI
 
@@ -47,8 +50,7 @@ class VmIdAllocator:
         """
         used = used_vm_ids(client=self._client)
         suggested = self._suggested_next_id()
-        if self._is_usable_candidate(suggested=suggested, used=used):
-            assert suggested is not None
+        if self._is_usable_candidate(suggested=suggested, used=used) and suggested is not None:
             return suggested
 
         candidate = self._minimum
@@ -64,7 +66,8 @@ class VmIdAllocator:
         """
         try:
             return int(self._client.cluster.nextid.get())
-        except Exception:
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            logger.debug("suggested_next_id failed: %s", exc)
             return None
 
     def _is_usable_candidate(self, *, suggested: int | None, used: set[int]) -> bool:

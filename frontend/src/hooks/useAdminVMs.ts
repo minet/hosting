@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
 import { VMListSchema } from '../schemas'
 
 export interface AdminVM {
@@ -20,18 +20,16 @@ export interface AdminVM {
 }
 
 export function useAdminVMs() {
-  const [vms, setVMs] = useState<AdminVM[]>([])
-  const [loading, setLoading] = useState(true)
-  const { toast } = useToast()
+  const qc = useQueryClient()
 
-  function refresh() {
-    apiFetch('/api/vms', undefined, VMListSchema)
-      .then(data => setVMs(data.items as AdminVM[]))
-      .catch(err => toast(err.message ?? 'Impossible de charger les VMs'))
-      .finally(() => setLoading(false))
-  }
+  const { data, isLoading } = useQuery({
+    queryKey: ['vms'],
+    queryFn: () => apiFetch('/api/vms', undefined, VMListSchema),
+  })
 
-  useEffect(() => { refresh() }, [])
+  const refresh = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['vms'] })
+  }, [qc])
 
-  return { vms, loading, refresh }
+  return { vms: (data?.items ?? []) as AdminVM[], loading: isLoading, refresh }
 }

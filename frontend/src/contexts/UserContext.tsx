@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
-import type { Me } from '../useMe'
+import type { Me } from '../hooks/useMe'
 
 const UserContext = createContext<Me | null>(null)
 

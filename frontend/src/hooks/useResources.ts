@@ -1,30 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
 import { ResourcesSchema, type Resources } from '../schemas'
 
-const CACHE_KEY = 'resources_cache'
-
-function readCache(): Resources | null {
-  try {
-    const raw = sessionStorage.getItem(CACHE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
-}
-
-function writeCache(data: Resources) {
-  try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(data)) } catch { /* ignore */ }
-}
-
 export function useResources() {
-  const [resources, setResources] = useState<Resources | null>(readCache)
-  const { toast } = useToast()
+  const { data } = useQuery({
+    queryKey: ['resources'],
+    queryFn: () => apiFetch('/api/users/me/resources', undefined, ResourcesSchema),
+  })
 
-  useEffect(() => {
-    apiFetch('/api/users/me/resources', undefined, ResourcesSchema)
-      .then(data => { writeCache(data); setResources(data) })
-      .catch(err => toast(err.message ?? 'Impossible de charger les ressources'))
-  }, [])
-
-  return resources
+  return data ?? null
 }

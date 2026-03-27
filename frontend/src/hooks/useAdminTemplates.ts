@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 
 export interface AdminTemplate {
@@ -7,33 +8,46 @@ export interface AdminTemplate {
 }
 
 export function useAdminTemplates() {
-  const [templates, setTemplates] = useState<AdminTemplate[]>([])
-  const [loading, setLoading] = useState(true)
+  const qc = useQueryClient()
 
-  const refresh = useCallback(() => {
-    setLoading(true)
-    apiFetch<{ items: AdminTemplate[] }>('/api/templates')
-      .then(r => setTemplates(r.items))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+  const { data: templates = [], isLoading: loading } = useQuery({
+    queryKey: ['templates'],
+    queryFn: async () => {
+      const r = await apiFetch<{ items: AdminTemplate[] }>('/api/templates')
+      return r.items
+    },
+  })
 
-  useEffect(() => { refresh() }, [refresh])
+  const createMutation = useMutation({
+    mutationFn: ({ template_id, name }: { template_id: number; name: string }) =>
+      apiFetch<AdminTemplate>('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id, name }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
+  })
 
-  async function create(template_id: number, name: string) {
-    const tpl = await apiFetch<AdminTemplate>('/api/templates', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template_id, name }),
-    })
-    setTemplates(prev => [...prev, tpl].sort((a, b) => a.template_id - b.template_id))
-    return tpl
-  }
+  const removeMutation = useMutation({
+    mutationFn: (template_id: number) =>
+      apiFetch<void>(`/api/templates/${template_id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['templates'] }),
+  })
 
-  async function remove(template_id: number) {
-    await apiFetch<void>(`/api/templates/${template_id}`, { method: 'DELETE' })
-    setTemplates(prev => prev.filter(t => t.template_id !== template_id))
-  }
+  const create = useCallback(
+    (template_id: number, name: string) => createMutation.mutateAsync({ template_id, name }),
+    [createMutation],
+  )
+
+  const remove = useCallback(
+    (template_id: number) => removeMutation.mutateAsync(template_id),
+    [removeMutation],
+  )
+
+  const refresh = useCallback(
+    () => qc.invalidateQueries({ queryKey: ['templates'] }),
+    [qc],
+  )
 
   return { templates, loading, create, remove, refresh }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { apiFetch } from './api'
-import { MeSchema, type Me } from './schemas'
+import { apiFetch } from '../api'
+import { MeSchema, type Me } from '../schemas'
 
 export type { Me }
 

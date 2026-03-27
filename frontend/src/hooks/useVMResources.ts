@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
 import { type VMDetail } from '../types/vm'
+import { useMutationWithToast } from './useMutationWithToast'
 
 type Resources = {
   remaining: { cpu_cores: number; ram_mb: number; disk_gb: number }
@@ -14,12 +14,10 @@ export function useVMResources(
   resources: Resources,
   onSaved: (updated: Pick<VMDetail, 'cpu_cores' | 'ram_mb' | 'disk_gb'>) => void,
 ) {
-  const { toast } = useToast()
   const [resModalOpen, setResModalOpen] = useState(false)
   const [newCpu, setNewCpu] = useState(1)
   const [newRam, setNewRam] = useState(1)
   const [newDisk, setNewDisk] = useState(10)
-  const [resSaving, setResSaving] = useState(false)
 
   useEffect(() => {
     if (!vm) return
@@ -28,22 +26,24 @@ export function useVMResources(
     setNewDisk(vm.disk_gb)
   }, [vm?.vm_id])
 
-  async function doSaveResources() {
-    if (!vmId || resSaving || !vm) return
-    setResSaving(true)
-    try {
-      await apiFetch(`/api/vms/${vmId}`, {
+  const saveMutation = useMutationWithToast({
+    mutationFn: () =>
+      apiFetch(`/api/vms/${vmId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cpu_cores: newCpu, ram_gb: newRam, disk_gb: newDisk }),
-      })
+      }),
+    invalidate: [['vms'], ['resources']],
+    onSuccess: () => {
       onSaved({ cpu_cores: newCpu, ram_mb: newRam * 1024, disk_gb: newDisk })
       setResModalOpen(false)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Échec de la modification des ressources'
-      toast(msg)
-    }
-    setResSaving(false)
+    },
+    fallbackError: 'Échec de la modification des ressources',
+  })
+
+  async function doSaveResources() {
+    if (!vmId || saveMutation.isPending || !vm) return
+    await saveMutation.mutateAsync().catch(() => {})
   }
 
   const maxCpu  = vm ? vm.cpu_cores  + (resources?.remaining.cpu_cores ?? 0) : 1
@@ -60,7 +60,7 @@ export function useVMResources(
     newCpu, setNewCpu,
     newRam, setNewRam,
     newDisk, setNewDisk,
-    resSaving, doSaveResources,
+    resSaving: saveMutation.isPending, doSaveResources,
     maxCpu, maxRam, maxDisk,
     minCpu, minRam, minDisk,
   }

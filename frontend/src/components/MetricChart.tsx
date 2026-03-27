@@ -129,9 +129,9 @@ export default function MetricChart({ vmId, className = '' }: Props) {
   const filled = data.filter(d => d.a != null)
 
   return (
-    <div className={`border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col ${className}`}>
+    <div className={`border border-neutral-100 shadow-md rounded-sm bg-white px-4 py-3 flex flex-col overflow-hidden ${className}`}>
       {/* Titre + timeframe */}
-      <div className="flex items-center justify-between mb-1.5">
+      <div className="flex items-center justify-between mb-1.5 min-w-0 gap-2">
         <div className="flex items-center gap-1.5">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400">{def.label}</p>
           <button

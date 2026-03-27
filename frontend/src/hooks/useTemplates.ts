@@ -1,22 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
 import { TemplateListSchema } from '../schemas'
 
-interface Template {
+export interface Template {
   template_id: number
   name: string
 }
 
 export function useTemplates() {
-  const [templates, setTemplates] = useState<Template[]>([])
-  const { toast } = useToast()
+  const { data } = useQuery({
+    queryKey: ['templates'],
+    queryFn: () => apiFetch('/api/templates', undefined, TemplateListSchema),
+  })
 
-  useEffect(() => {
-    apiFetch('/api/templates', undefined, TemplateListSchema)
-      .then(r => setTemplates(r.items))
-      .catch(err => toast(err.message ?? 'Impossible de charger les templates'))
-  }, [])
-
-  return templates
+  return data?.items ?? []
 }

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
-import { useToast } from '../contexts/ToastContext'
 
 export interface ProxmoxNode {
   node: string
@@ -37,25 +37,22 @@ export interface ProxmoxStatus {
 }
 
 export function useProxmoxStatus() {
-  const [data, setData] = useState<ProxmoxStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const { toast } = useToast()
+  const qc = useQueryClient()
 
-  function refresh() {
-    setLoading(true)
-    setError(null)
-    apiFetch<ProxmoxStatus>('/api/cluster/status')
-      .then(setData)
-      .catch(err => {
-        const msg = err.message ?? 'Impossible de charger le statut Proxmox'
-        setError(msg)
-        toast(msg)
-      })
-      .finally(() => setLoading(false))
+  const { data, isLoading: loading, error } = useQuery({
+    queryKey: ['proxmox-status'],
+    queryFn: () => apiFetch<ProxmoxStatus>('/api/cluster/status'),
+  })
+
+  const refresh = useCallback(
+    () => qc.invalidateQueries({ queryKey: ['proxmox-status'] }),
+    [qc],
+  )
+
+  return {
+    data: data ?? null,
+    loading,
+    error: error ? (error as Error).message : null,
+    refresh,
   }
-
-  useEffect(() => { refresh() }, [])
-
-  return { data, loading, error, refresh }
 }

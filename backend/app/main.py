@@ -48,8 +48,10 @@ async def _purge_loop() -> None:
             else:
                 async with get_session_factory()() as session:
                     await run_purge(db=session, gateway=get_proxmox_gateway(), settings=settings)
+        except asyncio.CancelledError:
+            raise
         except Exception:
-            logger.exception("purge_loop: unhandled error")
+            logger.exception("purge_loop: unhandled error (will retry in 24h)")
         await asyncio.sleep(24 * 3600)  # run once per day
 
 
@@ -59,15 +61,24 @@ async def lifespan(_: FastAPI):
     await open_db_engine()
     purge_task = asyncio.create_task(_purge_loop())
 
+    # Start the centralized VM status cache poller
+    from app.services.proxmox.gateway import ensure_proxmox_gateway, get_proxmox_gateway
+    from app.services.vm.status_cache import get_status_cache
+
+    settings = get_settings()
+    if settings.proxmox_configured:
+        await ensure_proxmox_gateway()
+        get_status_cache().start(get_proxmox_gateway())
+
     # Notify BIND secondaries on startup
     from app.services.dns import DnsService
-    dns = DnsService(settings=get_settings())
-    await dns.notify()
-    await dns.close()
+    async with DnsService(settings=settings) as dns:
+        await dns.notify()
 
     try:
         yield
     finally:
+        await get_status_cache().stop()
         purge_task.cancel()
         await close_db_engine()
 
@@ -86,8 +97,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 app.include_router(api_router)

@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useMe } from './useMe'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './lib/queryClient'
+import { useMe } from './hooks/useMe'
 import { loginUrl } from './api'
 import Layout from './components/Layout'
 import AdminLayout from './components/AdminLayout'
@@ -60,49 +62,53 @@ export default function App() {
 
   if (auth.me.is_admin) {
     return (
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <UserProvider me={auth.me}>
+            <VMStatusProvider>
+              <BrowserRouter>
+                <AdminLayout>
+                  <RouteBoundary>
+                    <Suspense fallback={<PageFallback />}>
+                      <Routes>
+                        <Route path="/admin" element={<AdminPage />} />
+                        <Route path="/vm/:vmId" element={<VMPage />} />
+                        <Route path="*" element={<Navigate to="/admin" replace />} />
+                      </Routes>
+                    </Suspense>
+                  </RouteBoundary>
+                </AdminLayout>
+              </BrowserRouter>
+            </VMStatusProvider>
+          </UserProvider>
+          <ToastContainer />
+        </ToastProvider>
+      </QueryClientProvider>
+    )
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <UserProvider me={auth.me}>
           <VMStatusProvider>
             <BrowserRouter>
-              <AdminLayout>
+              <Layout>
                 <RouteBoundary>
                   <Suspense fallback={<PageFallback />}>
                     <Routes>
-                      <Route path="/admin" element={<AdminPage />} />
+                      <Route path="/" element={<Dashboard />} />
                       <Route path="/vm/:vmId" element={<VMPage />} />
-                      <Route path="*" element={<Navigate to="/admin" replace />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Suspense>
                 </RouteBoundary>
-              </AdminLayout>
+              </Layout>
             </BrowserRouter>
           </VMStatusProvider>
         </UserProvider>
         <ToastContainer />
       </ToastProvider>
-    )
-  }
-
-  return (
-    <ToastProvider>
-      <UserProvider me={auth.me}>
-        <VMStatusProvider>
-          <BrowserRouter>
-            <Layout>
-              <RouteBoundary>
-                <Suspense fallback={<PageFallback />}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/vm/:vmId" element={<VMPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </Suspense>
-              </RouteBoundary>
-            </Layout>
-          </BrowserRouter>
-        </VMStatusProvider>
-      </UserProvider>
-      <ToastContainer />
-    </ToastProvider>
+    </QueryClientProvider>
   )
 }

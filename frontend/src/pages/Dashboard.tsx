@@ -1,15 +1,54 @@
+import { lazy, Suspense, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import ResourceGauge from '../components/ResourceGauge'
 import WelcomeCard from '../components/WelcomeCard'
-import VMOverviewChart from '../components/VMOverviewChart'
+const VMOverviewChart = lazy(() => import('../components/VMOverviewChart'))
 import { ChartCardSkeleton } from '../components/Skeleton'
 import { useResources } from '../hooks/useResources'
 import { useVMs } from '../hooks/useVMs'
+import { apiFetch } from '../api'
+
+interface MetricPoint {
+  time: number | null
+  cpu: number | null
+  mem: number | null
+  maxmem: number | null
+}
+
+export interface ChartPoint {
+  time: number | null
+  cpu: number | null
+  ram: number | null
+}
+
+function toChartPoints(items: MetricPoint[]): ChartPoint[] {
+  return items.map(p => ({
+    time: p.time,
+    cpu: p.cpu != null ? p.cpu * 100 : null,
+    ram: p.mem != null && p.maxmem ? (p.mem / p.maxmem) * 100 : null,
+  }))
+}
 
 export default function Dashboard() {
   const resources = useResources()
   const { vms, loading: vmsLoading } = useVMs()
-  const ownerVMs = vms.filter(v => v.role === 'owner')
+  const ownerVMs = useMemo(() => vms.filter(v => v.role === 'owner'), [vms])
   const { usage, limits } = resources ?? {}
+
+  const vmIds = useMemo(() => ownerVMs.map(v => v.vm_id).join(','), [ownerVMs])
+  const metricsQuery = useQuery({
+    queryKey: ['dashboard-metrics', vmIds],
+    queryFn: async () => {
+      const r = await apiFetch<{ items: Record<string, MetricPoint[]> }>(`/api/vms/metrics/batch?vm_ids=${vmIds}&timeframe=hour`)
+      const map: Record<string, ChartPoint[]> = {}
+      for (const [id, items] of Object.entries(r.items)) {
+        map[id] = toChartPoints(items)
+      }
+      return map
+    },
+    enabled: ownerVMs.length > 0,
+  })
+  const metricsMap = metricsQuery.data ?? {}
 
   const gaugeConfig = usage && limits ? [
     { label: 'RAM',    used: Math.round(usage.ram_mb / 1024), total: Math.round(limits.ram_mb / 1024), unit: 'Go',    color: 'blue'    },
@@ -60,7 +99,9 @@ export default function Dashboard() {
             </>
           ) : (
             ownerVMs.map(vm => (
-              <VMOverviewChart key={vm.vm_id} vmId={vm.vm_id} name={vm.name} />
+              <Suspense key={vm.vm_id} fallback={<ChartCardSkeleton className="h-32" />}>
+                <VMOverviewChart vmId={vm.vm_id} name={vm.name} data={metricsMap[String(vm.vm_id)]} />
+              </Suspense>
             ))
           )}
         </div>

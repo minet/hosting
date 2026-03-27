@@ -31,7 +31,7 @@ from app.services.auth.helpers import (
     callback_url,
     exchange_code_for_token,
     generate_pkce_pair,
-    keycloak_realm_base,
+    keycloak_realm_browser_base,
     safe_frontend_redirect,
 )
 from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
@@ -72,14 +72,14 @@ def login_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> Re
         {
             "client_id": settings.keycloak_client_id,
             "response_type": "code",
-            "scope": "openid profile email adh6_attributes",
+            "scope": settings.oidc_scopes,
             "redirect_uri": callback,
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
         }
     )
-    auth_url = f"{keycloak_realm_base()}/protocol/openid-connect/auth?{query}"
+    auth_url = f"{keycloak_realm_browser_base()}/protocol/openid-connect/auth?{query}"
     return RedirectResponse(url=auth_url, status_code=status.HTTP_302_FOUND)
 
 
@@ -224,7 +224,7 @@ def logout_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> R
     }
     if id_token_hint:
         params["id_token_hint"] = id_token_hint
-    logout_url = f"{keycloak_realm_base()}/protocol/openid-connect/logout?{urlencode(params)}"
+    logout_url = f"{keycloak_realm_browser_base()}/protocol/openid-connect/logout?{urlencode(params)}"
 
     response = RedirectResponse(url=logout_url, status_code=status.HTTP_302_FOUND)
     delete_token_cookies(response)

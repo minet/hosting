@@ -331,14 +331,15 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On Proxmox or database errors.
         """
-        service = VmDeleteService(
-            db=self._db,
-            cmd_repo=self._cmd_repo,
-            query_repo=self._query_repo,
-            gateway=self._gateway,
-            dns=DnsService(settings=self._settings),
-        )
-        return await service.delete(vm_id=vm_id)
+        async with DnsService(settings=self._settings) as dns:
+            service = VmDeleteService(
+                db=self._db,
+                cmd_repo=self._cmd_repo,
+                query_repo=self._query_repo,
+                gateway=self._gateway,
+                dns=dns,
+            )
+            return await service.delete(vm_id=vm_id)
 
     async def allocate_and_assign_ipv4(self, *, vm_id: int) -> str:
         """Validate, allocate, persist, and configure an IPv4 address for a VM.

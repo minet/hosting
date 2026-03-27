@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Play, TerminalSquare } from 'lucide-react'
-import { apiFetch } from '../api'
-import VMTerminal from '../components/VMTerminal'
-import MetricChart from '../components/MetricChart'
+import { apiFetch, ApiError } from '../api'
+
+const VMTerminal = lazy(() => import('../components/VMTerminal'))
+const MetricChart = lazy(() => import('../components/MetricChart'))
 import { useVMStatus } from '../contexts/VMStatusContext'
 import { useResources } from '../hooks/useResources'
 import { useUser } from '../contexts/UserContext'
@@ -22,7 +23,7 @@ import VMActionsCard from '../components/VMActionsCard'
 import VMResourcesCard from '../components/VMResourcesCard'
 import VMHistoryCard from '../components/VMHistoryCard'
 import VMAccessCard from '../components/VMAccessCard'
-import VMTerminalOverlay from '../components/VMTerminalOverlay'
+const VMTerminalOverlay = lazy(() => import('../components/VMTerminalOverlay'))
 import { CardSkeleton } from '../components/Skeleton'
 import { type VMDetail, type VMTask } from '../types/vm'
 
@@ -64,14 +65,16 @@ export default function VMPage() {
       if (onbootData) setOnboot(onbootData.onboot)
       setTasks(tasksData.items)
     }).catch((err) => {
-      if (err?.status === 403) navigate('/')
+      if (err instanceof ApiError && (err.status === 403 || err.status === 404)) navigate('/')
     })
   }, [vmId])
 
   // Refresh tasks when status changes
   useEffect(() => {
     if (!vmId || !vmStatusEntry?.status) return
-    apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`).then(r => setTasks(r.items)).catch(() => null)
+    apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`)
+      .then(r => setTasks(r.items))
+      .catch(() => { /* tasks are non-critical, keep previous state */ })
   }, [vmStatusEntry?.status])
 
   async function toggleOnboot() {
@@ -192,7 +195,7 @@ export default function VMPage() {
       {/* Terminal — tablette & desktop uniquement */}
       {vmId && isDesktop && (
         <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 shadow-md rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
-          {running && canAccessConsole && <VMTerminal vmId={vmId} />}
+          {running && canAccessConsole && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
           {running && !canAccessConsole && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <TerminalSquare size={24} className="text-neutral-500" />
@@ -232,17 +235,21 @@ export default function VMPage() {
         creds={creds}
       />
 
-      <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
+      <Suspense fallback={null}>
+        <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
+      </Suspense>
 
     </div>
 
     {mobileTermOpen && vmId && (
-      <VMTerminalOverlay
-        vmId={vmId}
-        vmName={vm?.name}
-        overlayHeight={overlayHeight}
-        onClose={() => setMobileTermOpen(false)}
-      />
+      <Suspense fallback={null}>
+        <VMTerminalOverlay
+          vmId={vmId}
+          vmName={vm?.name}
+          overlayHeight={overlayHeight}
+          onClose={() => setMobileTermOpen(false)}
+        />
+      </Suspense>
     )}
     </>
   )

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from 'recharts'
 import { apiFetch } from '../api'
 import { useVMStatus } from '../contexts/VMStatusContext'
+import type { ChartPoint } from '../pages/Dashboard'
 
 interface MetricPoint {
   time: number | null
@@ -11,32 +12,30 @@ interface MetricPoint {
   maxmem: number | null
 }
 
-interface ChartPoint {
-  time: number | null
-  cpu: number | null
-  ram: number | null
-}
-
 interface Props {
   vmId: number
   name: string
+  data?: ChartPoint[]
 }
 
-export default function VMOverviewChart({ vmId, name }: Props) {
-  const [data, setData] = useState<ChartPoint[]>([])
+export default function VMOverviewChart({ vmId, name, data: prefetched }: Props) {
+  const [selfData, setSelfData] = useState<ChartPoint[]>([])
   const entry = useVMStatus(vmId)
   const running = entry?.status === 'running'
 
+  // Only self-fetch if no prefetched data provided
   useEffect(() => {
+    if (prefetched) return
     apiFetch<{ items: MetricPoint[] }>(`/api/vms/${vmId}/metrics?timeframe=hour`)
-      .then(r => setData(r.items.map(p => ({
+      .then(r => setSelfData(r.items.map(p => ({
         time: p.time,
         cpu: p.cpu != null ? p.cpu * 100 : null,
         ram: p.mem != null && p.maxmem ? (p.mem / p.maxmem) * 100 : null,
       }))))
       .catch(() => null)
-  }, [vmId])
+  }, [vmId, prefetched])
 
+  const data = prefetched ?? selfData
   const hasDat = data.some(d => d.cpu != null || d.ram != null)
 
   return (

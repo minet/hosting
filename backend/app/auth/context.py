@@ -165,17 +165,19 @@ def require_user(
 ) -> AuthCtx:
     """FastAPI dependency that enforces basic user-level access.
 
-    If ``AUTH_USER_GROUPS`` is configured, the caller must belong to at
-    least one of the listed groups. When the setting is empty, every
-    authenticated user is allowed through.
+    In **pre-prod** mode, the caller must belong to at least one of the
+    groups listed in ``AUTH_USER_GROUPS``.  In **production** mode, every
+    authenticated user is allowed through regardless of group membership.
 
     :param ctx: Authentication context injected by FastAPI.
     :param settings: Application settings injected by FastAPI.
     :returns: The validated authentication context.
     :rtype: AuthCtx
     :raises ~fastapi.HTTPException: ``403`` if the user does not belong to
-        any of the required groups.
+        any of the required groups (pre-prod only).
     """
+    if not settings.is_preprod:
+        return ctx
     required = csv_values(settings.auth_user_groups)
     if not required:
         return ctx

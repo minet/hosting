@@ -14,6 +14,7 @@ from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx, require_charter_signed, require_cotisant
+from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
 from app.services.vm import AccessLevel, VmAccessService
@@ -41,6 +42,7 @@ async def create_vm(
     body: VMCreateBody,
     ctx: AuthCtx = Depends(require_cotisant),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    _rl=Depends(RateLimiter(max_calls=3, window_seconds=60)),
 ) -> VMDetailResponse:
     """
     Create a new virtual machine from a template.
@@ -74,6 +76,7 @@ async def start_vm(
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Start a stopped virtual machine.
@@ -96,6 +99,7 @@ async def stop_vm(
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Stop a running virtual machine.
@@ -118,6 +122,7 @@ async def restart_vm(
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Restart a virtual machine.
@@ -257,6 +262,7 @@ async def delete_vm(
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    _rl=Depends(RateLimiter(max_calls=3, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Permanently delete a virtual machine.

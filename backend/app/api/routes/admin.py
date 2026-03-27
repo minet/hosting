@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -196,27 +197,31 @@ async def update_request_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
     settings = get_settings()
-    dns_svc = DnsService(settings=settings)
 
     if body.status == "approved" and row["type"] == "ipv4":
         ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=row["vm_id"])
-        await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
-    elif body.status == "approved" and row["type"] == "dns":
         await db.commit()
+        # DNS is best-effort — create records after commit
+        async with DnsService(settings=settings) as dns_svc:
+            await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
+    elif body.status == "approved" and row["type"] == "dns":
         dns_label = row.get("dns_label")
         if not dns_label:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="DNS label is missing on this request",
             )
-        try:
-            await dns_svc.create_and_verify_custom_dns(dns_label=dns_label, vm_id=row["vm_id"], db=db)
-        except Exception as exc:
-            logger.exception("DNS CNAME creation failed for vm_id=%s label=%s", row["vm_id"], dns_label)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Failed to create DNS record in PowerDNS: {exc}",
-            ) from exc
+        await db.commit()
+        # DNS CNAME creation after commit — so DB state is consistent
+        async with DnsService(settings=settings) as dns_svc:
+            try:
+                await dns_svc.create_and_verify_custom_dns(dns_label=dns_label, vm_id=row["vm_id"], db=db)
+            except (httpx.HTTPError, OSError, ValueError, RuntimeError) as exc:
+                logger.exception("DNS CNAME creation failed for vm_id=%s label=%s", row["vm_id"], dns_label)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to create DNS record in PowerDNS: {exc}",
+                ) from exc
     else:
         await db.commit()
 
@@ -251,15 +256,15 @@ async def revoke_dns(
 
     dns_label = row.get("dns_label")
     if dns_label:
-        dns_svc = DnsService(settings=get_settings())
-        try:
-            await dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
-        except Exception as exc:
-            logger.exception("DNS CNAME revoke failed for request_id=%s label=%s", request_id, dns_label)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Failed to delete DNS record in PowerDNS: {exc}",
-            ) from exc
+        async with DnsService(settings=get_settings()) as dns_svc:
+            try:
+                await dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
+            except (httpx.HTTPError, OSError) as exc:
+                logger.exception("DNS CNAME revoke failed for request_id=%s label=%s", request_id, dns_label)
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to delete DNS record in PowerDNS: {exc}",
+                ) from exc
 
     await repo.update_status(request_id=request_id, status="rejected")
     await db.commit()
@@ -340,8 +345,8 @@ async def assign_vm_ipv4(
     :rtype: VMAssignIPv4Response
     """
     ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=vm_id)
-    dns_svc = DnsService(settings=get_settings())
-    await dns_svc.create_records(vm_id=vm_id, ipv4=ipv4, ipv6=None)
+    async with DnsService(settings=get_settings()) as dns_svc:
+        await dns_svc.create_records(vm_id=vm_id, ipv4=ipv4, ipv6=None)
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 
@@ -396,11 +401,8 @@ async def trigger_dns_notify(
     _: AuthCtx = Depends(require_admin),
 ) -> None:
     """Force a DNS NOTIFY to all BIND secondaries (admin only)."""
-    dns_svc = DnsService(settings=get_settings())
-    try:
+    async with DnsService(settings=get_settings()) as dns_svc:
         await dns_svc.notify()
-    finally:
-        await dns_svc.close()
 
 
 @router.post("/purge", status_code=200)

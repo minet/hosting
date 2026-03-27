@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import threading
 import time
 from typing import Any
 
@@ -917,7 +917,7 @@ class ProxmoxGateway:
             raise_mapped_proxmox_error(exc)
 
 
-_gateway_lock = threading.Lock()
+_gateway_lock = asyncio.Lock()
 _gateway_instance: ProxmoxGateway | None = None
 _gateway_last_failure: float = 0.0
 _GATEWAY_RETRY_COOLDOWN = 30.0  # seconds between retry attempts
@@ -925,23 +925,15 @@ _GATEWAY_RETRY_COOLDOWN = 30.0  # seconds between retry attempts
 _logger = logging.getLogger(__name__)
 
 
-def get_proxmox_gateway() -> ProxmoxGateway:
-    """Return a shared :class:`ProxmoxGateway` instance with retry cooldown.
+async def _init_gateway() -> ProxmoxGateway:
+    """Create the gateway instance under the async lock.
 
-    If the connection to Proxmox fails, subsequent calls within the cooldown
-    period raise immediately instead of hammering the Proxmox auth endpoint.
-
-    :returns: Singleton :class:`ProxmoxGateway` instance.
-    :rtype: ProxmoxGateway
-    :raises ProxmoxError: If Proxmox is unreachable.
+    Handles cooldown logic and maps connection failures to
+    :class:`ProxmoxError`.
     """
     global _gateway_instance, _gateway_last_failure
 
-    if _gateway_instance is not None:
-        return _gateway_instance
-
-    with _gateway_lock:
-        # Double-check after acquiring lock
+    async with _gateway_lock:
         if _gateway_instance is not None:
             return _gateway_instance
 
@@ -950,8 +942,9 @@ def get_proxmox_gateway() -> ProxmoxGateway:
             raise ProxmoxError(f"Proxmox connection unavailable (retry in {_GATEWAY_RETRY_COOLDOWN - elapsed:.0f}s)")
 
         try:
-            _gateway_instance = ProxmoxGateway(get_settings())
-            return _gateway_instance
+            instance = await asyncio.to_thread(ProxmoxGateway, get_settings())
+            _gateway_instance = instance
+            return instance
         except Exception:
             _gateway_last_failure = time.monotonic()
             _logger.warning(
@@ -960,3 +953,36 @@ def get_proxmox_gateway() -> ProxmoxGateway:
                 exc_info=True,
             )
             raise ProxmoxError("Proxmox connection failed") from None
+
+
+def get_proxmox_gateway() -> ProxmoxGateway:
+    """Return the shared :class:`ProxmoxGateway` instance.
+
+    If the instance is already initialised, returns it immediately (sync).
+    For first-time initialisation, use :func:`ensure_proxmox_gateway` in an
+    async context (e.g. during app lifespan) so that the blocking Proxmox
+    connection runs in a thread pool instead of blocking the event loop.
+
+    :returns: Singleton :class:`ProxmoxGateway` instance.
+    :rtype: ProxmoxGateway
+    :raises ProxmoxError: If the gateway has not been initialised yet
+        or if Proxmox is unreachable.
+    """
+    if _gateway_instance is not None:
+        return _gateway_instance
+    raise ProxmoxError("Proxmox gateway not initialised. Call ensure_proxmox_gateway() first.")
+
+
+async def ensure_proxmox_gateway() -> ProxmoxGateway:
+    """Ensure the shared :class:`ProxmoxGateway` is initialised (async-safe).
+
+    Uses an asyncio lock and runs the blocking Proxmox connection in a thread
+    pool.  Safe to call from multiple coroutines concurrently.
+
+    :returns: Singleton :class:`ProxmoxGateway` instance.
+    :rtype: ProxmoxGateway
+    :raises ProxmoxError: If Proxmox is unreachable.
+    """
+    if _gateway_instance is not None:
+        return _gateway_instance
+    return await _init_gateway()

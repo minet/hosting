@@ -42,13 +42,29 @@ def api_base_url(request: FastAPIRequest) -> str:
 
 def keycloak_realm_base() -> str:
     """
-    Build Keycloak realm base URL.
+    Build Keycloak realm base URL for backend-to-Keycloak API calls.
 
-    :returns: Realm base URL (e.g. ``https://id.example/realms/my-realm``).
+    :returns: Realm base URL (e.g. ``http://keycloak:8080/realms/my-realm``).
     :rtype: str
     """
     settings = get_settings()
     return f"{settings.keycloak_server_url.rstrip('/')}/realms/{settings.keycloak_realm}"
+
+
+def keycloak_realm_browser_base() -> str:
+    """
+    Build Keycloak realm base URL for browser redirects.
+
+    Uses ``KEYCLOAK_BROWSER_URL`` when set (for Docker where the browser
+    reaches Keycloak at a different URL than the backend), otherwise
+    falls back to ``KEYCLOAK_SERVER_URL``.
+
+    :returns: Realm base URL as seen from the browser.
+    :rtype: str
+    """
+    settings = get_settings()
+    base = settings.keycloak_browser_url or settings.keycloak_server_url
+    return f"{base.rstrip('/')}/realms/{settings.keycloak_realm}"
 
 
 def callback_url(request: FastAPIRequest) -> str:
@@ -149,7 +165,7 @@ def _post_form_json_with_retry(*, url: str, payload: dict[str, str]) -> dict[str
             body = ""
             try:
                 body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
+            except OSError:
                 pass
             logger.warning("token endpoint returned HTTP %s: %s", exc.code, body)
             if exc.code in _RETRYABLE_HTTP_STATUS_CODES and attempt < max_retries:

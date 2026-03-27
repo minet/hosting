@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 
 export interface GroupMember {
@@ -10,15 +10,10 @@ export interface GroupMember {
 }
 
 export function useAdminGroupMembers(endpoint: string) {
-  const [users, setUsers] = useState<GroupMember[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    apiFetch<GroupMember[]>(endpoint)
-      .then(setUsers)
-      .catch(() => setUsers([]))
-      .finally(() => setLoading(false))
-  }, [endpoint])
+  const { data: users = [], isLoading: loading } = useQuery({
+    queryKey: ['admin-group', endpoint],
+    queryFn: () => apiFetch<GroupMember[]>(endpoint),
+  })
 
   return { users, loading }
 }

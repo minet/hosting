@@ -55,6 +55,14 @@ class DnsService:
         self._nameservers = [ns.strip() for ns in settings.dns_nameservers.split(",") if ns.strip()]
         self._client: httpx.AsyncClient | None = None
 
+    async def __aenter__(self) -> DnsService:
+        """Enter the async context manager."""
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        """Exit the async context manager, closing the HTTP client."""
+        await self.close()
+
     def _get_client(self) -> httpx.AsyncClient:
         """Return a shared async HTTP client, creating it lazily."""
         if self._client is None or self._client.is_closed:
@@ -128,8 +136,8 @@ class DnsService:
             resp.raise_for_status()
             logger.info("dns_create_ok fqdn=%s", fqdn)
             await self.notify()
-        except Exception:
-            logger.warning("dns_create_failed fqdn=%s", fqdn, exc_info=True)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("dns_create_failed fqdn=%s: %s", fqdn, exc)
 
     async def create_custom_label(
         self,
@@ -160,8 +168,8 @@ class DnsService:
             resp.raise_for_status()
             logger.info("dns_custom_label_ok label=%s target=%s", custom_fqdn, target_fqdn)
             await self.notify()
-        except Exception:
-            logger.warning("dns_custom_label_failed label=%s", custom_fqdn, exc_info=True)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("dns_custom_label_failed label=%s: %s", custom_fqdn, exc)
             if raise_on_error:
                 raise
 
@@ -188,8 +196,8 @@ class DnsService:
             resp.raise_for_status()
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
             await self.notify()
-        except Exception:
-            logger.warning("dns_custom_label_delete_failed label=%s", custom_fqdn, exc_info=True)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("dns_custom_label_delete_failed label=%s: %s", custom_fqdn, exc)
             if raise_on_error:
                 raise
 
@@ -244,8 +252,8 @@ class DnsService:
             try:
                 await loop.run_in_executor(None, _send_udp, ip, 53, packet)
                 logger.info("dns_notify_sent zone=%s target=%s", self._zone, ip)
-            except Exception:
-                logger.warning("dns_notify_failed zone=%s target=%s", self._zone, ip, exc_info=True)
+            except OSError as exc:
+                logger.warning("dns_notify_failed zone=%s target=%s: %s", self._zone, ip, exc)
 
     async def delete_records(self, *, vm_id: int) -> None:
         """Remove all DNS records for a VM, including CNAMEs pointing to it.
@@ -277,8 +285,8 @@ class DnsService:
             resp.raise_for_status()
             logger.info("dns_delete_ok fqdn=%s rrsets=%d", fqdn, len(rrsets))
             await self.notify()
-        except Exception:
-            logger.warning("dns_delete_failed fqdn=%s", fqdn, exc_info=True)
+        except (httpx.HTTPError, OSError) as exc:
+            logger.warning("dns_delete_failed fqdn=%s: %s", fqdn, exc)
 
 
 def _nameserver_ips(nameservers: list[str]) -> list[str]:

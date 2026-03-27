@@ -8,6 +8,8 @@ quota/usage queries.  All database errors are translated to HTTP 503.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -16,6 +18,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
 from app.services.wordgen import vm_dns_label
+
+# ── Global CNAME cache with TTL ──────────────────────────────────────
+_cname_cache: dict[str, str] | None = None
+_cname_fetched_at: float = 0.0
+_CNAME_TTL: float = 60.0  # seconds
+_cname_lock = asyncio.Lock()
 
 
 class VmQueryService:
@@ -30,13 +38,21 @@ class VmQueryService:
         """
         self.repo = repo
         self.settings = settings
-        self._cname_cache: dict[str, str] | None = None
 
     async def _get_cname_map(self) -> dict[str, str]:
-        """Return CNAME targets, cached for the lifetime of this service instance."""
-        if self._cname_cache is None:
-            self._cname_cache = await self.repo.list_cname_targets()
-        return self._cname_cache
+        """Return CNAME targets from a global in-process cache (TTL-based)."""
+        global _cname_cache, _cname_fetched_at
+        now = time.monotonic()
+        if _cname_cache is not None and (now - _cname_fetched_at) < _CNAME_TTL:
+            return _cname_cache
+        async with _cname_lock:
+            # Double-check after acquiring lock
+            now = time.monotonic()
+            if _cname_cache is not None and (now - _cname_fetched_at) < _CNAME_TTL:
+                return _cname_cache
+            _cname_cache = await self.repo.list_cname_targets()
+            _cname_fetched_at = now
+            return _cname_cache
 
     async def list_vms(self, *, user_id: str) -> dict[str, Any]:
         """

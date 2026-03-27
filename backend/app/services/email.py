@@ -34,8 +34,8 @@ def send_email(
             smtp.sendmail(settings.smtp_from, [to_email], msg.as_string())
         logger.info("Email sent to %s: %s", to_email, subject)
         return True
-    except Exception:
-        logger.exception("Failed to send email to %s: %s", to_email, subject)
+    except (smtplib.SMTPException, OSError) as exc:
+        logger.warning("Failed to send email to %s: %s — %s", to_email, subject, exc)
         return False
 
 

@@ -18,6 +18,8 @@ import logging
 import time
 from typing import Any
 
+from keycloak.exceptions import KeycloakError
+
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -95,8 +97,8 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
             "last_name": user.get("lastName"),
             "email": user.get("email"),
         }
-    except Exception:
-        logger.exception("fetch_keycloak_user_by_id failed for user_id=%s", user_id)
+    except (KeycloakError, OSError) as exc:
+        logger.warning("fetch_keycloak_user_by_id failed for user_id=%s: %s", user_id, exc)
         return None
 
 
@@ -157,8 +159,8 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
                         fi = federations[0]
                         if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
                             fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
-            except Exception:
-                pass
+            except (KeycloakError, OSError):
+                pass  # federation lookup is best-effort
             results.append(
                 {
                     "id": fed_id,
@@ -170,8 +172,8 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
                 }
             )
         return results
-    except Exception:
-        logger.exception("fetch_keycloak_group_members failed for group_path=%s", group_path)
+    except (KeycloakError, OSError) as exc:
+        logger.warning("fetch_keycloak_group_members failed for group_path=%s: %s", group_path, exc)
         return []
 
 
@@ -196,8 +198,8 @@ def set_date_signed_hosting(user_id: str, date_iso: str) -> bool:
         attributes["dateSignedHosting"] = [date_iso]
         admin.update_user(user_id=user_id, payload={**user, "attributes": attributes})
         return True
-    except Exception:
-        logger.exception("set_date_signed_hosting failed for user_id=%s", user_id)
+    except (KeycloakError, OSError) as exc:
+        logger.warning("set_date_signed_hosting failed for user_id=%s: %s", user_id, exc)
         return False
 
 
@@ -222,8 +224,8 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
             **flat_attrs,
             "cotise_end_ms": _extract_cotise_end_ms(attributes, cotise_key),
         }
-    except Exception:
-        logger.exception("fetch_keycloak_user_profile failed for username=%s", username)
+    except (KeycloakError, OSError) as exc:
+        logger.warning("fetch_keycloak_user_profile failed for username=%s: %s", username, exc)
         return None
 
 

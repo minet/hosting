@@ -30,9 +30,10 @@ class Settings(BaseSettings):
 
     backend_url: str = Field(default="http://localhost:8000", alias="BACKEND_URL")
 
-    keycloak_server_url: str = Field(alias="KEYCLOAK_SERVER_URL")
-    keycloak_realm: str = Field(alias="KEYCLOAK_REALM")
-    keycloak_client_id: str = Field(alias="KEYCLOAK_CLIENT_ID")
+    keycloak_server_url: str = Field(default="http://keycloak:8080", alias="KEYCLOAK_SERVER_URL")
+    keycloak_browser_url: str | None = Field(default=None, alias="KEYCLOAK_BROWSER_URL")
+    keycloak_realm: str = Field(default="hosting-dev", alias="KEYCLOAK_REALM")
+    keycloak_client_id: str = Field(default="hosting", alias="KEYCLOAK_CLIENT_ID")
     keycloak_client_secret: str | None = Field(default=None, alias="KEYCLOAK_CLIENT_SECRET")
     keycloak_redirect_uri: str | None = Field(default=None, alias="KEYCLOAK_REDIRECT_URI")
     keycloak_verify_tls: bool = Field(default=True, alias="KEYCLOAK_VERIFY_TLS")
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     keycloak_admin_username: str | None = Field(default=None, alias="KEYCLOAK_ADMIN_USERNAME")
     keycloak_admin_password: str | None = Field(default=None, alias="KEYCLOAK_ADMIN_PASSWORD")
 
+    oidc_scopes: str = Field(default="openid profile email", alias="OIDC_SCOPES")
     auth_groups_claim: str = Field(default="groups", alias="AUTH_GROUPS_CLAIM")
     auth_attributes_namespace: str = Field(default="attributes", alias="AUTH_ATTRIBUTES_NAMESPACE")
     auth_user_id_claim: str = Field(default="sub", alias="AUTH_USER_ID_CLAIM")
@@ -62,16 +64,16 @@ class Settings(BaseSettings):
     resource_max_cpu_cores: int = Field(default=6, alias="RESOURCE_MAX_CPU_CORES")
     resource_max_ram_gb: int = Field(default=9, alias="RESOURCE_MAX_RAM_GB")
     resource_max_disk_gb: int = Field(default=30, alias="RESOURCE_MAX_DISK_GB")
-    vm_min_cpu_cores: int = Field(alias="VM_MIN_CPU_CORES")
-    vm_min_ram_gb: int = Field(alias="VM_MIN_RAM_GB")
-    vm_min_disk_gb: int = Field(alias="VM_MIN_DISK_GB")
+    vm_min_cpu_cores: int = Field(default=1, alias="VM_MIN_CPU_CORES")
+    vm_min_ram_gb: int = Field(default=2, alias="VM_MIN_RAM_GB")
+    vm_min_disk_gb: int = Field(default=10, alias="VM_MIN_DISK_GB")
     vm_ipv4_subnets: str | None = Field(default=None, alias="VM_IPV4_SUBNETS")
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
     vm_ipv6_subnet: str = Field(default="2001:660:3203:40a::/64", alias="VM_IPV6_SUBNET")
     vm_ipv6_gateway_host: int = Field(default=1, alias="VM_IPV6_GATEWAY_HOST")
     vm_id_min: int = Field(default=2001, alias="VM_ID_MIN")
-    proxmox_base_url: str | None = Field(default=None, alias="PROXMOX_BASE_URL")
-    proxmox_verify_tls: bool = Field(default=True, alias="PROXMOX_VERIFY_TLS")
+    proxmox_base_url: str | None = Field(default="https://luna.priv.minet.net:8006", alias="PROXMOX_BASE_URL")
+    proxmox_verify_tls: bool = Field(default=False, alias="PROXMOX_VERIFY_TLS")
     proxmox_timeout_seconds: int = Field(default=10, alias="PROXMOX_TIMEOUT_SECONDS")
     proxmox_task_timeout_seconds: int = Field(default=300, alias="PROXMOX_TASK_TIMEOUT_SECONDS")
     proxmox_executor_max_workers: int = Field(default=16, alias="PROXMOX_EXECUTOR_MAX_WORKERS")
@@ -130,15 +132,31 @@ class Settings(BaseSettings):
         return self.app_env.lower() in {"prod", "production"}
 
     @property
+    def is_preprod(self) -> bool:
+        """Return ``True`` when running in pre-production mode.
+
+        In pre-prod, access is restricted to users in ``AUTH_USER_GROUPS``.
+        In production, all authenticated users are allowed.
+
+        :returns: Whether ``APP_ENV`` is ``"preprod"`` or ``"pre-prod"``.
+        :rtype: bool
+        """
+        return self.app_env.lower() in {"preprod", "pre-prod"}
+
+    @property
     def keycloak_issuer(self) -> str:
         """Return the expected issuer URL for access tokens.
 
-        Constructed from the Keycloak server URL and realm name.
+        Uses ``KEYCLOAK_BROWSER_URL`` when set (needed when the browser
+        reaches Keycloak at a different URL than the backend, e.g. in
+        Docker where the backend uses the internal hostname but the
+        browser uses ``localhost``).  Falls back to ``KEYCLOAK_SERVER_URL``.
 
         :returns: The Keycloak issuer URL.
         :rtype: str
         """
-        return f"{self.keycloak_server_url.rstrip('/')}/realms/{self.keycloak_realm}"
+        base = self.keycloak_browser_url or self.keycloak_server_url
+        return f"{base.rstrip('/')}/realms/{self.keycloak_realm}"
 
     @property
     def resolved_session_cookie_secure(self) -> bool:

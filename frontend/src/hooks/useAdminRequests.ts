@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api'
 import { useToast } from '../contexts/ToastContext'
 
@@ -14,46 +15,48 @@ export interface AdminRequest {
 }
 
 export function useAdminRequests(onUpdated?: () => void) {
-  const [requests, setRequests] = useState<AdminRequest[]>([])
+  const qc = useQueryClient()
   const { toast } = useToast()
 
-  const refresh = useCallback(async () => {
-    try {
+  const { data: requests = [] } = useQuery({
+    queryKey: ['admin-requests'],
+    queryFn: async () => {
       const data = await apiFetch<{ items: AdminRequest[] }>('/api/requests')
-      setRequests(data.items)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Impossible de charger les demandes'
-      toast(msg)
-    }
-  }, [])
+      return data.items
+    },
+  })
 
-  useEffect(() => { refresh() }, [refresh])
-
-  async function updateRequest(id: number, status: 'approved' | 'rejected') {
-    try {
-      await apiFetch(`/api/requests/${id}`, {
+  const mutation = useMutation({
+    mutationFn: ({ id, status }: { id: number; status: 'approved' | 'rejected' }) =>
+      apiFetch(`/api/requests/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
-      })
-      await refresh()
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-requests'] })
       onUpdated?.()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Échec de la mise à jour de la demande'
-      toast(msg)
-      throw err
-    }
+    },
+    onError: (err: Error) => {
+      toast(err.message ?? 'Échec de la mise à jour de la demande')
+    },
+  })
+
+  async function updateRequest(id: number, status: 'approved' | 'rejected') {
+    await mutation.mutateAsync({ id, status })
   }
 
-  // Map vm_id → pending requests
-  const pendingByVm = new Map<number, AdminRequest[]>()
-  for (const r of requests) {
-    if (r.status === 'pending') {
-      const list = pendingByVm.get(r.vm_id) ?? []
-      list.push(r)
-      pendingByVm.set(r.vm_id, list)
+  const pendingByVm = useMemo(() => {
+    const map = new Map<number, AdminRequest[]>()
+    for (const r of requests) {
+      if (r.status === 'pending') {
+        const list = map.get(r.vm_id) ?? []
+        list.push(r)
+        map.set(r.vm_id, list)
+      }
     }
-  }
+    return map
+  }, [requests])
 
   return { requests, pendingByVm, updateRequest }
 }

@@ -13,6 +13,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx, require_charter_signed
@@ -24,6 +25,7 @@ from app.db.repositories.vm import VmQueryRepo
 from app.services.vm import AccessLevel, VmAccessService, VmQueryService
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_query_service
+from app.services.vm.status_cache import get_status_cache
 
 from .schemas import (
     VMAccessListResponse,
@@ -44,13 +46,13 @@ router = APIRouter()
 @router.get("/status/stream")
 async def stream_vm_statuses(
     ctx: AuthCtx = Depends(require_charter_signed),
-    cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> StreamingResponse:
     """
     SSE stream pushing VM status changes for all VMs accessible to the current user.
 
-    Polls Proxmox every 5 seconds and emits a JSON event only when a VM's
-    status changes.  A heartbeat comment is sent every cycle to keep the
+    Reads from the centralized VM status cache (one Proxmox poll for the
+    entire application) and emits a JSON event only when a VM's status
+    changes.  A heartbeat comment is sent every cycle to keep the
     connection alive.
 
     A fresh database session is created and released on every poll cycle so
@@ -58,10 +60,10 @@ async def stream_vm_statuses(
     indefinitely.
 
     :param ctx: Authenticated user context (injected).
-    :param cmd: VM command service (injected).
     :returns: A text/event-stream response.
     """
     settings = get_settings()
+    cache = get_status_cache()
 
     async def generate():
         last: dict[int, str | None] = {}
@@ -72,22 +74,16 @@ async def stream_vm_statuses(
                     query = VmQueryService(repo=VmQueryRepo(db, dns_zone=settings.dns_zone.rstrip(".")), settings=settings)
                     vms = await query.list_vms_for(ctx=ctx)
                     vm_ids = [v["vm_id"] for v in vms["items"]]
-                results = await asyncio.gather(
-                    *[cmd.status(vm_id=vm_id) for vm_id in vm_ids],
-                    return_exceptions=True,
-                )
-                for vm_id, data in zip(vm_ids, results):
-                    if isinstance(data, Exception):
-                        logger.debug("SSE: failed to fetch status for vm_id=%s", vm_id, exc_info=data)
+                cached = cache.get_many(vm_ids)
+                for vm_id in vm_ids:
+                    entry = cached.get(vm_id)
+                    if entry is None:
                         continue
-                    s = data.get("status")
-                    uptime = data.get("uptime")
-                    node = data.get("node")
-                    if last.get(vm_id) != s:
-                        last[vm_id] = s
-                        yield f"data: {json.dumps({'vm_id': vm_id, 'status': s, 'uptime': uptime, 'node': node})}\n\n"
-            except Exception:
-                logger.exception("SSE: error during VM list or DB query for user_id=%s", ctx.user_id)
+                    if last.get(vm_id) != entry.status:
+                        last[vm_id] = entry.status
+                        yield f"data: {json.dumps({'vm_id': vm_id, 'status': entry.status, 'uptime': entry.uptime, 'node': entry.node})}\n\n"
+            except (SQLAlchemyError, OSError) as exc:
+                logger.warning("SSE: error during VM list or DB query for user_id=%s: %s", ctx.user_id, exc)
             yield f"event: sync\ndata: {json.dumps({'vm_ids': vm_ids})}\n\n"
             yield ": ping\n\n"
             await asyncio.sleep(5)
@@ -113,6 +109,44 @@ async def list_vms(
     :rtype: VMListResponse
     """
     return VMListResponse.model_validate(await query.list_vms_for(ctx=ctx))
+
+
+@router.get("/metrics/batch")
+async def get_batch_metrics(
+    vm_ids: str = Query(description="Comma-separated VM IDs"),
+    timeframe: str = Query(default="hour", pattern="^(hour|day|week|month|year)$"),
+    cf: str = Query(default="AVERAGE", pattern="^(AVERAGE|MAX)$"),
+    ctx: AuthCtx = Depends(require_charter_signed),
+    query: VmQueryService = Depends(get_vm_query_service),
+    cmd: VmCommandService = Depends(get_vm_command_service),
+) -> dict:
+    """Fetch metrics for multiple VMs in a single request.
+
+    Only VMs the caller has access to are included; unauthorized IDs are silently skipped.
+    """
+    try:
+        ids = [int(v.strip()) for v in vm_ids.split(",") if v.strip()]
+    except ValueError:
+        ids = []
+    if not ids:
+        return {"items": {}}
+
+    # Filter to only accessible VMs
+    all_vms = await query.list_vms_for(ctx=ctx)
+    accessible = {v["vm_id"] for v in all_vms["items"]}
+    ids = [i for i in ids if i in accessible]
+
+    # Fetch metrics concurrently
+    results = await asyncio.gather(
+        *(cmd.metrics(vm_id=vm_id, timeframe=timeframe, cf=cf) for vm_id in ids),
+        return_exceptions=True,
+    )
+    items = {}
+    for vm_id, result in zip(ids, results):
+        if isinstance(result, Exception):
+            continue
+        items[str(vm_id)] = result.get("items", [])
+    return {"items": items}
 
 
 @router.get("/{vm_id}", response_model=VMDetailResponse)

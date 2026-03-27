@@ -4,14 +4,21 @@ Access-token decoding and validation module.
 Provides :class:`TokenService` which validates Keycloak-issued JWTs,
 and FastAPI dependency helpers for extracting the token payload from
 incoming requests.
+
+The service is used as a singleton so that the Keycloak public key
+(JWK) is fetched once and cached in-process with a TTL, avoiding a
+round-trip to Keycloak on every request.
 """
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwcrypto import jwk
 from jwcrypto.common import JWException
 from keycloak import KeycloakOpenID
 from keycloak.exceptions import KeycloakError
@@ -26,9 +33,16 @@ logger = logging.getLogger(__name__)
 TokenPayload = dict[str, Any]
 http_bearer = HTTPBearer(auto_error=False)
 
+_JWK_CACHE_TTL = 300  # 5 minutes
+
 
 class TokenService:
-    """Decode and validate access tokens from a Bearer header or cookie."""
+    """Decode and validate access tokens from a Bearer header or cookie.
+
+    The Keycloak public key is cached for up to ``_JWK_CACHE_TTL`` seconds.
+    On signature verification failure the cache is invalidated and one
+    retry is attempted to handle key rotation transparently.
+    """
 
     def __init__(self, *, settings: Settings):
         self._settings = settings
@@ -39,16 +53,50 @@ class TokenService:
             client_secret_key=settings.keycloak_client_secret,
             verify=settings.keycloak_verify_tls,
         )
+        self._cached_jwk: jwk.JWK | None = None
+        self._jwk_fetched_at: float = 0.0
 
-    def decode(self, token: str) -> TokenPayload:
-        """Decode and validate a JWT access token."""
-        try:
-            payload = self._keycloak.decode_token(token=token, validate=True)
-        except (KeycloakError, JWException, ValueError, TypeError) as exc:
-            raise self._unauthorized(reason=type(exc).__name__) from exc
+    def _get_public_jwk(self) -> jwk.JWK:
+        """Return the realm public key, fetching from Keycloak only when the cache has expired."""
+        now = time.monotonic()
+        if self._cached_jwk is not None and (now - self._jwk_fetched_at) < _JWK_CACHE_TTL:
+            return self._cached_jwk
+        pem = (
+            "-----BEGIN PUBLIC KEY-----\n"
+            + self._keycloak.public_key()
+            + "\n-----END PUBLIC KEY-----"
+        )
+        self._cached_jwk = jwk.JWK.from_pem(pem.encode("utf-8"))
+        self._jwk_fetched_at = time.monotonic()
+        logger.info("jwk_cache_refreshed ttl=%ds", _JWK_CACHE_TTL)
+        return self._cached_jwk
 
+    def _decode_with_key(self, token: str, key: jwk.JWK) -> TokenPayload:
+        """Decode a token using the given JWK, raising on any error."""
+        payload = self._keycloak.decode_token(token=token, validate=True, key=key)
         if not isinstance(payload, dict):
             raise self._unauthorized(reason=f"payload_type={type(payload).__name__}")
+        return payload
+
+    def decode(self, token: str) -> TokenPayload:
+        """Decode and validate a JWT access token.
+
+        Uses the cached public key.  If validation fails (e.g. after a
+        key rotation), invalidates the cache and retries once with a
+        freshly fetched key.
+        """
+        key = self._get_public_jwk()
+        try:
+            payload = self._decode_with_key(token, key)
+        except (KeycloakError, JWException, ValueError, TypeError):
+            # Key may have rotated — invalidate cache and retry once.
+            self._cached_jwk = None
+            try:
+                key = self._get_public_jwk()
+                payload = self._decode_with_key(token, key)
+                logger.info("jwk_cache_retry_succeeded")
+            except (KeycloakError, JWException, ValueError, TypeError) as exc:
+                raise self._unauthorized(reason=type(exc).__name__) from exc
 
         self._enforce_issuer_and_audience(payload)
         return payload
@@ -126,12 +174,35 @@ class TokenService:
         )
 
 
+_token_service: TokenService | None = None
+_token_service_lock = asyncio.Lock()
+
+
+async def _init_token_service(settings: Settings) -> TokenService:
+    """Create the TokenService singleton under an async lock."""
+    global _token_service
+    async with _token_service_lock:
+        if _token_service is None:
+            _token_service = TokenService(settings=settings)
+        return _token_service
+
+
 def get_token_service(settings: Settings = Depends(get_settings)) -> TokenService:
-    return TokenService(settings=settings)
+    """Return the singleton TokenService.
+
+    The instance is created lazily on first call.  Because CPython's GIL
+    protects the simple check-then-assign for this lightweight constructor,
+    this remains safe in practice.  For explicit async-safe initialisation,
+    call :func:`ensure_token_service` during app lifespan.
+    """
+    global _token_service
+    if _token_service is None:
+        _token_service = TokenService(settings=settings)
+    return _token_service
 
 
 def decode_token(token: str, settings: Settings | None = None) -> TokenPayload:
-    return TokenService(settings=settings or get_settings()).decode(token)
+    return get_token_service(settings=settings or get_settings()).decode(token)
 
 
 def get_token_payload(

@@ -1,0 +1,183 @@
+{
+  "realm": "hosting-dev",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "attributes": {
+    "userProfileEnabled": "true"
+  },
+  "roles": {
+    "realm": [
+      { "name": "user", "description": "Regular user" },
+      { "name": "admin", "description": "Administrator" }
+    ]
+  },
+  "groups": [
+    {
+      "name": "cluster-dev",
+      "path": "/cluster-dev"
+    },
+    {
+      "name": "admin",
+      "path": "/admin"
+    }
+  ],
+  "defaultGroups": [],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@dev.local",
+      "firstName": "Admin",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "admin", "temporary": false }
+      ],
+      "groups": ["/cluster-dev", "/admin"],
+      "attributes": {
+        "cotise_end": ["4102444800000"],
+        "dateSignedHosting": ["2025-01-01"]
+      }
+    },
+    {
+      "username": "user",
+      "email": "user@dev.local",
+      "firstName": "Test",
+      "lastName": "Cotisant",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "user", "temporary": false }
+      ],
+      "groups": ["/cluster-dev"],
+      "attributes": {
+        "cotise_end": ["4102444800000"],
+        "dateSignedHosting": ["2025-01-01"]
+      }
+    },
+    {
+      "username": "newuser",
+      "email": "newuser@dev.local",
+      "firstName": "New",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "newuser", "temporary": false }
+      ],
+      "groups": ["/cluster-dev"],
+      "attributes": {
+        "cotise_end": ["4102444800000"]
+      }
+    },
+    {
+      "username": "expired",
+      "email": "expired@dev.local",
+      "firstName": "Expired",
+      "lastName": "Member",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "expired", "temporary": false }
+      ],
+      "groups": ["/cluster-dev"],
+      "attributes": {
+        "cotise_end": ["1704067200000"],
+        "dateSignedHosting": ["2025-01-01"]
+      }
+    },
+    {
+      "username": "outsider",
+      "email": "outsider@dev.local",
+      "firstName": "Outside",
+      "lastName": "Person",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "outsider", "temporary": false }
+      ],
+      "groups": [],
+      "attributes": {
+        "cotise_end": ["4102444800000"],
+        "dateSignedHosting": ["2025-01-01"]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "hosting",
+      "name": "Hosting Platform",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://localhost:8000/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ],
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "cotise_end",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "cotise_end",
+            "claim.name": "attributes.cotise_end",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "dateSignedHosting",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "dateSignedHosting",
+            "claim.name": "attributes.dateSignedHosting",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "clientScopeMappings": {}
+}

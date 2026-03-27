@@ -12,6 +12,7 @@ from fastapi import Request as FastAPIRequest
 from fastapi.responses import RedirectResponse
 
 from app.core.config import get_settings
+from app.core.rate_limit import RateLimiter
 from app.core.security.token import TokenPayload, get_token_payload
 from app.core.sessions import get_refresh_token, set_token_cookies
 from app.services.auth import (
@@ -61,7 +62,7 @@ def auth_me(payload: TokenPayload = Depends(get_token_payload)) -> AuthMeRespons
 
 
 @router.post("/refresh")
-def auth_refresh(request: FastAPIRequest, response: Response) -> dict:
+async def auth_refresh(request: FastAPIRequest, response: Response, _rl=Depends(RateLimiter(max_calls=10, window_seconds=60))) -> dict:
     """Refresh the access token using the refresh token cookie.
 
     :returns: ``{"ok": true}`` on success.

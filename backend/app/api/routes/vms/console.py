@@ -31,7 +31,7 @@ from fastapi.websockets import WebSocketState
 from app.auth import AuthCtx, require_user
 from app.auth.context import build_auth_ctx
 from app.core.config import get_settings
-from app.core.security.token import TokenService
+from app.core.security.token import get_token_service
 from app.core.sessions import get_access_token
 from app.db.core.engine import get_session_factory
 from app.db.repositories.vm import VmAccessRepo
@@ -39,6 +39,7 @@ from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.access import AccessLevel, VmAccessService
 from app.services.vm.deps import get_vm_access_service
+from app.core.rate_limit import RateLimiter
 from app.services.vm.errors import raise_proxmox_as_http
 
 logger = logging.getLogger(__name__)
@@ -105,11 +106,11 @@ class _VmSession:
                 for ws in list(self.clients):
                     try:
                         await ws.send_bytes(frame)
-                    except Exception:
+                    except (OSError, RuntimeError):
                         dead.append(ws)
                 for ws in dead:
                     self.clients.discard(ws)
-        except Exception as exc:
+        except (websockets.exceptions.ConnectionClosed, OSError) as exc:
             logger.warning("_VmSession vm=%s proxmox reader stopped: %s", self.vm_id, exc)
 
     async def _keepalive(self) -> None:
@@ -118,7 +119,7 @@ class _VmSession:
             while True:
                 await asyncio.sleep(30)
                 await self.prox_ws.send(b"2")
-        except Exception:
+        except (websockets.exceptions.ConnectionClosed, OSError, asyncio.CancelledError):
             pass
 
     async def send_to_proxmox(self, data: bytes) -> None:
@@ -131,7 +132,7 @@ class _VmSession:
                 task.cancel()
         try:
             await self.prox_ws.close()
-        except Exception:
+        except (websockets.exceptions.ConnectionClosed, OSError):
             pass
 
 
@@ -157,7 +158,7 @@ async def _get_or_create_session(vm_id: int) -> _VmSession:
             try:
                 await session.prox_ws.ping()
                 return session
-            except Exception:
+            except (websockets.exceptions.ConnectionClosed, OSError):
                 logger.info("_get_or_create_session vm=%s stale session, reconnecting", vm_id)
                 await session.close()
                 _sessions.pop(vm_id, None)
@@ -237,9 +238,9 @@ async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
     if not access_token:
         return None
     try:
-        payload = TokenService(settings=settings).decode(access_token)
+        payload = get_token_service(settings=settings).decode(access_token)
         return build_auth_ctx(payload, settings)
-    except Exception:
+    except (ValueError, KeyError, OSError):
         logger.warning("terminal_ws _ws_auth failed", exc_info=True)
         return None
 
@@ -254,6 +255,7 @@ async def get_termproxy(
     vm_id: int,
     ctx: AuthCtx = Depends(require_user),
     access: VmAccessService = Depends(get_vm_access_service),
+    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> dict:
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     gateway = get_proxmox_gateway()
@@ -295,7 +297,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
         logger.warning("terminal_ws vm=%s termproxy failed: %s", vm_id, exc)
         await websocket.close(code=4503, reason=str(exc))
         return
-    except Exception as exc:
+    except (websockets.exceptions.WebSocketException, OSError) as exc:
         logger.warning("terminal_ws vm=%s proxmox connection failed: %r", vm_id, exc)
         await websocket.close(code=4503, reason="Proxmox connection failed")
         return
@@ -308,7 +310,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
             # Forward mux-framed data as-is to Proxmox termproxy.
             # Proxmox expects: 0:len:data (input), 1:cols:rows: (resize), 2 (keepalive)
             await session.send_to_proxmox(data)
-    except Exception as exc:
+    except (websockets.exceptions.ConnectionClosed, OSError, RuntimeError) as exc:
         logger.debug("terminal_ws vm=%s client disconnected: %s", vm_id, exc)
     finally:
         await _release_client(vm_id, websocket)

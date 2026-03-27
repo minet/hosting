@@ -56,7 +56,7 @@ def _fmt_date(iso: str) -> str:
         offset = dt_paris.strftime("%z")
         offset_fmt = f"UTC{offset[:3]}:{offset[3:]}" if len(offset) == 5 else "UTC+1"
         return f"{dt_paris.day:02d} {_MOIS[dt_paris.month - 1]} {dt_paris.year} à {dt_paris.strftime('%H:%M')} ({offset_fmt})"
-    except Exception:
+    except (ValueError, IndexError, OSError):
         return iso
 
 
@@ -188,7 +188,7 @@ def _refresh_session_token(request: Request, response: Response, settings: Setti
                 refresh_token=new_refresh_token if isinstance(new_refresh_token, str) else None,
                 settings=settings,
             )
-    except Exception:
+    except (HTTPException, OSError, KeyError, ValueError):
         logger.warning("Could not refresh token after charter signature — user may need to re-login")
 
 
@@ -240,7 +240,7 @@ async def sign_charter(
 
     try:
         pdf_bytes = generate_charter_pdf(prenom=prenom, nom=nom, signed_at=signed_at)
-    except Exception:
+    except (OSError, ValueError, RuntimeError):
         logger.exception("Failed to generate charter PDF for user_id=%s", user_id)
         pdf_bytes = None
 
@@ -258,7 +258,7 @@ async def sign_charter(
                 pdf_bytes=pdf_bytes,
                 settings=settings,
             )
-        except Exception:
+        except (smtplib.SMTPException, OSError):
             logger.exception("Failed to send charter email to %s (user_id=%s)", email, user_id)
 
     return {"signed_at": signed_at}

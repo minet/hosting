@@ -128,7 +128,8 @@ class VmPatchService:
 
         try:
             if wants_resize:
-                assert target_cpu is not None and target_ram_mb is not None and target_disk is not None
+                if target_cpu is None or target_ram_mb is None or target_disk is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing resize parameters")
                 logger.info(
                     "vm_patch_proxmox_resize vm_id=%s cpu_cores=%s ram_mb=%s disk_gb=%s",
                     vm_id,
@@ -144,7 +145,8 @@ class VmPatchService:
                     disk_gb=target_disk,
                 )
             if wants_cloudinit:
-                assert username is not None
+                if username is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing username")
                 logger.info("vm_patch_proxmox_cloudinit vm_id=%s username=%s", vm_id, username)
                 await asyncio.to_thread(
                     self.gateway.update_vm_cloudinit,
@@ -159,7 +161,8 @@ class VmPatchService:
 
         try:
             if wants_resize:
-                assert target_cpu is not None and target_ram_mb is not None and target_disk is not None
+                if target_cpu is None or target_ram_mb is None or target_disk is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing resize parameters")
                 updated_vm = await self.cmd_repo.update_vm_resources(
                     vm_id=vm_id,
                     cpu_cores=target_cpu,
@@ -170,7 +173,8 @@ class VmPatchService:
                     await self.db.rollback()
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM changed concurrently")
             if wants_cloudinit:
-                assert username is not None
+                if username is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing username")
                 updated_resource = await self.cmd_repo.update_resource(
                     vm_id=vm_id,
                     username=username,
