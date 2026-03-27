@@ -179,7 +179,10 @@ def require_user(
     if not settings.is_preprod:
         return ctx
     # In pre-prod, only users with an LDAP account are allowed.
-    ldap_login = _claim_value(ctx.payload, "ldapLogin")
+    attrs = ctx.payload.get(settings.auth_attributes_namespace, {})
+    ldap_login = _claim_value(ctx.payload, "ldapLogin") or (
+        _claim_value(attrs, "ldapLogin") if isinstance(attrs, dict) else None
+    )
     if not ldap_login and not ctx.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     required = csv_values(settings.auth_user_groups)
