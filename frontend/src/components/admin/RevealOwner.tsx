@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Eye, Loader } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../../api'
 
 interface UserIdentity { username: string | null; first_name: string | null; last_name: string | null; email: string | null }
@@ -8,6 +9,7 @@ export default function RevealOwner({ ownerId }: { ownerId: string }) {
   const [identity, setIdentity] = useState<UserIdentity | null>(null)
   const [loading, setLoading] = useState(false)
   const [revealed, setRevealed] = useState(false)
+  const { t } = useTranslation('admin')
 
   async function reveal() {
     if (revealed) return
@@ -23,7 +25,7 @@ export default function RevealOwner({ ownerId }: { ownerId: string }) {
 
   if (!revealed) {
     return (
-      <button onClick={reveal} className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-500 transition-colors" title="Révéler l'identité">
+      <button onClick={reveal} className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-500 transition-colors" title={t('revealIdentity')}>
         {loading ? <Loader size={11} className="animate-spin text-blue-400" /> : <Eye size={11} />}
         <span className="font-mono">{ownerId}</span>
       </button>

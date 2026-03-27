@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X, Check, AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
 
 function RequestDialog({ request, onClose, onUpdate }: {
@@ -8,6 +9,7 @@ function RequestDialog({ request, onClose, onUpdate }: {
   onUpdate: (id: number, status: 'approved' | 'rejected') => Promise<void>
 }) {
   const [loading, setLoading] = useState(false)
+  const { t } = useTranslation('admin')
 
   async function handle(status: 'approved' | 'rejected') {
     setLoading(true)
@@ -27,7 +29,7 @@ function RequestDialog({ request, onClose, onUpdate }: {
 
         <div className="flex items-center justify-between">
           <p className="text-sm font-bold text-neutral-800 dark:text-neutral-200">
-            Requête {request.type === 'ipv4' ? 'IPv4' : 'DNS'}
+            {t('request.title', { type: request.type === 'ipv4' ? 'IPv4' : 'DNS' })}
           </p>
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer">
             <X size={16} />
@@ -36,21 +38,21 @@ function RequestDialog({ request, onClose, onUpdate }: {
 
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 text-xs">
-            <span className="text-neutral-400 dark:text-neutral-500">VM</span>
+            <span className="text-neutral-400 dark:text-neutral-500">{t('request.vm')}</span>
             <span className="font-medium text-neutral-700 dark:text-neutral-300">{request.vm_name ?? request.vm_id}</span>
           </div>
           <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 text-xs">
-            <span className="text-neutral-400 dark:text-neutral-500">Type</span>
+            <span className="text-neutral-400 dark:text-neutral-500">{t('request.type')}</span>
             <span className="font-mono text-neutral-700 dark:text-neutral-300">{request.type}</span>
           </div>
           {request.dns_label && (
             <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 text-xs">
-              <span className="text-neutral-400 dark:text-neutral-500">Label DNS</span>
+              <span className="text-neutral-400 dark:text-neutral-500">{t('request.dnsLabel')}</span>
               <span className="font-mono text-neutral-700 dark:text-neutral-300">{request.dns_label}</span>
             </div>
           )}
           <div className="flex items-center justify-between px-3 py-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 text-xs">
-            <span className="text-neutral-400 dark:text-neutral-500">Soumise le</span>
+            <span className="text-neutral-400 dark:text-neutral-500">{t('request.submittedAt')}</span>
             <span className="text-neutral-700 dark:text-neutral-300">{new Date(request.created_at).toLocaleString('fr-FR')}</span>
           </div>
         </div>
@@ -61,14 +63,14 @@ function RequestDialog({ request, onClose, onUpdate }: {
             disabled={loading}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
           >
-            <Check size={14} /> Approuver
+            <Check size={14} /> {t('request.approve')}
           </button>
           <button
             onClick={() => handle('rejected')}
             disabled={loading}
             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
           >
-            <X size={14} /> Rejeter
+            <X size={14} /> {t('request.reject')}
           </button>
         </div>
       </div>
@@ -82,6 +84,7 @@ export default function RequestBadge({ request, onUpdate }: {
 }) {
   const [open, setOpen] = useState(false)
   const isIpv4 = request.type === 'ipv4'
+  const { t } = useTranslation('admin')
 
   return (
     <>
@@ -94,7 +97,7 @@ export default function RequestBadge({ request, onUpdate }: {
         }`}
       >
         {!isIpv4 && <AlertTriangle size={11} />}
-        {isIpv4 ? 'Demande IPv4' : `DNS : ${request.dns_label}`}
+        {isIpv4 ? t('request.requestIpv4') : `DNS : ${request.dns_label}`}
       </button>
       {open && <RequestDialog request={request} onClose={() => setOpen(false)} onUpdate={onUpdate} />}
     </>

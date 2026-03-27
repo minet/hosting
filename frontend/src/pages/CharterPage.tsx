@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { useTranslation } from 'react-i18next'
 import { API_BASE, apiFetch, logoutUrl } from '../api'
 
 interface Props {
@@ -13,6 +14,9 @@ export default function CharterPage({ onSigned }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation('charter')
+  const tc = useTranslation().t
+  const { t: tAuth } = useTranslation('auth')
 
   useEffect(() => {
     fetch(`${API_BASE}/api/charte`, { credentials: 'include' })
@@ -32,7 +36,6 @@ export default function CharterPage({ onSigned }: Props) {
     }
 
     el.addEventListener('scroll', onScroll)
-    // Check immediately in case content is short enough to not need scrolling
     onScroll()
     return () => el.removeEventListener('scroll', onScroll)
   }, [charterText])
@@ -43,10 +46,9 @@ export default function CharterPage({ onSigned }: Props) {
     setError(null)
     try {
       await apiFetch('/api/charter/sign', { method: 'POST' })
-      // Token already refreshed server-side — just reload user state
       onSigned()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Une erreur est survenue.')
+      setError(e instanceof Error ? e.message : tc('errorOccurred'))
       setLoading(false)
     }
   }
@@ -59,8 +61,8 @@ export default function CharterPage({ onSigned }: Props) {
           <img src="/assets/logo/text_hosting_dark.png" alt="Hosting" className="h-7 dark:hidden" />
           <img src="/assets/logo/text_hosting_light.png" alt="Hosting" className="h-7 hidden dark:block" />
           <div>
-            <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Charte d'utilisation</h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">Vous devez accepter la charte pour accéder à la plateforme Hosting MiNET.</p>
+            <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t('title')}</h1>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('subtitle')}</p>
           </div>
         </div>
 
@@ -71,7 +73,7 @@ export default function CharterPage({ onSigned }: Props) {
           style={{ minHeight: 0 }}
         >
           {charterText === null ? (
-            <p className="text-neutral-400 dark:text-neutral-500 italic">Chargement de la charte…</p>
+            <p className="text-neutral-400 dark:text-neutral-500 italic">{t('loadingCharter')}</p>
           ) : (
             <ReactMarkdown
               components={{
@@ -91,7 +93,7 @@ export default function CharterPage({ onSigned }: Props) {
         {/* Scroll hint */}
         {!hasScrolledToBottom && charterText !== null && (
           <div className="text-center text-xs text-neutral-400 dark:text-neutral-500 py-2 border-t border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
-            Faites défiler jusqu'en bas pour pouvoir accepter la charte
+            {t('scrollHint')}
           </div>
         )}
 
@@ -109,8 +111,7 @@ export default function CharterPage({ onSigned }: Props) {
               onChange={(e) => setChecked(e.target.checked)}
             />
             <span className="text-sm text-neutral-700 dark:text-neutral-300">
-              J'ai lu et j'accepte la charte d'utilisation de la plateforme Hosting MiNET dans son intégralité.
-              Un exemplaire signé me sera envoyé par email.
+              {t('accept')}
             </span>
           </label>
           <div className="flex items-center gap-3">
@@ -119,13 +120,13 @@ export default function CharterPage({ onSigned }: Props) {
               disabled={!checked || !hasScrolledToBottom || loading}
               className="px-5 py-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-sm font-medium rounded-md hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {loading ? 'Enregistrement…' : 'Signer et continuer'}
+              {loading ? t('signing') : t('signAndContinue')}
             </button>
             <a
               href={logoutUrl()}
               className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
             >
-              Se déconnecter
+              {tAuth('logout')}
             </a>
           </div>
         </div>

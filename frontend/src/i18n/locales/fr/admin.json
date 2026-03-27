@@ -1,0 +1,84 @@
+{
+  "tabs": {
+    "vms": "Machines virtuelles",
+    "templates": "Templates",
+    "dns": "DNS",
+    "proxmox": "Proxmox"
+  },
+  "clearFilters": "Effacer les filtres",
+  "noVM": "Aucune VM",
+  "columns": {
+    "id": "ID",
+    "status": "Statut",
+    "name": "Nom",
+    "template": "Template",
+    "resources": "Ressources",
+    "node": "Nœud",
+    "owner": "Propriétaire",
+    "subscription": "Cotisation"
+  },
+  "statusFilter": {
+    "all": "Tous",
+    "running": "Running",
+    "stopped": "Stopped"
+  },
+  "expired": "Expiré",
+  "templates": {
+    "title": "Templates",
+    "count_one": "{{count}} template",
+    "count_other": "{{count}} templates",
+    "proxmoxId": "ID Proxmox",
+    "name": "Nom",
+    "active": "Actif",
+    "add": "Ajouter",
+    "noTemplate": "Aucun template",
+    "activate": "Activer",
+    "deactivate": "Désactiver"
+  },
+  "dns": {
+    "title": "Enregistrements DNS",
+    "count_one": "{{count}} enregistrement",
+    "count_other": "{{count}} enregistrements",
+    "forceNotify": "Forcer NOTIFY",
+    "notifySent": "NOTIFY envoyé aux secondaires",
+    "cannotLoad": "Impossible de charger les DNS",
+    "revokeFailed": "Échec de la révocation",
+    "notifyFailed": "Échec du NOTIFY",
+    "noApprovedDns": "Aucun DNS custom approuvé",
+    "vmCol": "VM",
+    "vmNameCol": "Nom VM",
+    "dnsLabelCol": "Label DNS",
+    "createdAtCol": "Créé le",
+    "revoke": "Révoquer"
+  },
+  "proxmox": {
+    "title": "Proxmox VE",
+    "refresh": "Actualiser",
+    "loadingStatus": "Chargement du statut Proxmox...",
+    "cpuCluster": "CPU Cluster",
+    "ramCluster": "RAM Cluster",
+    "diskCluster": "Disque Cluster",
+    "nodes": "Noeuds",
+    "storage": "Stockage",
+    "localDisk": "Disque local",
+    "noStorage": "Aucun stockage",
+    "storageCol": "Storage",
+    "nodeCol": "Noeud",
+    "typeCol": "Type",
+    "statusCol": "Statut",
+    "usageCol": "Utilisation",
+    "sizeCol": "Taille",
+    "cpuOf": "{{pct}}% de {{cores}} cores"
+  },
+  "request": {
+    "title": "Requête {{type}}",
+    "vm": "VM",
+    "type": "Type",
+    "dnsLabel": "Label DNS",
+    "submittedAt": "Soumise le",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "requestIpv4": "Demande IPv4"
+  },
+  "revealIdentity": "Révéler l'identité"
+}

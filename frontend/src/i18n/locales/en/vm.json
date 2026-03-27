@@ -1,0 +1,124 @@
+{
+  "virtualMachines": "Virtual machines",
+  "createVM": "Create a VM",
+  "configureVM": "Create and configure your machine",
+  "configureNewVM": "Configure your new virtual machine",
+  "newVM": "New VM",
+  "welcome": {
+    "title": "Welcome {{name}} to Hosting!",
+    "description": "This service is free if you already have a MiNET account with an active subscription. It allows you to create virtual machines and experiment with them.",
+    "limits": "You have a maximum of <cores>{{cpu}} cores</cores>, <ram>{{ram}} GB of RAM</ram> and <disk>{{disk}} GB of disk</disk> to distribute across your machines.",
+    "subscriptionExpires": "Your subscription expires in",
+    "years_one": "{{count}} year",
+    "years_other": "{{count}} years",
+    "months": "{{count}} months",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days"
+  },
+  "create": {
+    "name": "Name",
+    "nameHint": "max 10 chars, letters, digits, hyphens",
+    "nameValidation": "Letters, digits and hyphens only, starts with an alphanumeric character",
+    "nameError": "Letters, digits and hyphens only",
+    "template": "Template",
+    "selectTemplate": "Select a template",
+    "cpu": "CPU",
+    "ramGb": "RAM GB",
+    "diskGb": "Disk GB",
+    "max": "max {{max}}",
+    "sshAccess": "SSH Access",
+    "username": "Username",
+    "password": "Password",
+    "sshKey": "SSH public key",
+    "sshKeyHelp": "How to generate a key?",
+    "createButton": "Create VM",
+    "steps": {
+      "reserving": "Reserving resources...",
+      "cloning": "Cloning template...",
+      "configuring": "Configuring VM...",
+      "resizing": "Resizing disk...",
+      "migrating": "Migrating to optimal node...",
+      "migratingInProgress": "Migration in progress...",
+      "provisioning": "Provisioning...",
+      "success": "VM created successfully!"
+    },
+    "errorCreating": "An error occurred while creating the VM.",
+    "quotaExhausted": "Quota exhausted",
+    "quotaExhaustedDesc": "You have used all your allocated resources. Delete a VM to create a new one."
+  },
+  "destroy": {
+    "title": "Delete <red>{{name}}</red>?",
+    "warning": "This action is irreversible. The VM and all its data will be permanently deleted."
+  },
+  "resources": {
+    "title": "Modify resources",
+    "allocated": "Allocated resources",
+    "disk": "Disk"
+  },
+  "access": {
+    "title": "VM Access",
+    "sshWorks": "works directly!",
+    "user": "User",
+    "password": "Password",
+    "sshKey": "SSH Key",
+    "ownerOnly": "Owner only",
+    "stopFirst": "Stop the VM first"
+  },
+  "info": {
+    "request": "Request",
+    "sharedVM": "This VM has been shared with you"
+  },
+  "actions": {
+    "alreadyOn": "Already running",
+    "vmOff": "VM is off",
+    "startVM": "Start VM",
+    "launchTerminal": "Launch terminal",
+    "backToAdmin": "Back to admin panel"
+  },
+  "deprecated": {
+    "banner": "Your VM uses a deprecated template. We recommend recreating it with an up-to-date template. Resource modification and terminal are disabled.",
+    "title": "Deprecated template",
+    "terminalDisabled": "Terminal is disabled. Recreate your VM with an up-to-date template.",
+    "resourcesDisabled": "Not available with a deprecated template"
+  },
+  "console": {
+    "notAvailable": "Console not available",
+    "adminRestriction": "As an administrator, you cannot access the console of other users' VMs.",
+    "vmStopped": "The VM is off"
+  },
+  "history": {
+    "title": "History",
+    "noRecentAction": "No recent action"
+  },
+  "share": {
+    "title": "Share VM",
+    "findUserId": "How to find a user's ID?",
+    "findUserIdDesc": "Each MiNET member has a membership number visible on the Hosting home page, displayed next to their first name as <mono>#12345</mono>.",
+    "sharedAccess": "Shared access",
+    "sharedRights": "Shared user rights",
+    "rightsList": {
+      "viewStatus": "View VM status and metrics",
+      "accessTerminal": "Access the terminal",
+      "startStopRestart": "Start / stop / restart"
+    },
+    "cannotModify": "They cannot modify resources, access settings or delete the VM.",
+    "memberNumber": "Member number",
+    "shareButton": "Share"
+  },
+  "request": {
+    "title": "Make a request",
+    "previousRequests": "Previous requests",
+    "retryWith": "Retry with these parameters",
+    "requestType": "Request type",
+    "ipv4Address": "IPv4 address",
+    "dnsName": "DNS name",
+    "alreadyHasIpv4": "This VM already has an IPv4 address.",
+    "ipv4Pending": "An IPv4 request is already pending.",
+    "dnsPending": "A DNS request is already pending.",
+    "subdomain": "Desired subdomain",
+    "ipv4Desc": "A public IPv4 address will be manually assigned by the MiNET team following your request."
+  },
+  "metrics": {
+    "network": "Network"
+  }
+}

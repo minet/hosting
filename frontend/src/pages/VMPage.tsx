@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Play, TerminalSquare } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch, ApiError } from '../api'
 
 const VMTerminal = lazy(() => import('../components/VMTerminal'))
@@ -32,6 +33,7 @@ export default function VMPage() {
   const navigate = useNavigate()
   const resources = useResources()
   const me = useUser()
+  const { t } = useTranslation('vm')
   const vmStatusEntry = useVMStatus(Number(vmId))
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
@@ -96,7 +98,7 @@ export default function VMPage() {
     {templateDeprecated && !deprecatedBannerDismissed && (
       <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-b-xl shadow-sm">
         <AlertTriangle size={13} className="shrink-0 text-amber-500" />
-        <span className="flex-1">Votre VM utilise une template dépréciée. Il vous est conseillé de la recréer avec une template à jour. La modification des ressources et le terminal sont désactivés.</span>
+        <span className="flex-1">{t('deprecated.banner')}</span>
         <button
           onClick={() => setDeprecatedBannerDismissed(true)}
           className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[11px] font-semibold transition-colors cursor-pointer"
@@ -163,11 +165,11 @@ export default function VMPage() {
         className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors mb-1 cursor-pointer"
       >
         <ArrowLeft size={13} />
-        Retour au tableau admin
+        {t('actions.backToAdmin')}
       </button>
     )}
 
-    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-2 xl:h-full [&>*]:min-w-0">
+    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-3 xl:h-full [&>*]:min-w-0">
 
       {vm ? (
         <VMInfoCard
@@ -202,7 +204,7 @@ export default function VMPage() {
           className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 border border-neutral-700 dark:border-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors cursor-pointer h-12"
         >
           <TerminalSquare size={15} className="shrink-0" />
-          Lancer le terminal
+          {t('actions.launchTerminal')}
         </button>
       )}
 
@@ -213,27 +215,27 @@ export default function VMPage() {
           {templateDeprecated && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <AlertTriangle size={24} className="text-amber-500" />
-              <p className="text-sm text-white/70 font-medium">Template dépréciée</p>
-              <p className="text-xs text-neutral-500 text-center px-6">Le terminal est désactivé. Recréez votre VM avec une template à jour.</p>
+              <p className="text-sm text-white/70 font-medium">{t('deprecated.title')}</p>
+              <p className="text-xs text-neutral-500 text-center px-6">{t('deprecated.terminalDisabled')}</p>
             </div>
           )}
           {!templateDeprecated && running && !canAccessConsole && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
               <TerminalSquare size={24} className="text-neutral-500" />
-              <p className="text-sm text-white/70 font-medium">Console non disponible</p>
-              <p className="text-xs text-neutral-500 text-center px-6">En tant qu'administrateur, vous ne pouvez pas accéder à la console des VMs d'autres utilisateurs.</p>
+              <p className="text-sm text-white/70 font-medium">{t('console.notAvailable')}</p>
+              <p className="text-xs text-neutral-500 text-center px-6">{t('console.adminRestriction')}</p>
             </div>
           )}
           {!templateDeprecated && !running && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <p className="text-sm text-white/70 font-medium">La VM est éteinte</p>
+              <p className="text-sm text-white/70 font-medium">{t('console.vmStopped')}</p>
               <button
                 onClick={() => doAction('start')}
                 disabled={!!loadingAction}
                 className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
               >
                 <Play size={14} />
-                Allumer la VM
+                {t('actions.startVM')}
               </button>
             </div>
           )}

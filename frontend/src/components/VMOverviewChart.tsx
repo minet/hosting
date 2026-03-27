@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ResponsiveContainer, AreaChart, Area, Tooltip, XAxis, YAxis } from 'recharts'
+import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { useVMStatus } from '../contexts/VMStatusContext'
 import type { ChartPoint } from '../pages/Dashboard'
@@ -22,8 +23,8 @@ export default function VMOverviewChart({ vmId, name, data: prefetched }: Props)
   const [selfData, setSelfData] = useState<ChartPoint[]>([])
   const entry = useVMStatus(vmId)
   const running = entry?.status === 'running'
+  const { t } = useTranslation()
 
-  // Only self-fetch if no prefetched data provided
   useEffect(() => {
     if (prefetched) return
     apiFetch<{ items: MetricPoint[] }>(`/api/vms/${vmId}/metrics?timeframe=hour`)
@@ -52,7 +53,7 @@ export default function VMOverviewChart({ vmId, name, data: prefetched }: Props)
       </div>
 
       {!hasDat ? (
-        <div className="flex-1 flex items-center justify-center text-neutral-300 dark:text-neutral-600 text-xs">Aucune donnée</div>
+        <div className="flex-1 flex items-center justify-center text-neutral-300 dark:text-neutral-600 text-xs">{t('noData')}</div>
       ) : (
         <>
           <div className="flex gap-3 mb-1.5">

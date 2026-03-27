@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
@@ -36,7 +37,8 @@ function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_logi
 }
 
 function PageFallback() {
-  return <div className="flex items-center justify-center h-full text-xs text-neutral-400 dark:text-neutral-500">Chargement…</div>
+  const { t } = useTranslation()
+  return <div className="flex items-center justify-center h-full text-xs text-neutral-400 dark:text-neutral-500">{t('loading')}</div>
 }
 
 function RouteBoundary({ children }: { children: ReactNode }) {

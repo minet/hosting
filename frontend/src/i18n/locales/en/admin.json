@@ -1,0 +1,84 @@
+{
+  "tabs": {
+    "vms": "Virtual machines",
+    "templates": "Templates",
+    "dns": "DNS",
+    "proxmox": "Proxmox"
+  },
+  "clearFilters": "Clear filters",
+  "noVM": "No VM",
+  "columns": {
+    "id": "ID",
+    "status": "Status",
+    "name": "Name",
+    "template": "Template",
+    "resources": "Resources",
+    "node": "Node",
+    "owner": "Owner",
+    "subscription": "Subscription"
+  },
+  "statusFilter": {
+    "all": "All",
+    "running": "Running",
+    "stopped": "Stopped"
+  },
+  "expired": "Expired",
+  "templates": {
+    "title": "Templates",
+    "count_one": "{{count}} template",
+    "count_other": "{{count}} templates",
+    "proxmoxId": "Proxmox ID",
+    "name": "Name",
+    "active": "Active",
+    "add": "Add",
+    "noTemplate": "No template",
+    "activate": "Activate",
+    "deactivate": "Deactivate"
+  },
+  "dns": {
+    "title": "DNS Records",
+    "count_one": "{{count}} record",
+    "count_other": "{{count}} records",
+    "forceNotify": "Force NOTIFY",
+    "notifySent": "NOTIFY sent to secondaries",
+    "cannotLoad": "Unable to load DNS records",
+    "revokeFailed": "Revocation failed",
+    "notifyFailed": "NOTIFY failed",
+    "noApprovedDns": "No approved custom DNS",
+    "vmCol": "VM",
+    "vmNameCol": "VM Name",
+    "dnsLabelCol": "DNS Label",
+    "createdAtCol": "Created at",
+    "revoke": "Revoke"
+  },
+  "proxmox": {
+    "title": "Proxmox VE",
+    "refresh": "Refresh",
+    "loadingStatus": "Loading Proxmox status...",
+    "cpuCluster": "CPU Cluster",
+    "ramCluster": "RAM Cluster",
+    "diskCluster": "Disk Cluster",
+    "nodes": "Nodes",
+    "storage": "Storage",
+    "localDisk": "Local disk",
+    "noStorage": "No storage",
+    "storageCol": "Storage",
+    "nodeCol": "Node",
+    "typeCol": "Type",
+    "statusCol": "Status",
+    "usageCol": "Usage",
+    "sizeCol": "Size",
+    "cpuOf": "{{pct}}% of {{cores}} cores"
+  },
+  "request": {
+    "title": "{{type}} Request",
+    "vm": "VM",
+    "type": "Type",
+    "dnsLabel": "DNS Label",
+    "submittedAt": "Submitted on",
+    "approve": "Approve",
+    "reject": "Reject",
+    "requestIpv4": "IPv4 Request"
+  },
+  "revealIdentity": "Reveal identity"
+}

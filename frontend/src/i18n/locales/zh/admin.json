@@ -1,0 +1,84 @@
+{
+  "tabs": {
+    "vms": "虚拟机",
+    "templates": "模板",
+    "dns": "DNS",
+    "proxmox": "Proxmox"
+  },
+  "clearFilters": "清除筛选",
+  "noVM": "无虚拟机",
+  "columns": {
+    "id": "ID",
+    "status": "状态",
+    "name": "名称",
+    "template": "模板",
+    "resources": "资源",
+    "node": "节点",
+    "owner": "所有者",
+    "subscription": "订阅"
+  },
+  "statusFilter": {
+    "all": "全部",
+    "running": "运行中",
+    "stopped": "已停止"
+  },
+  "expired": "已过期",
+  "templates": {
+    "title": "模板",
+    "count_one": "{{count}} 个模板",
+    "count_other": "{{count}} 个模板",
+    "proxmoxId": "Proxmox ID",
+    "name": "名称",
+    "active": "活跃",
+    "add": "添加",
+    "noTemplate": "无模板",
+    "activate": "启用",
+    "deactivate": "禁用"
+  },
+  "dns": {
+    "title": "DNS 记录",
+    "count_one": "{{count}} 条记录",
+    "count_other": "{{count}} 条记录",
+    "forceNotify": "强制 NOTIFY",
+    "notifySent": "NOTIFY 已发送到辅助服务器",
+    "cannotLoad": "无法加载 DNS 记录",
+    "revokeFailed": "撤销失败",
+    "notifyFailed": "NOTIFY 失败",
+    "noApprovedDns": "无已批准的自定义 DNS",
+    "vmCol": "虚拟机",
+    "vmNameCol": "虚拟机名称",
+    "dnsLabelCol": "DNS 标签",
+    "createdAtCol": "创建时间",
+    "revoke": "撤销"
+  },
+  "proxmox": {
+    "title": "Proxmox VE",
+    "refresh": "刷新",
+    "loadingStatus": "正在加载 Proxmox 状态...",
+    "cpuCluster": "CPU 集群",
+    "ramCluster": "内存集群",
+    "diskCluster": "磁盘集群",
+    "nodes": "节点",
+    "storage": "存储",
+    "localDisk": "本地磁盘",
+    "noStorage": "无存储",
+    "storageCol": "存储",
+    "nodeCol": "节点",
+    "typeCol": "类型",
+    "statusCol": "状态",
+    "usageCol": "使用情况",
+    "sizeCol": "大小",
+    "cpuOf": "{{cores}} 核的 {{pct}}%"
+  },
+  "request": {
+    "title": "{{type}} 请求",
+    "vm": "虚拟机",
+    "type": "类型",
+    "dnsLabel": "DNS 标签",
+    "submittedAt": "提交于",
+    "approve": "批准",
+    "reject": "拒绝",
+    "requestIpv4": "IPv4 申请"
+  },
+  "revealIdentity": "显示身份"
+}

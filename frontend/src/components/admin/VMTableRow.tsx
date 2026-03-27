@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { Cpu, MemoryStick, HardDrive } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { AdminVM } from '../../hooks/useAdminVMs'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
 import StatusCell from './StatusCell'
@@ -17,6 +18,8 @@ interface Props {
 }
 
 function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest }: Props) {
+  const { t } = useTranslation('admin')
+  const tc = useTranslation().t
   const ipv4Req = pendingRequests?.find(r => r.type === 'ipv4')
   const dnsReq = pendingRequests?.find(r => r.type === 'dns')
 
@@ -37,17 +40,17 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
           <span className="flex items-center gap-1 text-violet-600 dark:text-violet-400">
             <Cpu size={12} />
             <span className="font-mono font-semibold">{vm.cpu_cores}</span>
-            <span className="text-violet-400 dark:text-violet-500">core{vm.cpu_cores !== 1 ? 's' : ''}</span>
+            <span className="text-violet-400 dark:text-violet-500">{tc('cores', { count: vm.cpu_cores })}</span>
           </span>
           <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
             <MemoryStick size={12} />
             <span className="font-mono font-semibold">{Math.round(vm.ram_mb / 1024)}</span>
-            <span className="text-blue-400 dark:text-blue-500">Go</span>
+            <span className="text-blue-400 dark:text-blue-500">{tc('gb')}</span>
           </span>
           <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
             <HardDrive size={12} />
             <span className="font-mono font-semibold">{vm.disk_gb}</span>
-            <span className="text-emerald-400 dark:text-emerald-500">Go</span>
+            <span className="text-emerald-400 dark:text-emerald-500">{tc('gb')}</span>
           </span>
         </div>
       </td>
@@ -85,7 +88,7 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
       <td className="px-3 py-2 overflow-hidden text-center">
         {vm.owner_id ? (
           expired
-            ? <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800">Expiré</span>
+            ? <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800">{t('expired')}</span>
             : <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">OK</span>
         ) : <span className="text-neutral-300 dark:text-neutral-600 text-xs">—</span>}
       </td>

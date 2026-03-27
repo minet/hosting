@@ -1,9 +1,10 @@
 import { Loader, RefreshCw, Server, HardDrive, Cpu, MemoryStick, Clock } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useProxmoxStatus, type ProxmoxNode, type ProxmoxStorage } from '../../hooks/useProxmoxStatus'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
-  const units = ['Ko', 'Mo', 'Go', 'To']
+  const units = ['KB', 'MB', 'GB', 'TB']
   let i = -1
   let val = bytes
   do { val /= 1024; i++ } while (val >= 1024 && i < units.length - 1)
@@ -33,6 +34,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 }
 
 function NodeCard({ node }: { node: ProxmoxNode }) {
+  const { t } = useTranslation('admin')
   const isOnline = node.status === 'online'
   return (
     <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
@@ -53,7 +55,7 @@ function NodeCard({ node }: { node: ProxmoxNode }) {
               <Cpu size={12} /> CPU
             </span>
             <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 truncate ml-2">
-              {(node.cpu * 100).toFixed(1)}% de {node.maxcpu} cores
+              {t('proxmox.cpuOf', { pct: (node.cpu * 100).toFixed(1), cores: node.maxcpu })}
             </span>
           </div>
           <ProgressBar value={node.cpu * node.maxcpu} max={node.maxcpu} color="bg-violet-500" />
@@ -74,7 +76,7 @@ function NodeCard({ node }: { node: ProxmoxNode }) {
         <div>
           <div className="flex items-center justify-between mb-1 min-w-0">
             <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-              <HardDrive size={12} /> Disque local
+              <HardDrive size={12} /> {t('proxmox.localDisk')}
             </span>
             <span className="text-xs font-mono text-neutral-500 dark:text-neutral-400 truncate ml-2">
               {formatBytes(node.disk)} / {formatBytes(node.maxdisk)}
@@ -95,6 +97,7 @@ function NodeCard({ node }: { node: ProxmoxNode }) {
 }
 
 function StorageTable({ storages }: { storages: ProxmoxStorage[] }) {
+  const { t } = useTranslation('admin')
   const grouped = new Map<string, ProxmoxStorage[]>()
   for (const s of storages) {
     const key = s.storage
@@ -107,17 +110,17 @@ function StorageTable({ storages }: { storages: ProxmoxStorage[] }) {
       <table className="w-full text-sm border-collapse min-w-[600px]">
         <thead className="bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
           <tr>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Storage</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Noeud</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Type</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Statut</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-64">Utilisation</th>
-            <th className="px-3 py-2 text-right text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Taille</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t('proxmox.storageCol')}</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t('proxmox.nodeCol')}</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t('proxmox.typeCol')}</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t('proxmox.statusCol')}</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider w-64">{t('proxmox.usageCol')}</th>
+            <th className="px-3 py-2 text-right text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">{t('proxmox.sizeCol')}</th>
           </tr>
         </thead>
         <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
           {storages.length === 0 && (
-            <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500 text-xs">Aucun stockage</td></tr>
+            <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-400 dark:text-neutral-500 text-xs">{t('proxmox.noStorage')}</td></tr>
           )}
           {storages.map((s, i) => (
             <tr key={i} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
@@ -145,11 +148,13 @@ function StorageTable({ storages }: { storages: ProxmoxStorage[] }) {
 
 export default function ProxmoxTab() {
   const { data, loading, error, refresh } = useProxmoxStatus()
+  const { t } = useTranslation('admin')
+  const tc = useTranslation().t
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-neutral-400 dark:text-neutral-500 text-sm">
-        <Loader size={16} className="animate-spin mr-2" /> Chargement du statut Proxmox...
+        <Loader size={16} className="animate-spin mr-2" /> {t('proxmox.loadingStatus')}
       </div>
     )
   }
@@ -157,9 +162,9 @@ export default function ProxmoxTab() {
   if (error || !data) {
     return (
       <div className="flex flex-col items-center gap-3 py-20">
-        <p className="text-sm text-red-500">{error ?? 'Erreur inconnue'}</p>
+        <p className="text-sm text-red-500">{error ?? tc('unknownError')}</p>
         <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-xs font-semibold transition-colors cursor-pointer">
-          <RefreshCw size={12} /> Réessayer
+          <RefreshCw size={12} /> {tc('retry')}
         </button>
       </div>
     )
@@ -185,7 +190,7 @@ export default function ProxmoxTab() {
           )}
         </div>
         <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium transition-colors cursor-pointer">
-          <RefreshCw size={12} /> Actualiser
+          <RefreshCw size={12} /> {t('proxmox.refresh')}
         </button>
       </div>
 
@@ -193,7 +198,7 @@ export default function ProxmoxTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
         <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
           <div className="flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 mb-2">
-            <Cpu size={12} className="shrink-0" /> CPU Cluster
+            <Cpu size={12} className="shrink-0" /> {t('proxmox.cpuCluster')}
           </div>
           <div className="text-lg font-mono font-semibold text-neutral-800 dark:text-neutral-200 mb-1 truncate">
             {totalCpu > 0 ? (usedCpu / totalCpu * 100).toFixed(1) : 0}%
@@ -203,7 +208,7 @@ export default function ProxmoxTab() {
         </div>
         <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
           <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 mb-2">
-            <MemoryStick size={12} className="shrink-0" /> RAM Cluster
+            <MemoryStick size={12} className="shrink-0" /> {t('proxmox.ramCluster')}
           </div>
           <div className="text-lg font-mono font-semibold text-neutral-800 dark:text-neutral-200 mb-1 truncate">
             {totalMem > 0 ? (usedMem / totalMem * 100).toFixed(1) : 0}%
@@ -213,7 +218,7 @@ export default function ProxmoxTab() {
         </div>
         <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
           <div className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 mb-2">
-            <HardDrive size={12} className="shrink-0" /> Disque Cluster
+            <HardDrive size={12} className="shrink-0" /> {t('proxmox.diskCluster')}
           </div>
           <div className="text-lg font-mono font-semibold text-neutral-800 dark:text-neutral-200 mb-1 truncate">
             {totalDisk > 0 ? (usedDisk / totalDisk * 100).toFixed(1) : 0}%
@@ -226,7 +231,7 @@ export default function ProxmoxTab() {
       {/* Nodes */}
       <div className="shrink-0">
         <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-3">
-          Noeuds <span className="text-neutral-400 dark:text-neutral-500 font-normal">({data.nodes.length})</span>
+          {t('proxmox.nodes')} <span className="text-neutral-400 dark:text-neutral-500 font-normal">({data.nodes.length})</span>
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {data.nodes.map(n => <NodeCard key={n.node} node={n} />)}
@@ -236,7 +241,7 @@ export default function ProxmoxTab() {
       {/* Storage */}
       <div className="shrink-0">
         <h2 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-3">
-          Stockage <span className="text-neutral-400 dark:text-neutral-500 font-normal">({data.storages.length})</span>
+          {t('proxmox.storage')} <span className="text-neutral-400 dark:text-neutral-500 font-normal">({data.storages.length})</span>
         </h2>
         <StorageTable storages={data.storages} />
       </div>

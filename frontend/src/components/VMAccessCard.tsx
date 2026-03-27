@@ -1,4 +1,5 @@
 import { Eye, EyeOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Tooltip from './Tooltip'
 import { type VMDetail } from '../types/vm'
 import { vmFqdn } from './VMInfoCard'
@@ -32,33 +33,35 @@ export default function VMAccessCard({ vm, running, isOwner, creds }: Props) {
     showPassword, setShowPassword,
     credSaving, credSuccess, doSaveCreds,
   } = creds
+  const { t } = useTranslation('vm')
+  const tc = useTranslation().t
 
   return (
     <div className="flex flex-col md:col-span-3 xl:col-span-3 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 min-w-0 min-h-0 overflow-visible">
       <div className="flex items-center justify-between mb-2 min-w-0 gap-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 shrink-0">Accès VM</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 shrink-0">{t('access.title')}</p>
           {vm && isOwner && (
             <p className="text-[10px] text-neutral-500 dark:text-neutral-400 font-mono truncate min-w-0">
-              <span className="font-bold">ssh {vm.username ?? 'username'}@{vmFqdn(vm)}</span> marche direct !
+              <span className="font-bold">ssh {vm.username ?? 'username'}@{vmFqdn(vm)}</span> {t('access.sshWorks')}
             </p>
           )}
         </div>
-        <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : running ? "Éteignez la VM d'abord" : undefined} align="right">
+        <Tooltip tip={!isOwner ? t('access.ownerOnly') : running ? t('access.stopFirst') : undefined} align="right">
           <button
             onClick={doSaveCreds}
             disabled={credSaving || !credUsername.trim() || running || !isOwner}
             className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0
               ${credSuccess ? 'bg-emerald-50 dark:bg-emerald-950 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300' : 'bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900'}`}
           >
-            {credSuccess ? 'Sauvegardé ✓' : credSaving ? '…' : 'Appliquer'}
+            {credSuccess ? tc('saved') : credSaving ? '…' : tc('apply')}
           </button>
         </Tooltip>
       </div>
       <div className="flex flex-col gap-2 flex-1 min-h-0 min-w-0 overflow-hidden">
         <div className="flex gap-2 min-w-0 shrink-0">
           <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Utilisateur</label>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('access.user')}</label>
             <input
               value={credUsername}
               onChange={e => setCredUsername(e.target.value)}
@@ -68,7 +71,7 @@ export default function VMAccessCard({ vm, running, isOwner, creds }: Props) {
             />
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Mot de passe</label>
+            <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('access.password')}</label>
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -85,7 +88,7 @@ export default function VMAccessCard({ vm, running, isOwner, creds }: Props) {
           </div>
         </div>
         <div className="flex flex-col gap-1 flex-1 min-h-0 min-w-0 overflow-hidden">
-          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 shrink-0">Clé SSH</label>
+          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 shrink-0">{t('access.sshKey')}</label>
           <textarea
             value={credSshKey}
             onChange={e => setCredSshKey(e.target.value)}

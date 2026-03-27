@@ -1,4 +1,5 @@
 import { Crown, Pencil, Share2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Tooltip from './Tooltip'
 import { type VMDetail } from '../types/vm'
 
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export default function VMInfoCard({ vm, status, loadingAction, running, isOwner, uptime, onOpenDnsRequest, onOpenIpRequest }: Props) {
+  const { t } = useTranslation('vm')
   return (
     <div className="md:col-span-2 xl:col-span-2 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col gap-4 min-w-0 overflow-hidden">
       <div className="flex items-center gap-2 pb-3 border-b border-neutral-100 dark:border-neutral-800 min-w-0">
@@ -42,7 +44,7 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
         {isOwner ? (
           <Crown size={13} className="text-amber-400 shrink-0" fill="currentColor" strokeWidth={0} />
         ) : (
-          <Tooltip tip="Cette VM vous a été partagée" className="shrink-0">
+          <Tooltip tip={t('info.sharedVM')} className="shrink-0">
             <Share2 size={13} className="text-blue-400" />
           </Tooltip>
         )}
@@ -57,7 +59,7 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
             {isOwner && (
               <button onClick={onOpenDnsRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-[10px] font-semibold transition-colors cursor-pointer">
                 <Pencil size={9} />
-                Demander
+                {t('info.request')}
               </button>
             )}
           </div>
@@ -77,7 +79,7 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
             {isOwner && (
               <button onClick={onOpenIpRequest} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-[10px] font-semibold transition-colors cursor-pointer">
                 <Pencil size={9} />
-                Demander
+                {t('info.request')}
               </button>
             )}
           </div>

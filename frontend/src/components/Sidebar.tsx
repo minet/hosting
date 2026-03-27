@@ -1,6 +1,7 @@
 import { Monitor, Plus, Star, Share2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useVMList, useVMStatus } from '../contexts/VMStatusContext'
 
 function VMSidebarItem({ vm, expanded, onMobileClose }: { vm: { vm_id: number; name: string; role: string }; expanded: boolean; onMobileClose: () => void }) {
@@ -33,6 +34,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
   const [hovered, setHovered] = useState(false)
   const expanded = hovered || mobileOpen
   const vms = useVMList()
+  const { t } = useTranslation('vm')
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : ''
@@ -66,7 +68,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
           >
             <Monitor size={18} className="shrink-0" />
             <span className={`text-sm whitespace-nowrap overflow-hidden transition-all duration-200 ${expanded ? 'opacity-100 max-w-xs' : 'opacity-0 max-w-0'}`}>
-              Machines virtuelles
+              {t('virtualMachines')}
             </span>
           </Link>
 
@@ -82,7 +84,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
             >
               <Plus size={18} strokeWidth={3} className="shrink-0" />
               <span className={`text-sm font-semibold whitespace-nowrap overflow-hidden transition-all duration-200 ${expanded ? 'opacity-100 max-w-xs' : 'opacity-0 max-w-0'}`}>
-                Créer une VM
+                {t('createVM')}
               </span>
             </button>
           </div>

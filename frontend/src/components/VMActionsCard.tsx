@@ -1,4 +1,5 @@
 import { Play, Square, RotateCcw, Share2, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import Tooltip from './Tooltip'
 
 interface Props {
@@ -13,11 +14,12 @@ interface Props {
 }
 
 export default function VMActionsCard({ running, isOwner, loadingAction, onboot, onToggleOnboot, onAction, onOpenDestroyModal, onOpenShareModal }: Props) {
+  const { t } = useTranslation('vm')
   return (
-    <div className="flex rounded-sm bg-white dark:bg-neutral-900 px-4 py-3 flex-col gap-2 min-w-0 overflow-hidden xl:justify-center">
+    <div className="flex rounded-sm px-4 py-3 flex-col gap-2 min-w-0 overflow-hidden xl:justify-center">
       <div className="grid grid-cols-2 gap-2 h-full">
         {/* Row 1: Auto-start | Destroy/Stop */}
-        <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : undefined}>
+        <Tooltip tip={!isOwner ? t('access.ownerOnly') : undefined}>
           <button
             onClick={onToggleOnboot}
             disabled={!!loadingAction || !isOwner || onboot === null}
@@ -39,7 +41,7 @@ export default function VMActionsCard({ running, isOwner, loadingAction, onboot,
             Stop
           </button>
         ) : (
-          <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : undefined}>
+          <Tooltip tip={!isOwner ? t('access.ownerOnly') : undefined}>
             <button
               onClick={onOpenDestroyModal}
               disabled={!!loadingAction || !isOwner}
@@ -52,7 +54,7 @@ export default function VMActionsCard({ running, isOwner, loadingAction, onboot,
         )}
 
         {/* Row 2: Restart | Share */}
-        <Tooltip tip={!running ? 'VM éteinte' : undefined}>
+        <Tooltip tip={!running ? t('actions.vmOff') : undefined}>
           <button
             onClick={() => onAction('restart')}
             disabled={!!loadingAction || !running}
@@ -62,7 +64,7 @@ export default function VMActionsCard({ running, isOwner, loadingAction, onboot,
             Restart
           </button>
         </Tooltip>
-        <Tooltip tip={!isOwner ? 'Réservé au propriétaire' : undefined}>
+        <Tooltip tip={!isOwner ? t('access.ownerOnly') : undefined}>
           <button
             onClick={onOpenShareModal}
             disabled={!isOwner}
@@ -74,7 +76,7 @@ export default function VMActionsCard({ running, isOwner, loadingAction, onboot,
         </Tooltip>
 
         {/* Row 3: Start (full width) */}
-        <Tooltip tip={running ? 'Déjà allumée' : undefined} className="col-span-2">
+        <Tooltip tip={running ? t('actions.alreadyOn') : undefined} className="col-span-2">
           <button
             onClick={() => onAction('start')}
             disabled={!!loadingAction || running}
