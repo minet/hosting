@@ -24,8 +24,8 @@ export default function Header({ onBurgerClick }: Props) {
             <Menu size={20} />
           </button>
         )}
-        <img src="/assets/logo/text_hosting_light.png" alt="Hosting" className="h-8 dark:hidden" />
-        <img src="/assets/logo/text_hosting_dark.png" alt="Hosting" className="h-8 hidden dark:block" />
+        <img src="/assets/logo/text_hosting_dark.png" alt="Hosting" className="h-8 dark:hidden" />
+        <img src="/assets/logo/text_hosting_light.png" alt="Hosting" className="h-8 hidden dark:block" />
         <span className="text-xs text-neutral-400 font-medium">v3.0</span>
       </div>
       <div className="flex items-center gap-3">
