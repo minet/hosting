@@ -26,6 +26,7 @@ from app.services.auth.keycloak_admin import (
     set_date_signed_hosting_async,
 )
 from app.services.auth.service import current_user_claims
+from app.core.templates import jinja_env
 from app.services.charter import generate_charter_pdf
 
 logger = logging.getLogger(__name__)
@@ -70,70 +71,12 @@ def _send_charter_email(
     settings: Settings,
 ) -> None:
     """Send the signed charter PDF by email via SMTP."""
-    base_url = settings.backend_url.rstrip("/")
-    logo_hosting_tag = f'<img src="{base_url}/assets/logo_hosting.png" alt="Hosting MiNET" style="height:48px;">'
-    logo_minet_tag = f'<img src="{base_url}/assets/logo_minet.png" alt="MiNET" style="height:32px;">'
-    signed_at_display = _fmt_date(signed_at)
-
-    html = f"""<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-
-        <!-- Header -->
-        <tr>
-          <td style="background:#1a56db;padding:28px 40px;text-align:center;">
-            {logo_hosting_tag}
-          </td>
-        </tr>
-
-        <!-- Body -->
-        <tr>
-          <td style="padding:40px 40px 32px;">
-            <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Charte signée ✓</h2>
-            <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Confirmation de signature</p>
-
-            <p style="margin:0 0 16px;font-size:15px;color:#374151;">Bonjour <strong>{prenom} {nom}</strong>,</p>
-            <p style="margin:0 0 16px;font-size:15px;color:#374151;">
-              Vous venez de signer la charte d'utilisation de la plateforme <strong>Hosting MiNET</strong>.
-              Vous trouverez en pièce jointe un exemplaire PDF de la charte signée.
-            </p>
-
-            <!-- Info box -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border-left:4px solid #1a56db;border-radius:4px;margin:24px 0;">
-              <tr>
-                <td style="padding:16px 20px;">
-                  <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Date de signature</p>
-                  <p style="margin:0;font-size:15px;color:#1e40af;font-weight:bold;">{signed_at_display}</p>
-                </td>
-              </tr>
-            </table>
-
-            <p style="margin:0 0 24px;font-size:15px;color:#374151;">
-              Pour toute question, ouvrez un ticket sur
-              <a href="https://tickets.minet.net" style="color:#1a56db;text-decoration:none;font-weight:bold;">tickets.minet.net</a>.
-            </p>
-          </td>
-        </tr>
-
-        <!-- Footer -->
-        <tr>
-          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center;">
-            {logo_minet_tag}
-            <p style="margin:12px 0 0;font-size:12px;color:#9ca3af;">
-              © MiNET — Ce message est envoyé automatiquement, merci de ne pas y répondre.
-            </p>
-          </td>
-        </tr>
-
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>"""
+    html = jinja_env.get_template("emails/charter_signed.html").render(
+        base_url=settings.backend_url.rstrip("/"),
+        prenom=prenom,
+        nom=nom,
+        signed_at_display=_fmt_date(signed_at),
+    )
 
     plain = (
         f"Bonjour {prenom} {nom},\n\n"

@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.templates import jinja_env
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
 from app.services.dns import DnsService
@@ -74,44 +75,15 @@ def _build_warning_email(
         "— L'équipe MiNET"
     )
 
-    html = f"""<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <tr><td style="background:#dc2626;padding:28px 40px;text-align:center;">
-          <img src="{base_url}/assets/logo_hosting.png" alt="Hosting MiNET" style="height:48px;">
-        </td></tr>
-        <tr><td style="padding:40px;">
-          <h2 style="margin:0 0 8px;font-size:22px;color:#111827;">Suppression programmée</h2>
-          <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">Action requise</p>
-          <p style="font-size:15px;color:#374151;">Bonjour <strong>{prenom} {nom}</strong>,</p>
-          <p style="font-size:15px;color:#374151;">
-            Votre cotisation MiNET a expiré il y a <strong>{days_expired} jours</strong>.
-          </p>
-          <table width="100%" style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:4px;margin:24px 0;">
-            <tr><td style="padding:16px 20px;">
-              <p style="margin:0 0 4px;font-size:13px;color:#6b7280;text-transform:uppercase;">VM concernée</p>
-              <p style="margin:0;font-size:15px;color:#991b1b;font-weight:bold;">{vm_name} (#{vm_id})</p>
-              <p style="margin:8px 0 0;font-size:14px;color:#991b1b;">
-                Suppression automatique dans <strong>{days_remaining} jours</strong>
-              </p>
-            </td></tr>
-          </table>
-          <p style="font-size:15px;color:#374151;">
-            <a href="https://adh6.minet.net" style="color:#1a56db;font-weight:bold;">Renouvelez votre cotisation</a>
-            pour conserver votre VM.
-          </p>
-        </td></tr>
-        <tr><td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:24px 40px;text-align:center;">
-          <p style="margin:0;font-size:12px;color:#9ca3af;">© MiNET — Message automatique</p>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>"""
+    html = jinja_env.get_template("emails/vm_warning.html").render(
+        base_url=base_url,
+        prenom=prenom,
+        nom=nom,
+        days_expired=days_expired,
+        vm_name=vm_name,
+        vm_id=vm_id,
+        days_remaining=days_remaining,
+    )
 
     return subject, plain, html
 
@@ -199,14 +171,12 @@ async def run_purge(
                     f"Votre machine virtuelle « {vm_name} » (ID {vm_id}) a été supprimée automatiquement.\n\n"
                     "— L'équipe MiNET"
                 )
-                html_del = f"""<!DOCTYPE html><html lang="fr"><body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;"><tr><td align="center">
-<table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;">
-<tr><td style="background:#111;padding:28px 40px;text-align:center;color:#fff;font-size:20px;font-weight:bold;">VM supprimée</td></tr>
-<tr><td style="padding:40px;">
-<p style="font-size:15px;color:#374151;">Bonjour <strong>{prenom} {nom}</strong>,</p>
-<p style="font-size:15px;color:#374151;">Votre VM <strong>{vm_name}</strong> (#{vm_id}) a été supprimée après 6 mois de cotisation expirée.</p>
-</td></tr></table></td></tr></table></body></html>"""
+                html_del = jinja_env.get_template("emails/vm_deleted.html").render(
+                    prenom=prenom,
+                    nom=nom,
+                    vm_name=vm_name,
+                    vm_id=vm_id,
+                )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
 
             try:
