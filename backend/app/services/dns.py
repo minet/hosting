@@ -192,6 +192,7 @@ class DnsService:
         rrsets = [{"name": custom_fqdn, "type": "CNAME", "changetype": "DELETE"}]
         try:
             c = self._get_client()
+            await self._ensure_zone(c)
             resp = await c.patch(self._zone_url(), json={"rrsets": rrsets})
             resp.raise_for_status()
             logger.info("dns_custom_label_deleted label=%s", custom_fqdn)
