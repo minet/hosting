@@ -88,6 +88,14 @@ class DnsService:
     def _zone_url(self) -> str:
         return f"{self._api_url}/api/v1/servers/localhost/zones/{self._zone}."
 
+    def _soa_record(self) -> str:
+        """Return the desired SOA content string.
+
+        Uses a 15-second refresh so BIND secondaries pick up changes quickly.
+        """
+        primary = self._nameservers[0] if self._nameservers else "ns1.minet.net."
+        return f"{primary} hostmaster.{self._zone}. 1 15 5 604800 60"
+
     async def _ensure_zone(self, client: httpx.AsyncClient) -> None:
         """Create the zone in PowerDNS if it does not already exist."""
         resp = await client.get(self._zone_url())
@@ -104,6 +112,11 @@ class DnsService:
                 "nameservers": self._nameservers,
                 "soa_edit_api": "INCREASE",
             },
+        )
+        # Replace the default SOA with a proper one (15s refresh for BIND)
+        await client.patch(
+            self._zone_url(),
+            json={"rrsets": [_rrset(f"{self._zone}.", "SOA", self._soa_record(), ttl=3600)]},
         )
 
     async def create_records(
