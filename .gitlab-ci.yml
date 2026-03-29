@@ -37,6 +37,8 @@ docker_backend:
       changes:
         - backend/**/*
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
+        - backend/**/*
 
 # Frontend is built with baked-in VITE_* values that differ per environment.
 
@@ -90,6 +92,8 @@ docker_frontend_preprod:
       --compressed-caching=false
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
+        - frontend/**/*
 
 docker_pdns:
   stage: docker
@@ -112,6 +116,8 @@ docker_pdns:
       changes:
         - pdns/**/*
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
+        - pdns/**/*
 
 # ── Deploy stage ──────────────────────────────────────────────────────────────
 
