@@ -72,6 +72,8 @@ services:
       AUTH_USER_GROUPS: ${AUTH_USER_GROUPS:-cluster-dev}
       # Proxmox — defaults to luna.priv.minet.net, TOKEN_ID/SECRET in backend/.env
       PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://192.168.103.59:8006}
+      PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID}
+      PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET}
       PROXMOX_VERIFY_TLS: ${PROXMOX_VERIFY_TLS:-false}
       # PowerDNS
       PDNS_API_URL: ${PDNS_API_URL:-http://pdns:8081}
