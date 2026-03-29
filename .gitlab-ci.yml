@@ -150,6 +150,7 @@ dns_retransfer_preprod:
     branch: main
   variables:
     HOSTING_RETRANSFER: "true"
+    HOSTING_DNS_ZONE: hdev.minet.net
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
 
@@ -161,5 +162,6 @@ dns_retransfer_prod:
     branch: main
   variables:
     HOSTING_RETRANSFER: "true"
+    HOSTING_DNS_ZONE: h.minet.net
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
