@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     vm_min_cpu_cores: int = Field(default=1, alias="VM_MIN_CPU_CORES")
     vm_min_ram_gb: int = Field(default=2, alias="VM_MIN_RAM_GB")
     vm_min_disk_gb: int = Field(default=10, alias="VM_MIN_DISK_GB")
+    vm_auto_assign_ipv4: bool = Field(default=False, alias="VM_AUTO_ASSIGN_IPV4")
     vm_ipv4_subnets: str | None = Field(default=None, alias="VM_IPV4_SUBNETS")
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
     vm_ipv4_netmasks: str = Field(default="", alias="VM_IPV4_NETMASKS")

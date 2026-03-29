@@ -109,8 +109,8 @@ class VmCreateService:
         node = await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
         await self._finalize_db(ctx=ctx, res=reservation, node=node)
 
-        # Auto-assign IPv4 if available (best-effort)
-        ipv4 = await self._try_assign_ipv4(vm_id=reservation.vm_id)
+        # Auto-assign IPv4 if enabled and available (best-effort)
+        ipv4 = await self._try_assign_ipv4(vm_id=reservation.vm_id) if self.settings.vm_auto_assign_ipv4 else None
 
         result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
         async with DnsService(settings=self.settings) as dns:
