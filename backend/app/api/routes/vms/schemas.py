@@ -292,7 +292,7 @@ class VMCreateResourceBody(BaseModel):
 class VMCreateBody(BaseModel):
     """Request body for creating a new virtual machine."""
 
-    name: str = Field(min_length=1, max_length=10)
+    name: str = Field(min_length=1)
     template_id: int = Field(ge=1)
     cpu_cores: int = Field(ge=1)
     ram_gb: int = Field(ge=1)
@@ -310,6 +310,11 @@ class VMCreateBody(BaseModel):
         :returns: The validated name string unchanged.
         :raises ValueError: If the name contains disallowed characters or has an invalid prefix.
         """
+        from app.core.config import get_settings
+
+        max_length = get_settings().vm_name_max_length
+        if len(v) > max_length:
+            raise ValueError(f"name must be at most {max_length} characters")
         if not _VM_NAME_RE.match(v):
             raise ValueError(
                 "name must start with alphanumeric and contain only alphanumeric characters and hyphens"

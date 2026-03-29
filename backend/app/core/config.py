@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
     vm_ipv6_subnet: str = Field(default="2001:660:3203:40a::/64", alias="VM_IPV6_SUBNET")
     vm_ipv6_gateway_host: int = Field(default=1, alias="VM_IPV6_GATEWAY_HOST")
+    vm_name_max_length: int = Field(default=10, alias="VM_NAME_MAX_LENGTH")
     vm_id_min: int = Field(default=2001, alias="VM_ID_MIN")
     proxmox_base_url: str | None = Field(default="https://luna.priv.minet.net:8006", alias="PROXMOX_BASE_URL")
     proxmox_verify_tls: bool = Field(default=False, alias="PROXMOX_VERIFY_TLS")

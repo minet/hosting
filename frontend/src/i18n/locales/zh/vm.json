@@ -17,7 +17,7 @@
   },
   "create": {
     "name": "名称",
-    "nameHint": "最多10个字符，字母、数字、连字符",
+    "nameHint": "最多{{max}}个字符，字母、数字、连字符",
     "nameValidation": "仅限字母、数字和连字符，以字母数字开头",
     "nameError": "仅限字母、数字和连字符",
     "template": "模板",

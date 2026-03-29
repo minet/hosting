@@ -54,6 +54,7 @@ docker_frontend_prod:
       --build-arg "VITE_API_URL=https://hosting.minet.net"
       --build-arg "VITE_DNS_ZONE=h.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
+      --build-arg "VITE_VM_NAME_MAX_LENGTH=60"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
@@ -80,6 +81,7 @@ docker_frontend_preprod:
       --build-arg "VITE_DNS_ZONE=hdev.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
       --build-arg "VITE_APP_ENV=preprod"
+      --build-arg "VITE_VM_NAME_MAX_LENGTH=60"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
