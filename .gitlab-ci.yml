@@ -1,6 +1,7 @@
 stages:
   - docker
   - deploy
+  - retransfer
 
 variables:
   IMAGE_REGISTRY_BASE: $CI_REGISTRY_IMAGE
@@ -137,3 +138,28 @@ deploy_preprod:
       image_registry: $CI_REGISTRY_IMAGE
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ── DNS retransfer ───────────────────────────────────────────────────────────
+# After deploy, tell BIND (ns1/ns2) to retransfer hdev.minet.net from PowerDNS.
+
+dns_retransfer_preprod:
+  stage: retransfer
+  needs: [deploy_preprod]
+  trigger:
+    project: minet/configurations/push/dns
+    branch: main
+  variables:
+    HOSTING_RETRANSFER: "true"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+dns_retransfer_prod:
+  stage: retransfer
+  needs: [deploy_prod]
+  trigger:
+    project: minet/configurations/push/dns
+    branch: main
+  variables:
+    HOSTING_RETRANSFER: "true"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
