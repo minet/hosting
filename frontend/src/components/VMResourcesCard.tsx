@@ -24,7 +24,7 @@ export default function VMResourcesCard({ vm, running, isOwner, templateDeprecat
     : undefined
 
   return (
-    <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col min-w-0 overflow-hidden">
+    <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col min-w-0 overflow-visible">
       <div className="flex items-center justify-between mb-3 min-w-0 gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 truncate">{t('resources.allocated')}</p>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -32,9 +32,9 @@ export default function VMResourcesCard({ vm, running, isOwner, templateDeprecat
             <button
               onClick={onOpenResModal}
               disabled={modifyDisabled}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[10px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[10px] font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
             >
-              <SlidersHorizontal size={10} />
+              <SlidersHorizontal size={10} className="shrink-0" />
               {tc('modify')}
             </button>
           </Tooltip>

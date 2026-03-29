@@ -114,13 +114,18 @@ class Settings(BaseSettings):
         return self._is_configured(self.proxmox_base_url) and self._is_configured(self.proxmox_password)
 
     @property
+    def proxmox_token_configured(self) -> bool:
+        """Return ``True`` when Proxmox token auth settings are present."""
+        return self._is_configured(self.proxmox_base_url) and self._is_configured(self.proxmox_token_id) and self._is_configured(self.proxmox_token_secret)
+
+    @property
     def proxmox_configured(self) -> bool:
         """Return ``True`` when any Proxmox authentication method is available.
 
         :returns: Whether Proxmox connectivity is configured.
         :rtype: bool
         """
-        return self.proxmox_password_configured
+        return self.proxmox_password_configured or self.proxmox_token_configured
 
     @property
     def is_production(self) -> bool:
