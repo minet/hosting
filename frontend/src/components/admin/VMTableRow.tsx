@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { Cpu, MemoryStick, HardDrive } from 'lucide-react'
+import { memo, useState } from 'react'
+import { Cpu, MemoryStick, HardDrive, X, Loader } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AdminVM } from '../../hooks/useAdminVMs'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
@@ -15,13 +15,17 @@ interface Props {
   node: string | null
   onNavigate: (vmId: number) => void
   onUpdateRequest: (id: number, status: 'approved' | 'rejected') => Promise<void>
+  onRemoveIpv4: (vmId: number) => Promise<void>
+  onRemoveDns: (vmId: number) => Promise<void>
 }
 
-function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest }: Props) {
+function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns }: Props) {
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
   const ipv4Req = pendingRequests?.find(r => r.type === 'ipv4')
   const dnsReq = pendingRequests?.find(r => r.type === 'dns')
+  const [removingIpv4, setRemovingIpv4] = useState(false)
+  const [removingDns, setRemovingDns] = useState(false)
 
   return (
     <tr onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
@@ -60,7 +64,18 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
       <td className="px-3 py-2 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden" onClick={e => e.stopPropagation()}>
         {ipv4Req
           ? <RequestBadge request={ipv4Req} onUpdate={onUpdateRequest} />
-          : <span className="font-mono text-neutral-700 dark:text-neutral-300">{vm.ipv4 ?? <span className="text-neutral-300 dark:text-neutral-600">—</span>}</span>
+          : vm.ipv4
+            ? <span className="flex items-center gap-1">
+                <span className="font-mono text-neutral-700 dark:text-neutral-300">{vm.ipv4}</span>
+                <button
+                  onClick={async () => { setRemovingIpv4(true); try { await onRemoveIpv4(vm.vm_id) } finally { setRemovingIpv4(false) } }}
+                  disabled={removingIpv4}
+                  className="text-neutral-300 dark:text-neutral-600 hover:text-red-500 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                  {removingIpv4 ? <Loader size={11} className="animate-spin" /> : <X size={11} />}
+                </button>
+              </span>
+            : <span className="font-mono text-neutral-300 dark:text-neutral-600">—</span>
         }
       </td>
       <td className="px-3 py-2 font-mono text-xs text-neutral-500 dark:text-neutral-400 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
@@ -72,7 +87,18 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
       <td className="px-3 py-2 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden" onClick={e => e.stopPropagation()}>
         {dnsReq
           ? <RequestBadge request={dnsReq} onUpdate={onUpdateRequest} />
-          : <span className="font-mono text-neutral-500 dark:text-neutral-400">{vm.dns ?? <span className="text-neutral-300 dark:text-neutral-600">—</span>}</span>
+          : vm.dns
+            ? <span className="flex items-center gap-1">
+                <span className="font-mono text-neutral-500 dark:text-neutral-400">{vm.dns}</span>
+                <button
+                  onClick={async () => { setRemovingDns(true); try { await onRemoveDns(vm.vm_id) } finally { setRemovingDns(false) } }}
+                  disabled={removingDns}
+                  className="text-neutral-300 dark:text-neutral-600 hover:text-red-500 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
+                >
+                  {removingDns ? <Loader size={11} className="animate-spin" /> : <X size={11} />}
+                </button>
+              </span>
+            : <span className="font-mono text-neutral-300 dark:text-neutral-600">—</span>
         }
       </td>
       <td className="px-3 py-2 overflow-hidden border-r border-neutral-100 dark:border-neutral-800" onClick={e => e.stopPropagation()}>

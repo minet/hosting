@@ -352,6 +352,54 @@ async def assign_vm_ipv4(
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 
+@router.delete("/vms/{vm_id}/ipv4", status_code=204)
+async def remove_vm_ipv4(
+    vm_id: int,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the IPv4 address from a VM and delete the A record from DNS (admin only)."""
+    repo = VmCmdRepo(db)
+    old_ipv4 = await repo.clear_vm_ipv4(vm_id)
+    if old_ipv4 is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found or has no IPv4")
+    await db.commit()
+    # Best-effort: delete the A record from PowerDNS
+    async with DnsService(settings=get_settings()) as dns_svc:
+        await dns_svc.delete_records(vm_id=vm_id)
+
+
+@router.delete("/vms/{vm_id}/dns", status_code=204)
+async def remove_vm_dns(
+    vm_id: int,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the CNAME record for a VM: delete from PowerDNS and reject the request (admin only)."""
+    repo = RequestRepo(db)
+    # Find the approved DNS request for this VM
+    all_dns = await repo.list_approved_dns()
+    matching = [r for r in all_dns if r["vm_id"] == vm_id]
+    if not matching:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No approved DNS for this VM")
+
+    settings = get_settings()
+    async with DnsService(settings=settings) as dns_svc:
+        for row in matching:
+            dns_label = row.get("dns_label")
+            if dns_label:
+                try:
+                    await dns_svc.delete_custom_label(dns_label=dns_label, raise_on_error=True)
+                except (httpx.HTTPError, OSError) as exc:
+                    logger.exception("DNS CNAME revoke failed for vm_id=%s label=%s", vm_id, dns_label)
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=f"Failed to delete DNS record in PowerDNS: {exc}",
+                    ) from exc
+            await repo.update_status(request_id=row["id"], status="rejected")
+    await db.commit()
+
+
 @router.get("/admin/templates", response_model=TemplateListResponse)
 async def list_templates_admin(
     _: AuthCtx = Depends(require_admin),

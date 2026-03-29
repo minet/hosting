@@ -164,6 +164,21 @@ class VmCmdRepo:
         await self.db.flush()
         await self.db.execute(select(QuotaLock).where(QuotaLock.user_id == _KEY).with_for_update())
 
+    async def clear_vm_ipv4(self, vm_id: int) -> str | None:
+        """Remove the IPv4 address from a VM.
+
+        :param vm_id: The VM identifier.
+        :returns: The previously assigned IPv4, or ``None`` if the VM was not found or had no IPv4.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None or vm.ipv4 is None:
+            return None
+        old_ipv4 = str(vm.ipv4)
+        vm.ipv4 = None
+        self.db.add(vm)
+        await self.db.flush()
+        return old_ipv4
+
     async def update_vm_ipv4(self, vm_id: int, ipv4: str) -> bool:
         """Assign an IPv4 address to a VM.
 
