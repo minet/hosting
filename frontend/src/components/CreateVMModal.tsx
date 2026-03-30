@@ -17,6 +17,8 @@ interface TaskItem {
   endtime: number | null
 }
 
+const VM_NAME_MAX_LENGTH = Number(import.meta.env.VITE_VM_NAME_MAX_LENGTH) || 10
+
 const inputClass = "w-full border border-neutral-200 dark:border-neutral-600 rounded-md px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 bg-white dark:bg-neutral-800"
 const labelClass = "text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide"
 
@@ -232,13 +234,13 @@ export default function CreateVMModal({ onClose }: Props) {
             <section className="flex flex-col gap-4">
               <h3 className="text-sm font-bold text-neutral-700 dark:text-neutral-300 border-l-2 border-blue-400 pl-2">{name || t('newVM')}</h3>
               <div className="flex flex-col gap-1">
-                <label className={labelClass}>{t('create.name')} <span className="normal-case font-normal text-neutral-400 dark:text-neutral-500">({t('create.nameHint')})</span></label>
+                <label className={labelClass}>{t('create.name')} <span className="normal-case font-normal text-neutral-400 dark:text-neutral-500">({t('create.nameHint', { max: VM_NAME_MAX_LENGTH })})</span></label>
                 <input
                   className={inputClass}
                   value={name}
-                  onChange={e => setName(e.target.value.slice(0, 10))}
+                  onChange={e => setName(e.target.value.slice(0, VM_NAME_MAX_LENGTH))}
                   placeholder="ma-vm"
-                  maxLength={10}
+                  maxLength={VM_NAME_MAX_LENGTH}
                   pattern="^[a-zA-Z0-9][a-zA-Z0-9-]*$"
                   title={t('create.nameValidation')}
                   required

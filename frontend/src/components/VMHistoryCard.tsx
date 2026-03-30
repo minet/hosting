@@ -21,7 +21,7 @@ export default function VMHistoryCard({ tasks }: Props) {
   const { t } = useTranslation('vm')
 
   return (
-    <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col min-w-0 overflow-hidden max-h-64 md:max-h-72 self-start">
+    <div className="border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm bg-white dark:bg-neutral-900 px-5 py-4 flex flex-col min-w-0 overflow-hidden">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-3">{t('history.title')}</p>
       {filtered.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-neutral-300 dark:text-neutral-600 text-xs">{t('history.noRecentAction')}</div>

@@ -20,8 +20,8 @@ from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
-from app.services.proxmox.allocation import allocate_next_vm_ipv6
-from app.services.proxmox.errors import ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
+from app.services.proxmox.allocation import allocate_next_vm_ipv4, allocate_next_vm_ipv6
+from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
 from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.errors import raise_proxmox_as_http
 from app.services.vm.query import VmQueryService
@@ -109,14 +109,24 @@ class VmCreateService:
         node = await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
         await self._finalize_db(ctx=ctx, res=reservation, node=node)
 
+        # Auto-assign IPv4 if enabled and available (best-effort)
+        ipv4 = await self._try_assign_ipv4(vm_id=reservation.vm_id) if self.settings.vm_auto_assign_ipv4 else None
+
         result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
         async with DnsService(settings=self.settings) as dns:
             await dns.create_records(
                 vm_id=reservation.vm_id,
-                ipv4=result.get("network", {}).get("ipv4"),
+                ipv4=ipv4 or result.get("network", {}).get("ipv4"),
                 ipv6=reservation.vm_ipv6,
             )
-        logger.info("vm_create_done user_id=%s vm_id=%s", ctx.user_id, reservation.vm_id)
+
+        if ipv4:
+            try:
+                await asyncio.to_thread(self.gateway.assign_vm_ipv4, vm_id=reservation.vm_id, vm_ipv4=ipv4)
+            except ProxmoxError:
+                logger.warning("vm_create_ipv4_proxmox_config_failed vm_id=%s ipv4=%s", reservation.vm_id, ipv4, exc_info=True)
+
+        logger.info("vm_create_done user_id=%s vm_id=%s ipv4=%s", ctx.user_id, reservation.vm_id, ipv4)
         return result
 
     def _validate_limits(self, cmd: VmCreateCmd) -> None:
@@ -377,6 +387,28 @@ class VmCreateService:
         except SQLAlchemyError:
             await self.db.rollback()
             logger.exception("vm_create_compensate_db_failed vm_id=%s", vm_id)
+
+    async def _try_assign_ipv4(self, *, vm_id: int) -> str | None:
+        """Best-effort IPv4 allocation during VM creation.
+
+        Returns the allocated IPv4 or ``None`` if none is available.
+        """
+        try:
+            await self.cmd_repo.lock_ipv4_allocation()
+            used = await self.query_repo.list_used_ipv4()
+            ipv4 = allocate_next_vm_ipv4(used_ipv4=used)
+            await self.cmd_repo.update_vm_ipv4(vm_id, ipv4)
+            await self.db.commit()
+            logger.info("vm_create_ipv4_assigned vm_id=%s ipv4=%s", vm_id, ipv4)
+            return ipv4
+        except (ProxmoxConfigError, ProxmoxUnavailableError):
+            logger.info("vm_create_no_ipv4_available vm_id=%s", vm_id)
+            await self.db.rollback()
+            return None
+        except (IntegrityError, SQLAlchemyError):
+            logger.warning("vm_create_ipv4_db_error vm_id=%s", vm_id, exc_info=True)
+            await self.db.rollback()
+            return None
 
     async def _allocate_vm_id(self) -> int:
         """

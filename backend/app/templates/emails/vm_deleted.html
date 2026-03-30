@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:#111;padding:28px 40px;text-align:center;color:#fff;font-size:20px;font-weight:bold;">
+            VM supprimée
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px;">
+            <p style="font-size:15px;color:#374151;">Bonjour <strong>{{ prenom }} {{ nom }}</strong>,</p>
+            <p style="font-size:15px;color:#374151;">
+              Votre VM <strong>{{ vm_name }}</strong> (#{{ vm_id }}) a été supprimée après 6 mois de cotisation expirée.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

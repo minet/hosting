@@ -17,7 +17,7 @@
   },
   "create": {
     "name": "Name",
-    "nameHint": "max 10 chars, letters, digits, hyphens",
+    "nameHint": "max {{max}} chars, letters, digits, hyphens",
     "nameValidation": "Letters, digits and hyphens only, starts with an alphanumeric character",
     "nameError": "Letters, digits and hyphens only",
     "template": "Template",

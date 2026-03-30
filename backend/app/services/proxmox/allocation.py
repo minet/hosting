@@ -174,6 +174,7 @@ def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
 
     raw_subnets = [s.strip() for s in settings.vm_ipv4_subnets.split(",") if s.strip()]
     raw_gateways = [g.strip() for g in settings.vm_ipv4_gateway_hosts.split(",") if g.strip()]
+    raw_netmasks = [n.strip() for n in settings.vm_ipv4_netmasks.split(",") if n.strip()] if settings.vm_ipv4_netmasks else []
 
     if not raw_subnets:
         raise ProxmoxConfigError("VM_IPV4_SUBNETS is empty")
@@ -181,6 +182,10 @@ def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
     # If fewer gateway values than subnets, repeat the last one
     while len(raw_gateways) < len(raw_subnets):
         raw_gateways.append(raw_gateways[-1] if raw_gateways else "1")
+
+    # If fewer netmask values than subnets, repeat the last one (or fall back to subnet prefix)
+    while len(raw_netmasks) < len(raw_subnets):
+        raw_netmasks.append(raw_netmasks[-1] if raw_netmasks else "")
 
     results: list[tuple[IPv4Network, IPv4Address, int]] = []
     for i, raw_subnet in enumerate(raw_subnets):
@@ -197,8 +202,19 @@ def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
         if gateway_host > host_space:
             raise ProxmoxConfigError(f"Invalid gateway host {gateway_host} for subnet {raw_subnet}")
 
+        # Use configured netmask if provided, otherwise fall back to subnet prefix
+        if raw_netmasks[i]:
+            try:
+                netmask = int(raw_netmasks[i])
+                if not 0 <= netmask <= 32:
+                    raise ValueError
+            except ValueError as exc:
+                raise ProxmoxConfigError(f"Invalid VM_IPV4_NETMASKS entry: {raw_netmasks[i]}") from exc
+        else:
+            netmask = int(network.prefixlen)
+
         gateway_ip = network.network_address + gateway_host
-        results.append((network, IPv4Address(gateway_ip), int(network.prefixlen)))
+        results.append((network, IPv4Address(gateway_ip), netmask))
 
     return results
 

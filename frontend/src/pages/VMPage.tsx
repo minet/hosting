@@ -251,7 +251,7 @@ export default function VMPage() {
         </div>
       )}
 
-      <div className="md:col-span-3 xl:col-span-3 flex gap-2 self-start overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
+      <div className="md:col-span-3 xl:col-span-3 flex gap-2 overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
         <VMResourcesCard
           vm={vm}
           running={running}

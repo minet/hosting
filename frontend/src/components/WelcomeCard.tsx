@@ -38,8 +38,8 @@ export default function WelcomeCard() {
   return (
     <div className="flex flex-col md:h-full p-5 gap-4">
       <div className="flex items-center gap-3">
-        <img src="/assets/logo/icon_hosting_light.svg" alt="Hosting" className="h-8 md:h-8 xl:h-9 dark:hidden" />
-        <img src="/assets/logo/icon_hosting_dark.svg" alt="Hosting" className="h-8 md:h-8 xl:h-9 hidden dark:block" />
+        <img src="/assets/logo/icon_hosting_dark.svg" alt="Hosting" className="h-8 md:h-8 xl:h-9 dark:hidden" />
+        <img src="/assets/logo/icon_hosting_light.svg" alt="Hosting" className="h-8 md:h-8 xl:h-9 hidden dark:block" />
         <div className="flex items-baseline gap-2 flex-wrap">
           <span className="text-lg md:text-base xl:text-lg font-semibold text-neutral-800 dark:text-neutral-200">
             {t('welcome.title', { name })}

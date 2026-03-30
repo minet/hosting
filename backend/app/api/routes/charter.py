@@ -31,6 +31,7 @@ from app.services.auth.keycloak_admin import (
     set_date_signed_hosting_async,
 )
 from app.services.auth.service import current_user_claims
+from app.core.templates import jinja_env
 from app.services.charter import generate_charter_pdf
 
 logger = logging.getLogger(__name__)

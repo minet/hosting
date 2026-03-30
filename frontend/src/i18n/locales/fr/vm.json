@@ -17,7 +17,7 @@
   },
   "create": {
     "name": "Nom",
-    "nameHint": "max 10 car., lettres, chiffres, tirets",
+    "nameHint": "max {{max}} car., lettres, chiffres, tirets",
     "nameValidation": "Lettres, chiffres et tirets uniquement, commence par un caractère alphanumerique",
     "nameError": "Lettres, chiffres et tirets uniquement",
     "template": "Template",
