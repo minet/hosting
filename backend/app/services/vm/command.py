@@ -173,6 +173,7 @@ class VmCommandService:
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to start VM on Proxmox")
         await self._cmd_repo.clear_pending_changes(vm_id)
+        await self._db.commit()
         return {"vm_id": vm_id, "action": "start", "status": "ok"}
 
     async def stop(self, *, vm_id: int) -> dict[str, Any]:
@@ -204,6 +205,7 @@ class VmCommandService:
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to restart VM on Proxmox")
         await self._cmd_repo.clear_pending_changes(vm_id)
+        await self._db.commit()
         return {"vm_id": vm_id, "action": "restart", "status": "ok"}
 
     async def get_onboot(self, *, vm_id: int) -> dict[str, Any]:
