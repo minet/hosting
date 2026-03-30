@@ -48,6 +48,7 @@ export default function VMPage() {
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
   const canAccessConsole = !me.is_admin || (vm?.current_user_role === 'owner')
   const templateDeprecated = vm !== null && vm.template.is_active === false
+  const hasPendingChanges = vm !== null && Array.isArray(vm.pending_changes) && vm.pending_changes.length > 0
   const uptime = vmStatusEntry?.uptime ?? null
   const realmPrefix = me.user_id ? me.user_id.split(':').slice(0, 2).join(':') : null
 
@@ -105,6 +106,14 @@ export default function VMPage() {
         >
           OK
         </button>
+      </div>
+    )}
+    {hasPendingChanges && (
+      <div className={`fixed ${templateDeprecated && !deprecatedBannerDismissed ? 'top-24' : 'top-14'} left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-xs font-medium rounded-b-xl shadow-sm`}>
+        <AlertTriangle size={13} className="shrink-0 text-blue-500" />
+        <span className="flex-1">
+          {t('pendingChanges.banner', { changes: vm!.pending_changes!.map(c => t(`pendingChanges.${c}`)).join(', ') })}
+        </span>
       </div>
     )}
     {showDestroyModal && (

@@ -18,7 +18,7 @@ from app.core.config import Settings, get_settings
 from app.core.security.token import TokenPayload, get_token_payload
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AuthCtx:
     """Immutable authentication context attached to an incoming request.
 

@@ -75,6 +75,12 @@
     "launchTerminal": "Lancer le terminal",
     "backToAdmin": "Retour au tableau admin"
   },
+  "pendingChanges": {
+    "banner": "Votre VM a des changements de configuration en attente ({{changes}}). Redémarrez la VM pour les appliquer.",
+    "ipv4": "adresse IPv4",
+    "resources": "ressources",
+    "cloudinit": "configuration cloud-init"
+  },
   "deprecated": {
     "banner": "Votre VM utilise une template dépréciée. Il vous est conseillé de la recréer avec une template à jour. La modification des ressources et le terminal sont désactivés.",
     "title": "Template dépréciée",

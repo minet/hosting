@@ -243,6 +243,7 @@ class VmQueryService:
             "username": row.get("username") if role in ("owner", "admin") else None,
             "ssh_public_key": row.get("ssh_public_key") if role in ("owner", "admin") else None,
             "dns": self._resolve_dns(row["vm_id"], cname_map),
+            "pending_changes": row.get("pending_changes"),
         }
 
     @staticmethod

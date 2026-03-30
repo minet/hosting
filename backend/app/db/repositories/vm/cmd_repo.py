@@ -150,20 +150,6 @@ class VmCmdRepo:
         await self.db.flush()
         return True
 
-    async def lock_ipv4_allocation(self) -> None:
-        """Acquire a row-level lock to serialize IPv4 address allocation.
-
-        Inserts a sentinel row into the ``quota_locks`` table if it does not
-        exist, then selects it with ``FOR UPDATE`` to prevent concurrent IPv4
-        assignments from reading the same free address.
-
-        :returns: None
-        """
-        _KEY = "__ipv4_alloc__"
-        await self.db.execute(pg_insert(QuotaLock).values(user_id=_KEY).on_conflict_do_nothing())
-        await self.db.flush()
-        await self.db.execute(select(QuotaLock).where(QuotaLock.user_id == _KEY).with_for_update())
-
     async def update_vm_ipv4(self, vm_id: int, ipv4: str) -> bool:
         """Assign an IPv4 address to a VM.
 
@@ -182,6 +168,39 @@ class VmCmdRepo:
         vm.ipv4 = ipv4
         self.db.add(vm)
         await self.db.flush()
+        return True
+
+    async def add_pending_change(self, vm_id: int, change_code: str) -> bool:
+        """Append a change code to the VM's pending_changes list (no duplicates).
+
+        :param vm_id: The VM identifier.
+        :param change_code: The change code to add (e.g. ``"ipv4"``, ``"resources"``, ``"cloudinit"``).
+        :returns: ``True`` if the VM was found and updated, ``False`` otherwise.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+        current = list(vm.pending_changes or [])
+        if change_code not in current:
+            current.append(change_code)
+            vm.pending_changes = current
+            self.db.add(vm)
+            await self.db.flush()
+        return True
+
+    async def clear_pending_changes(self, vm_id: int) -> bool:
+        """Clear all pending changes on a VM.
+
+        :param vm_id: The VM identifier.
+        :returns: ``True`` if the VM was found and updated, ``False`` otherwise.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+        if vm.pending_changes:
+            vm.pending_changes = None
+            self.db.add(vm)
+            await self.db.flush()
         return True
 
     async def insert_template(self, *, template_id: int, name: str) -> None:

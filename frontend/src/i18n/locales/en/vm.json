@@ -75,6 +75,12 @@
     "launchTerminal": "Launch terminal",
     "backToAdmin": "Back to admin panel"
   },
+  "pendingChanges": {
+    "banner": "Your VM has pending configuration changes ({{changes}}). Restart the VM to apply them.",
+    "ipv4": "IPv4 address",
+    "resources": "resources",
+    "cloudinit": "cloud-init configuration"
+  },
   "deprecated": {
     "banner": "Your VM uses a deprecated template. We recommend recreating it with an up-to-date template. Resource modification and terminal are disabled.",
     "title": "Deprecated template",

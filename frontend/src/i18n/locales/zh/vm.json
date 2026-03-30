@@ -75,6 +75,12 @@
     "launchTerminal": "打开终端",
     "backToAdmin": "返回管理面板"
   },
+  "pendingChanges": {
+    "banner": "您的虚拟机有待处理的配置更改（{{changes}}）。请重启虚拟机以应用更改。",
+    "ipv4": "IPv4 地址",
+    "resources": "资源",
+    "cloudinit": "cloud-init 配置"
+  },
   "deprecated": {
     "banner": "您的虚拟机使用了已弃用的模板。建议使用最新模板重新创建。资源修改和终端已禁用。",
     "title": "已弃用的模板",

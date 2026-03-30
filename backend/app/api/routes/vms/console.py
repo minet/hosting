@@ -249,12 +249,11 @@ async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{vm_id}/termproxy")
+@router.post("/{vm_id}/termproxy", dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def get_termproxy(
     vm_id: int,
     ctx: AuthCtx = Depends(require_user),
     access: VmAccessService = Depends(get_vm_access_service),
-    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> dict:
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     gateway = get_proxmox_gateway()

@@ -108,6 +108,7 @@ class VMDetailResponse(BaseModel):
     username: str | None = None
     ssh_public_key: str | None = None
     dns: str | None = None
+    pending_changes: list[str] | None = None
 
 
 class VMTaskItemResponse(BaseModel):

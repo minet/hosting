@@ -18,6 +18,7 @@ import logging
 import time
 from typing import Any
 
+from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakError
 
 from app.core.config import get_settings
@@ -43,8 +44,6 @@ def _make_admin():
     now = time.monotonic()
     if _admin_instance is not None and (now - _admin_created_at) < _ADMIN_TTL:
         return _admin_instance
-
-    from keycloak import KeycloakAdmin
 
     settings = get_settings()
 

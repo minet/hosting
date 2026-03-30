@@ -183,6 +183,10 @@ class VmPatchService:
                 if not updated_resource:
                     await self.db.rollback()
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="VM resource changed concurrently")
+            if wants_resize:
+                await self.cmd_repo.add_pending_change(vm_id, "resources")
+            if wants_cloudinit:
+                await self.cmd_repo.add_pending_change(vm_id, "cloudinit")
             await self.db.commit()
             logger.info("vm_patch_done vm_id=%s", vm_id)
         except HTTPException:

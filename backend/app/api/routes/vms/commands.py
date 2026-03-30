@@ -19,6 +19,7 @@ from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
+from app.db.repositories.vm import VmQueryRepo
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_share_service
 from app.services.vm.share import VmShareService
 
@@ -37,12 +38,11 @@ from .schemas import (
 router = APIRouter()
 
 
-@router.post("", response_model=VMDetailResponse, status_code=201)
+@router.post("", response_model=VMDetailResponse, status_code=201, dependencies=[Depends(RateLimiter(max_calls=3, window_seconds=60))])
 async def create_vm(
     body: VMCreateBody,
     ctx: AuthCtx = Depends(require_cotisant),
     cmd: VmCommandService = Depends(get_vm_command_service),
-    _rl=Depends(RateLimiter(max_calls=3, window_seconds=60)),
 ) -> VMDetailResponse:
     """
     Create a new virtual machine from a template.
@@ -70,13 +70,12 @@ async def create_vm(
     )
 
 
-@router.post("/{vm_id}/start", response_model=VMActionResponse)
+@router.post("/{vm_id}/start", response_model=VMActionResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def start_vm(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
-    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Start a stopped virtual machine.
@@ -93,13 +92,12 @@ async def start_vm(
     return VMActionResponse.model_validate(await cmd.start(vm_id=vm_id))
 
 
-@router.post("/{vm_id}/stop", response_model=VMActionResponse)
+@router.post("/{vm_id}/stop", response_model=VMActionResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def stop_vm(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
-    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Stop a running virtual machine.
@@ -116,13 +114,12 @@ async def stop_vm(
     return VMActionResponse.model_validate(await cmd.stop(vm_id=vm_id))
 
 
-@router.post("/{vm_id}/restart", response_model=VMActionResponse)
+@router.post("/{vm_id}/restart", response_model=VMActionResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def restart_vm(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
-    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Restart a virtual machine.
@@ -208,8 +205,6 @@ async def create_request(
     access: VmAccessService = Depends(get_vm_access_service),
     db: AsyncSession = Depends(get_db),
 ) -> VMRequestResponse:
-    from app.db.repositories.vm import VmQueryRepo
-
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
     if body.type == "dns" and not body.dns_label:
         raise HTTPException(
@@ -256,13 +251,12 @@ async def grant_access(
     return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=user_id))
 
 
-@router.delete("/{vm_id}", response_model=VMActionResponse)
+@router.delete("/{vm_id}", response_model=VMActionResponse, dependencies=[Depends(RateLimiter(max_calls=3, window_seconds=60))])
 async def delete_vm(
     vm_id: int,
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     cmd: VmCommandService = Depends(get_vm_command_service),
-    _rl=Depends(RateLimiter(max_calls=3, window_seconds=60)),
 ) -> VMActionResponse:
     """
     Permanently delete a virtual machine.

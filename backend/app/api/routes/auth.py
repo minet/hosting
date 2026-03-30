@@ -56,13 +56,13 @@ def auth_callback(
 
 
 @router.get("/me")
-def auth_me(payload: TokenPayload = Depends(get_token_payload)) -> AuthMeResponse:
+async def auth_me(payload: TokenPayload = Depends(get_token_payload)) -> AuthMeResponse:
     """Return the claims of the currently authenticated user."""
-    return current_user_claims(payload)
+    return await current_user_claims(payload)
 
 
-@router.post("/refresh")
-async def auth_refresh(request: FastAPIRequest, response: Response, _rl=Depends(RateLimiter(max_calls=10, window_seconds=60))) -> dict:
+@router.post("/refresh", dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
+async def auth_refresh(request: FastAPIRequest, response: Response) -> dict:
     """Refresh the access token using the refresh token cookie.
 
     :returns: ``{"ok": true}`` on success.

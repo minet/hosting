@@ -9,6 +9,7 @@ from typing import Any
 from proxmoxer import ProxmoxAPI
 
 from app.core.config import get_settings
+from app.services.proxmox.errors import ProxmoxError
 
 # TTL cache for VM → node mapping to avoid repeated cluster/resources calls.
 _vm_node_cache: dict[int, tuple[str, float]] = {}
@@ -95,8 +96,6 @@ def clone_node_for_template(*, client: ProxmoxAPI, template_vmid: int) -> str:
     :rtype: str
     :raises ProxmoxError: If no node can be resolved.
     """
-    from app.services.proxmox.errors import ProxmoxError
-
     node = template_node_from_cluster(client=client, template_vmid=template_vmid)
     if node:
         return node
@@ -133,8 +132,6 @@ def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     :rtype: str
     :raises ProxmoxError: If no node can be resolved.
     """
-    from app.services.proxmox.errors import ProxmoxError
-
     now = time.monotonic()
     cached = _vm_node_cache.get(vm_id)
     if cached is not None:

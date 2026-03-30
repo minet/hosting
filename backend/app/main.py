@@ -16,6 +16,11 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.db.core import close_db_engine, open_db_engine
+from app.db.core.engine import get_session_factory
+from app.services.dns import DnsService
+from app.services.proxmox.gateway import ensure_proxmox_gateway, get_proxmox_gateway
+from app.services.vm.purge import run_purge
+from app.services.vm.status_cache import get_status_cache
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +42,7 @@ async def _purge_loop() -> None:
     await asyncio.sleep(30)  # wait for app to fully start
     while True:
         try:
-            from app.core.config import get_settings as _gs
-            from app.db.core.engine import get_session_factory
-            from app.services.proxmox.gateway import get_proxmox_gateway
-            from app.services.vm.purge import run_purge
-
-            settings = _gs()
+            settings = get_settings()
             if not settings.proxmox_configured:
                 logger.debug("purge_loop: Proxmox not configured, skipping")
             else:
@@ -61,17 +61,11 @@ async def lifespan(_: FastAPI):
     await open_db_engine()
     purge_task = asyncio.create_task(_purge_loop())
 
-    # Start the centralized VM status cache poller
-    from app.services.proxmox.gateway import ensure_proxmox_gateway, get_proxmox_gateway
-    from app.services.vm.status_cache import get_status_cache
-
     settings = get_settings()
     if settings.proxmox_configured:
         await ensure_proxmox_gateway()
         get_status_cache().start(get_proxmox_gateway())
 
-    # Notify BIND secondaries on startup
-    from app.services.dns import DnsService
     async with DnsService(settings=settings) as dns:
         await dns.notify()
 

@@ -33,6 +33,7 @@ _VM_COLUMNS = (
     func.host(VM.ipv4).label("ipv4"),
     func.host(VM.ipv6).label("ipv6"),
     cast(VM.mac, Text).label("mac"),
+    VM.pending_changes.label("pending_changes"),
 )
 
 

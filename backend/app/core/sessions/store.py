@@ -63,20 +63,17 @@ def delete_token_cookies(response: Response) -> None:
 
 def get_access_token(request: Any) -> str | None:
     """Read the access token from the request/websocket cookies."""
-    val = request.cookies.get(ACCESS_COOKIE)
-    return val if val else None
+    return request.cookies.get(ACCESS_COOKIE)
 
 
 def get_refresh_token(request: Any) -> str | None:
     """Read the refresh token from the request/websocket cookies."""
-    val = request.cookies.get(REFRESH_COOKIE)
-    return val if val else None
+    return request.cookies.get(REFRESH_COOKIE)
 
 
 def get_id_token(request: Any) -> str | None:
     """Read the ID token from the request/websocket cookies."""
-    val = request.cookies.get(ID_COOKIE)
-    return val if val else None
+    return request.cookies.get(ID_COOKIE)
 
 
 # ---------------------------------------------------------------------------

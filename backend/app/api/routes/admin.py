@@ -44,6 +44,7 @@ from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_command_service, get_vm_query_service
+from app.services.vm.purge import run_purge
 from app.services.vm.query import VmQueryService
 
 router = APIRouter(tags=["admin"])
@@ -432,6 +433,4 @@ async def trigger_purge(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Manually trigger the expired-membership VM purge (admin only)."""
-    from app.services.vm.purge import run_purge
-
     return await run_purge(db=db, gateway=get_proxmox_gateway(), settings=get_settings())
