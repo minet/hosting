@@ -170,6 +170,21 @@ class VmCmdRepo:
         await self.db.flush()
         return True
 
+    async def clear_vm_ipv4(self, vm_id: int) -> str | None:
+        """Remove the IPv4 address from a VM and return the old value.
+
+        :param vm_id: The VM identifier.
+        :returns: The previous IPv4 address, or ``None`` if the VM was not found or had no IPv4.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None or vm.ipv4 is None:
+            return None
+        old = vm.ipv4
+        vm.ipv4 = None
+        self.db.add(vm)
+        await self.db.flush()
+        return old
+
     async def add_pending_change(self, vm_id: int, change_code: str) -> bool:
         """Append a change code to the VM's pending_changes list (no duplicates).
 
