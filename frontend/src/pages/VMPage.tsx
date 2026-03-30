@@ -74,9 +74,12 @@ export default function VMPage() {
     })
   }, [vmId])
 
-  // Refresh tasks when status changes
+  // Refresh tasks + VM detail when status changes
   useEffect(() => {
     if (!vmId || !vmStatusEntry?.status) return
+    apiFetch<VMDetail>(`/api/vms/${vmId}`)
+      .then(vmData => setVm(vmData))
+      .catch(() => {})
     apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`)
       .then(r => setTasks(r.items))
       .catch(() => { /* tasks are non-critical, keep previous state */ })
