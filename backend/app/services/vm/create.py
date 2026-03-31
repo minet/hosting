@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
+from app.services.discord import notify_ipv4_exhausted
 from app.services.dns import DnsService
 from app.services.proxmox.allocation import allocate_next_vm_ipv4, allocate_next_vm_ipv6
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
@@ -401,6 +402,12 @@ class VmCreateService:
             await self.cmd_repo.update_vm_ipv4(vm_id, ipv4)
             await self.db.commit()
             logger.info("vm_create_ipv4_assigned vm_id=%s ipv4=%s", vm_id, ipv4)
+            # Check if pool is now exhausted
+            try:
+                remaining = await self.query_repo.list_used_ipv4()
+                allocate_next_vm_ipv4(used_ipv4=remaining)
+            except (ProxmoxUnavailableError, ProxmoxConfigError):
+                await notify_ipv4_exhausted()
             return ipv4
         except (ProxmoxConfigError, ProxmoxUnavailableError):
             logger.info("vm_create_no_ipv4_available vm_id=%s", vm_id)
