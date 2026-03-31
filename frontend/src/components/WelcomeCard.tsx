@@ -34,6 +34,7 @@ export default function WelcomeCard() {
   }
 
   const limits = resources?.limits
+  const isExpired = me.cotise_end_ms != null && me.cotise_end_ms < Date.now()
 
   return (
     <div className="flex flex-col md:h-full p-5 gap-4">
@@ -99,14 +100,16 @@ export default function WelcomeCard() {
           )
         })()}
       </div>
-<button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 dark:border-blue-700 shadow-sm hover:shadow-md text-blue-700 dark:text-blue-300 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
-        <img src="/assets/pinguins/PinguinFiere.svg" alt="Pinguin" className="h-[90%] w-auto" />
-        <div className="flex flex-col items-start flex-1">
-          <span className="font-semibold text-sm md:text-base xl:text-base">{t('createVM')}</span>
-          <span className="hidden md:block text-xs text-blue-500 dark:text-blue-400 font-normal">{t('configureVM')}</span>
-        </div>
-        <ArrowRight className="h-5 w-5 text-blue-400" />
-      </button>
+      {!isExpired && (
+        <button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 dark:border-blue-700 shadow-sm hover:shadow-md text-blue-700 dark:text-blue-300 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
+          <img src="/assets/pinguins/PinguinFiere.svg" alt="Pinguin" className="h-[90%] w-auto" />
+          <div className="flex flex-col items-start flex-1">
+            <span className="font-semibold text-sm md:text-base xl:text-base">{t('createVM')}</span>
+            <span className="hidden md:block text-xs text-blue-500 dark:text-blue-400 font-normal">{t('configureVM')}</span>
+          </div>
+          <ArrowRight className="h-5 w-5 text-blue-400" />
+        </button>
+      )}
     </div>
   )
 }
