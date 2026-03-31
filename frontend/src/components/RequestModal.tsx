@@ -35,6 +35,8 @@ export default function RequestModal({ vmNetwork, requests, reqType, setReqType,
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"><X size={16} /></button>
         </div>
 
+        <img src="/assets/pinguins/PinguinCable.svg" alt="Pinguin câble" className="w-28 h-28 mx-auto" />
+
         {requests.length > 0 && (
           <div className="flex flex-col gap-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('request.previousRequests')}</p>
