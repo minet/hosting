@@ -48,7 +48,10 @@
   },
   "destroy": {
     "title": "Delete <red>{{name}}</red>?",
-    "warning": "This action is irreversible. The VM and all its data will be permanently deleted."
+    "warning": "This action is irreversible. The VM and all its data will be permanently deleted.",
+    "confirmTitle": "Are you really sure?",
+    "confirmWarning": "This deletion is permanent. There will be no way to recover your data.",
+    "confirmButton": "Yes, delete"
   },
   "resources": {
     "title": "Modify resources",

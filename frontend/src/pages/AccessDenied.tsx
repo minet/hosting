@@ -11,7 +11,7 @@ export default function AccessDenied({ reason = 'preprod' }: Props) {
 
   return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">
-      <img src="/assets/pinguins/PinguinPerdu.svg" alt="Pingouin perdu" width={200} height={200} />
+      <img src="/assets/pinguins/PinguinAccesRefused.svg" alt="Accès refusé" width={200} height={200} />
       <h1 className="text-3xl font-bold">{t('accessDenied')}</h1>
       <p className="text-neutral-500 dark:text-neutral-400 text-center max-w-[400px]">
         {message}

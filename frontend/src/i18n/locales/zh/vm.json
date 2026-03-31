@@ -48,7 +48,10 @@
   },
   "destroy": {
     "title": "删除 <red>{{name}}</red>？",
-    "warning": "此操作不可逆。虚拟机及其所有数据将被永久删除。"
+    "warning": "此操作不可逆。虚拟机及其所有数据将被永久删除。",
+    "confirmTitle": "您真的确定吗？",
+    "confirmWarning": "此删除操作是永久性的。将无法恢复您的数据。",
+    "confirmButton": "是的，删除"
   },
   "resources": {
     "title": "修改资源",

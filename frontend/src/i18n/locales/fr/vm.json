@@ -48,7 +48,10 @@
   },
   "destroy": {
     "title": "Supprimer <red>{{name}}</red> ?",
-    "warning": "Cette action est irréversible. La VM et toutes ses données seront définitivement supprimées."
+    "warning": "Cette action est irréversible. La VM et toutes ses données seront définitivement supprimées.",
+    "confirmTitle": "Êtes-vous vraiment sûr ?",
+    "confirmWarning": "Cette suppression est définitive. Il n'y aura aucun moyen de récupérer vos données.",
+    "confirmButton": "Oui, supprimer"
   },
   "resources": {
     "title": "Modifier les ressources",
