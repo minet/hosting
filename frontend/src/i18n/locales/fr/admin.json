@@ -80,5 +80,10 @@
     "reject": "Rejeter",
     "requestIpv4": "Demande IPv4"
   },
-  "revealIdentity": "Révéler l'identité"
+  "revealIdentity": "Révéler l'identité",
+  "maintenance": {
+    "enable": "Activer la maintenance",
+    "disable": "Désactiver la maintenance",
+    "active": "Maintenance activée"
+  }
 }

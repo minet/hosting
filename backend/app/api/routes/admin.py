@@ -482,6 +482,27 @@ async def delete_template(
         ) from exc
 
 
+@router.post("/maintenance", status_code=200)
+async def toggle_maintenance(
+    _: AuthCtx = Depends(require_admin),
+) -> dict:
+    """Toggle maintenance mode (admin only)."""
+    from app.core.maintenance import is_maintenance, set_maintenance
+
+    set_maintenance(not is_maintenance())
+    return {"maintenance": is_maintenance()}
+
+
+@router.get("/maintenance", status_code=200)
+async def get_maintenance(
+    _: AuthCtx = Depends(require_admin),
+) -> dict:
+    """Get maintenance mode status (admin only)."""
+    from app.core.maintenance import is_maintenance
+
+    return {"maintenance": is_maintenance()}
+
+
 @router.post("/purge", status_code=200)
 async def trigger_purge(
     _: AuthCtx = Depends(require_admin),

@@ -27,6 +27,10 @@
     "month": "1mo",
     "year": "1y"
   },
+  "maintenance": {
+    "title": "Maintenance in progress",
+    "description": "The Hosting service is temporarily unavailable for maintenance. Please try again in a few minutes."
+  },
   "units": {
     "gbPerSec": "GB/s",
     "mbPerSec": "MB/s",

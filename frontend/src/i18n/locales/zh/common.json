@@ -27,6 +27,10 @@
     "month": "1月",
     "year": "1年"
   },
+  "maintenance": {
+    "title": "维护中",
+    "description": "Hosting 服务正在维护中，暂时不可用。请稍后再试。"
+  },
   "units": {
     "gbPerSec": "GB/s",
     "mbPerSec": "MB/s",

@@ -80,5 +80,10 @@
     "reject": "拒绝",
     "requestIpv4": "IPv4 申请"
   },
-  "revealIdentity": "显示身份"
+  "revealIdentity": "显示身份",
+  "maintenance": {
+    "enable": "启用维护模式",
+    "disable": "停用维护模式",
+    "active": "维护模式已启用"
+  }
 }

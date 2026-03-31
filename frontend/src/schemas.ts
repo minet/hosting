@@ -22,6 +22,7 @@ export const MeSchema = z.object({
   cotise_end_ms: z.number().nullable(),
   date_signed_hosting: z.string().nullable(),
   ldap_login: z.string().nullable().optional(),
+  maintenance: z.boolean().optional(),
 })
 
 export type Me = z.infer<typeof MeSchema>

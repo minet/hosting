@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
+import { useUser } from '../contexts/UserContext'
 import { useAdminVMs, type AdminVM } from '../hooks/useAdminVMs'
 import { useAdminRequests } from '../hooks/useAdminRequests'
 import { useAdminGroupMembers } from '../hooks/useAdminGroupMembers'
@@ -35,6 +36,8 @@ export default function AdminPage() {
   const navigate = useNavigate()
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
+  const me = useUser()
+  const [maintenance, setMaintenance] = useState(me.maintenance ?? false)
   const { vms, loading, refresh: refreshVMs } = useAdminVMs()
   const { pendingByVm, updateRequest } = useAdminRequests(refreshVMs)
   const statuses = useAllStatuses()
@@ -151,6 +154,11 @@ export default function AdminPage() {
     refreshVMs()
   }, [refreshVMs])
 
+  async function toggleMaintenance() {
+    const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
+    setMaintenance(res.maintenance)
+  }
+
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
     <div className="flex items-center gap-2">
@@ -160,6 +168,13 @@ export default function AdminPage() {
           {t(`tabs.${tb}`)}
         </button>
       ))}
+      <button onClick={toggleMaintenance}
+        className={`ml-4 px-3 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${maintenance
+          ? 'bg-red-500 text-white hover:bg-red-600'
+          : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+        }`}>
+        {maintenance ? t('maintenance.active') : t('maintenance.enable')}
+      </button>
     </div>
   )
 

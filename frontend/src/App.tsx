@@ -18,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const VMPage = lazy(() => import('./pages/VMPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const MaintenancePage = lazy(() => import('./pages/MaintenancePage'))
 
 // Roles that trigger the access denied page (unless the user is also an admin).
 // Configure via VITE_RESTRICTED_ROLES (comma-separated), e.g.:
@@ -59,6 +60,10 @@ export default function App() {
 
   const denied = accessDeniedReason(auth.me)
   if (denied) return <AccessDenied reason={denied} />
+
+  if (!auth.me.is_admin && auth.me.maintenance) {
+    return <Suspense fallback={null}><MaintenancePage /></Suspense>
+  }
 
   if (!auth.me.is_admin && !auth.me.date_signed_hosting) {
     return <CharterPage onSigned={auth.refresh} />

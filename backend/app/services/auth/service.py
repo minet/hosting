@@ -52,6 +52,7 @@ class AuthMeResponse(TypedDict):
     cotise_end_ms: int | None
     date_signed_hosting: str | None
     ldap_login: str | None
+    maintenance: bool
 
 
 def login_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
@@ -187,6 +188,8 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
             date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
 
+    from app.core.maintenance import is_maintenance
+
     return {
         "sub": payload.get("sub"),
         "user_id": user_id,
@@ -200,6 +203,7 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "cotise_end_ms": cotise_end,
         "date_signed_hosting": date_signed_hosting,
         "ldap_login": ldap_login,
+        "maintenance": is_maintenance(),
     }
 
 

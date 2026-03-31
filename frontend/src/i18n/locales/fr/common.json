@@ -27,6 +27,10 @@
     "month": "1mois",
     "year": "1an"
   },
+  "maintenance": {
+    "title": "Maintenance en cours",
+    "description": "Le service Hosting est temporairement indisponible pour maintenance. Veuillez réessayer dans quelques minutes."
+  },
   "units": {
     "gbPerSec": "Go/s",
     "mbPerSec": "Mo/s",
