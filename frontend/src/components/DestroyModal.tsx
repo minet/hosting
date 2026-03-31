@@ -15,9 +15,9 @@ export default function DestroyModal({ vmName, loadingAction, onClose, onConfirm
 
   if (step === 2) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-red-500/30 backdrop-blur-sm" onClick={onClose}>
         <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4 max-w-xs w-full mx-4" onClick={e => e.stopPropagation()}>
-          <img src="/assets/pinguins/PinguinAccesRefused.svg" alt="Confirmation suppression" className="w-24 h-24" />
+          <img src="/assets/pinguins/PinguinAccesRefused.svg" alt="Confirmation suppression" className="w-28 h-28" />
           <div className="text-center">
             <p className="text-base font-bold text-red-500">
               {t('destroy.confirmTitle')}
