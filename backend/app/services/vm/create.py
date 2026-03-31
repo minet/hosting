@@ -112,11 +112,11 @@ class VmCreateService:
         # Auto-assign IPv4 if enabled and available (best-effort)
         ipv4 = await self._try_assign_ipv4(vm_id=reservation.vm_id) if self.settings.vm_auto_assign_ipv4 else None
 
-        result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
+        # DNS records are created regardless of IPv4 availability
         async with DnsService(settings=self.settings) as dns:
             await dns.create_records(
                 vm_id=reservation.vm_id,
-                ipv4=ipv4 or result.get("network", {}).get("ipv4"),
+                ipv4=ipv4,
                 ipv6=reservation.vm_ipv6,
             )
 
@@ -126,6 +126,7 @@ class VmCreateService:
             except ProxmoxError:
                 logger.warning("vm_create_ipv4_proxmox_config_failed vm_id=%s ipv4=%s", reservation.vm_id, ipv4, exc_info=True)
 
+        result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
         logger.info("vm_create_done user_id=%s vm_id=%s ipv4=%s", ctx.user_id, reservation.vm_id, ipv4)
         return result
 
