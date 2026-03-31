@@ -14,7 +14,14 @@ logger = logging.getLogger(__name__)
 ROLE_REQUEST = "1089829786651730010"
 ROLE_ERROR = "1029835701803569152"
 
-PINGUIN_ACCES_REFUSED = "https://hosting.minet.net/assets/pinguins/PinguinAccesRefused.png"
+def _base_url() -> str:
+    env = get_settings().app_env.lower()
+    if env in {"preprod", "pre-prod"}:
+        return "https://hosting-dev.minet.net"
+    return "https://hosting.minet.net"
+
+
+PINGUIN_ACCES_REFUSED = "/assets/pinguins/PinguinAccesRefused.png"
 
 _ENV_LABELS: dict[str, tuple[str, int]] = {
     "prod": ("PROD", 0x2ECC71),
@@ -80,7 +87,7 @@ async def notify_new_request(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
     }
-    await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
+    await _send_webhook(content="", embeds=[embed])
 
 
 async def notify_ipv4_exhausted() -> None:
@@ -90,7 +97,7 @@ async def notify_ipv4_exhausted() -> None:
         "title": f"[{tag}] Pool IPv4 épuisé",
         "description": "La dernière adresse IPv4 disponible a été attribuée.",
         "color": _env_color(0xE74C3C),
-        "thumbnail": {"url": PINGUIN_ACCES_REFUSED},
+        "thumbnail": {"url": f"{_base_url()}{PINGUIN_ACCES_REFUSED}"},
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
     }
