@@ -87,7 +87,7 @@ async def notify_new_request(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
     }
-    await _send_webhook(content="", embeds=[embed])
+    await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
 
 
 async def notify_ipv4_exhausted() -> None:
