@@ -39,6 +39,10 @@ class VmCmdRepo:
         await self.db.flush()
         await self.db.execute(select(QuotaLock).where(QuotaLock.user_id == user_id).with_for_update())
 
+    async def lock_ipv4_allocation(self) -> None:
+        """Acquire a PostgreSQL advisory lock to serialize IPv4 allocation."""
+        await self.db.execute(select(VM.vm_id).where(VM.ipv4.is_not(None)).with_for_update())
+
     async def insert_vm_with_owner_and_resource(
         self,
         *,

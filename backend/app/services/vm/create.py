@@ -410,6 +410,13 @@ class VmCreateService:
             logger.warning("vm_create_ipv4_db_error vm_id=%s", vm_id, exc_info=True)
             await self.db.rollback()
             return None
+        except Exception:
+            logger.warning("vm_create_ipv4_unexpected vm_id=%s", vm_id, exc_info=True)
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+            return None
 
     async def _allocate_vm_id(self) -> int:
         """

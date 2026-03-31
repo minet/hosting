@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { apiFetch } from '../api'
+import { apiFetch, ApiError } from '../api'
 import { useResources } from '../hooks/useResources'
 import { useTemplates } from '../hooks/useTemplates'
 
@@ -168,10 +168,10 @@ export default function CreateVMModal({ onClose }: Props) {
       setTimeout(onClose, 2500)
     } catch (err) {
       stopAll()
-      if (err instanceof Response && err.status === 401) {
+      if (err instanceof ApiError && err.status === 401) {
         setError(tc('sessionExpired'))
       } else {
-        setError(t('create.errorCreating'))
+        setError(err instanceof ApiError ? err.message : t('create.errorCreating'))
       }
       setCreating(false)
     }
