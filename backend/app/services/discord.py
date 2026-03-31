@@ -49,7 +49,7 @@ async def notify_new_request(
         "description": description,
         "color": 0x3498DB,
     }
-    await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
+    await _send_webhook(content="", embeds=[embed])
 
 
 async def notify_ipv4_exhausted(*, vm_id: int, user_id: str) -> None:
