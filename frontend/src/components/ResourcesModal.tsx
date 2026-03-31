@@ -30,7 +30,7 @@ export default function ResourcesModal({ newCpu, setNewCpu, newRam, setNewRam, n
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"><X size={16} /></button>
         </div>
 
-        <img src="/assets/pinguins/PinguinHack.svg" alt="Pinguin hack" className="w-20 h-20 mx-auto" />
+        <img src="/assets/pinguins/PinguinHack.svg" alt="Pinguin hack" className="w-28 h-28 mx-auto" />
 
         {/* CPU */}
         <div className="flex flex-col gap-2">
