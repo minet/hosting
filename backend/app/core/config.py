@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     dns_zone: str = Field(default="h.lan", alias="DNS_ZONE")
     dns_nameservers: str = Field(default="ns1.minet.net.,ns2.minet.net.", alias="DNS_NAMESERVERS")
 
+    discord_webhook_url: str | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
+
     @staticmethod
     def _is_configured(value: str | None) -> bool:
         """Check whether a configuration value is a non-blank string.
