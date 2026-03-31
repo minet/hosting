@@ -17,7 +17,7 @@ from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
-from app.services.discord import notify_ipv4_exhausted, notify_new_request
+from app.services.discord import notify_new_request
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxUnavailableError
 from app.services.vm import AccessLevel, VmAccessService
@@ -229,7 +229,6 @@ async def create_request(
             used_ipv4 = await query_repo.list_used_ipv4()
             allocate_next_vm_ipv4(used_ipv4=used_ipv4)
         except (ProxmoxUnavailableError, ProxmoxConfigError):
-            await notify_ipv4_exhausted(vm_id=vm_id, user_id=ctx.user_id)
             raise HTTPException(
                 status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Plus d'adresse IPv4 disponible dans le pool",

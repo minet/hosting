@@ -40,7 +40,8 @@
       "migrating": "正在迁移到最佳节点...",
       "migratingInProgress": "迁移中...",
       "provisioning": "正在配置中...",
-      "success": "虚拟机创建成功！"
+      "success": "虚拟机创建成功！",
+      "successNoIpv4": "虚拟机创建成功，但目前没有可用的 IPv4 地址。"
     },
     "errorCreating": "创建虚拟机时发生错误。",
     "quotaExhausted": "配额已用尽",

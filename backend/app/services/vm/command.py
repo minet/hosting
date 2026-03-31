@@ -412,6 +412,6 @@ class VmCommandService:
             remaining_used = await self._query_repo.list_used_ipv4()
             allocate_next_vm_ipv4(used_ipv4=remaining_used)
         except (ProxmoxUnavailableError, ProxmoxConfigError):
-            await notify_ipv4_exhausted(vm_id=vm_id, user_id="system")
+            await notify_ipv4_exhausted()
 
         return ipv4

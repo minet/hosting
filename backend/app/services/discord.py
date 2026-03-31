@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 import httpx
 
@@ -12,6 +13,31 @@ logger = logging.getLogger(__name__)
 
 ROLE_REQUEST = "1089829786651730010"
 ROLE_ERROR = "1029835701803569152"
+
+PINGUIN_ACCES_REFUSED = "https://hosting.minet.net/assets/pinguins/PinguinAccesRefused.png"
+
+_ENV_LABELS: dict[str, tuple[str, int]] = {
+    "prod": ("PROD", 0x2ECC71),
+    "production": ("PROD", 0x2ECC71),
+    "preprod": ("PRE-PROD", 0xF39C12),
+    "pre-prod": ("PRE-PROD", 0xF39C12),
+}
+
+
+def _env_tag() -> str:
+    """Return a short environment label for embed titles."""
+    env = get_settings().app_env.lower()
+    label, _ = _ENV_LABELS.get(env, (env.upper(), 0x95A5A6))
+    return label
+
+
+def _env_color(default: int) -> int:
+    """Return the embed color matching the environment, or *default* for prod."""
+    env = get_settings().app_env.lower()
+    if env in {"prod", "production"}:
+        return default
+    _, color = _ENV_LABELS.get(env, (None, 0x95A5A6))
+    return color
 
 
 async def _send_webhook(content: str, embeds: list[dict] | None = None) -> None:
@@ -39,27 +65,33 @@ async def notify_new_request(
     dns_label: str | None = None,
 ) -> None:
     """Notify Discord that a new request has been created."""
-    description = f"**VM** `{vm_id}`\n**Type:** {request_type}"
+    tag = _env_tag()
+    fields = [
+        {"name": "VM", "value": f"`{vm_id}`", "inline": True},
+        {"name": "Type", "value": request_type.upper(), "inline": True},
+    ]
     if dns_label:
-        description += f"\n**DNS Label:** `{dns_label}`"
-    description += f"\n**User:** `{user_id}`"
+        fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
 
     embed = {
-        "title": f"Nouvelle request {request_type.upper()} — VM {vm_id}",
-        "description": description,
-        "color": 0x3498DB,
+        "title": f"[{tag}] Nouvelle demande — {request_type.upper()}",
+        "color": _env_color(0x3498DB),
+        "fields": fields,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
     }
-    await _send_webhook(content="", embeds=[embed])
+    await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
 
 
-async def notify_ipv4_exhausted(*, vm_id: int, user_id: str) -> None:
+async def notify_ipv4_exhausted() -> None:
     """Notify Discord that the IPv4 pool is exhausted."""
+    tag = _env_tag()
     embed = {
-        "title": "Plus d'IPv4 disponibles !",
-        "description": (
-            f"**VM** `{vm_id}` — l'utilisateur `{user_id}` a tenté de demander "
-            f"une IPv4 mais le pool est épuisé."
-        ),
-        "color": 0xE74C3C,
+        "title": f"[{tag}] Pool IPv4 épuisé",
+        "description": "La dernière adresse IPv4 disponible a été attribuée.",
+        "color": _env_color(0xE74C3C),
+        "thumbnail": {"url": PINGUIN_ACCES_REFUSED},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
     }
     await _send_webhook(content=f"<@&{ROLE_ERROR}>", embeds=[embed])

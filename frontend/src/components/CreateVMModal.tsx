@@ -157,11 +157,15 @@ export default function CreateVMModal({ onClose }: Props) {
     }, 1500)
 
     try {
-      await postPromise
+      const result = await postPromise as { vm_id: number; network?: { ipv4: string | null } }
       stopAll()
-      setStatusText(t('create.steps.success'))
+      if (result.network && result.network.ipv4 === null) {
+        setStatusText(t('create.steps.successNoIpv4'))
+      } else {
+        setStatusText(t('create.steps.success'))
+      }
       setDone(true)
-      setTimeout(onClose, 1500)
+      setTimeout(onClose, 2500)
     } catch (err) {
       stopAll()
       if (err instanceof Response && err.status === 401) {

@@ -40,7 +40,8 @@
       "migrating": "Migrating to optimal node...",
       "migratingInProgress": "Migration in progress...",
       "provisioning": "Provisioning...",
-      "success": "VM created successfully!"
+      "success": "VM created successfully!",
+      "successNoIpv4": "VM created successfully, but no IPv4 address is currently available."
     },
     "errorCreating": "An error occurred while creating the VM.",
     "quotaExhausted": "Quota exhausted",
