@@ -364,6 +364,7 @@ async def remove_vm_ipv4(
     old_ipv4 = await repo.clear_vm_ipv4(vm_id)
     if old_ipv4 is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found or has no IPv4")
+    await RequestRepo(db).reject_active(vm_id=vm_id, type="ipv4")
     await db.commit()
     # Best-effort: delete the A record from PowerDNS
     async with DnsService(settings=get_settings()) as dns_svc:

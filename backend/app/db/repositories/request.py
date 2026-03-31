@@ -73,6 +73,16 @@ class RequestRepo:
         rows = (await self._db.execute(stmt)).all()
         return [{**self._to_dict(req), "vm_name": vm_name} for req, vm_name in rows]
 
+    async def reject_active(self, *, vm_id: int, type: str) -> None:
+        """Reject all pending/approved requests of the given type for a VM."""
+        stmt = select(Request).where(
+            Request.vm_id == vm_id,
+            Request.type == type,
+            Request.status != "rejected",
+        )
+        for req in (await self._db.scalars(stmt)).all():
+            req.status = "rejected"
+
     async def get(self, request_id: int) -> dict[str, Any] | None:
         req = await self._db.get(Request, request_id)
         return self._to_dict(req) if req else None

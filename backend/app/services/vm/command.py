@@ -21,6 +21,7 @@ from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
+from app.services.discord import notify_ipv4_exhausted
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.gateway import ProxmoxGateway
@@ -405,5 +406,12 @@ class VmCommandService:
             ) from exc
 
         await self._cmd_repo.add_pending_change(vm_id, "ipv4")
+
+        # Check if the pool is now exhausted after this allocation
+        try:
+            remaining_used = await self._query_repo.list_used_ipv4()
+            allocate_next_vm_ipv4(used_ipv4=remaining_used)
+        except (ProxmoxUnavailableError, ProxmoxConfigError):
+            await notify_ipv4_exhausted(vm_id=vm_id, user_id="system")
 
         return ipv4
