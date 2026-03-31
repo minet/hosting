@@ -203,10 +203,12 @@ async def update_request_status(
 
     if body.status == "approved" and row["type"] == "ipv4":
         ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=row["vm_id"])
+        vm = await VmQueryRepo(db).get_vm(row["vm_id"])
         await db.commit()
         # DNS is best-effort — create records after commit
+        ipv6 = vm.get("ipv6") if vm else None
         async with DnsService(settings=settings) as dns_svc:
-            await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=None)
+            await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=ipv6)
     elif body.status == "approved" and row["type"] == "dns":
         dns_label = row.get("dns_label")
         if not dns_label:
@@ -337,6 +339,7 @@ async def assign_vm_ipv4(
     vm_id: int,
     _: AuthCtx = Depends(require_admin),
     cmd: VmCommandService = Depends(get_vm_command_service),
+    db: AsyncSession = Depends(get_db),
 ) -> VMAssignIPv4Response:
     """
     Automatically assign the next free IPv4 address to a VM (admin only).
@@ -344,12 +347,15 @@ async def assign_vm_ipv4(
     :param vm_id: The target VM identifier.
     :param _: Authenticated admin context (injected).
     :param cmd: VM command service (injected).
+    :param db: Database session (injected).
     :returns: The VM identifier and the newly assigned IPv4 address.
     :rtype: VMAssignIPv4Response
     """
     ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=vm_id)
+    vm = await VmQueryRepo(db).get_vm(vm_id)
+    ipv6 = vm.get("ipv6") if vm else None
     async with DnsService(settings=get_settings()) as dns_svc:
-        await dns_svc.create_records(vm_id=vm_id, ipv4=ipv4, ipv6=None)
+        await dns_svc.create_records(vm_id=vm_id, ipv4=ipv4, ipv6=ipv6)
     return VMAssignIPv4Response(vm_id=vm_id, ipv4=ipv4)
 
 

@@ -1,4 +1,4 @@
-import { ArrowRight, Copy, Check } from 'lucide-react'
+import { ArrowRight, Copy, Check, AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useOpenVMModal } from '../contexts/VMModalContext'
@@ -70,20 +70,34 @@ export default function WelcomeCard() {
             /></>
           )}
         </p>
-        {me.cotise_end_ms && (
-          <p className="text-sm md:text-xs xl:text-xs text-neutral-500 dark:text-neutral-400">
-            {t('welcome.subscriptionExpires')}{' '}
-            <span className="text-neutral-700 dark:text-neutral-300 font-medium">
-              {(() => {
-                const diff = me.cotise_end_ms - Date.now()
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-                if (days > 365) return t('welcome.years', { count: Math.floor(days / 365) })
-                if (days > 30) return t('welcome.months', { count: Math.floor(days / 30) })
-                return t('welcome.days', { count: days })
-              })()}
-            </span>.
-          </p>
-        )}
+        {me.cotise_end_ms && (() => {
+          const diff = me.cotise_end_ms - Date.now()
+          const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+          if (days < 0) {
+            const expiredDays = Math.abs(days)
+            const daysLeft = Math.max(0, 180 - expiredDays)
+            return (
+              <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/50 border border-red-300 dark:border-red-800 rounded-lg p-3">
+                <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-bold text-red-700 dark:text-red-400">{t('welcome.subscriptionExpired')}</p>
+                  <p className="text-xs text-red-600 dark:text-red-400/80">{t('welcome.subscriptionExpiredDesc', { days: daysLeft })}</p>
+                  <p className="text-xs font-medium text-red-500 dark:text-red-500/80">{t('welcome.subscriptionExpiredSince', { count: expiredDays })}</p>
+                </div>
+              </div>
+            )
+          }
+          return (
+            <p className="text-sm md:text-xs xl:text-xs text-neutral-500 dark:text-neutral-400">
+              {t('welcome.subscriptionExpires')}{' '}
+              <span className="text-neutral-700 dark:text-neutral-300 font-medium">
+                {days > 365 ? t('welcome.years', { count: Math.floor(days / 365) })
+                  : days > 30 ? t('welcome.months', { count: Math.floor(days / 30) })
+                  : t('welcome.days', { count: days })}
+              </span>.
+            </p>
+          )
+        })()}
       </div>
 <button onClick={openVMModal} className="w-full h-16 md:flex-1 md:min-h-10 bg-blue-400/15 hover:bg-blue-400/25 active:bg-blue-400/40 border border-blue-200 dark:border-blue-700 shadow-sm hover:shadow-md text-blue-700 dark:text-blue-300 rounded-md flex flex-row items-center px-4 gap-4 font-medium transition-colors cursor-pointer">
         <img src="/assets/pinguins/PinguinFiere.svg" alt="Pinguin" className="h-[90%] w-auto" />

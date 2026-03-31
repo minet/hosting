@@ -13,7 +13,10 @@
     "years_other": "{{count}} years",
     "months": "{{count}} months",
     "days_one": "{{count}} day",
-    "days_other": "{{count}} days"
+    "days_other": "{{count}} days",
+    "subscriptionExpired": "Your subscription has expired!",
+    "subscriptionExpiredDesc": "Your virtual machines will be deleted in {{days}} days. Renew your subscription as soon as possible to avoid losing your data.",
+    "subscriptionExpiredSince": "Expired since {{count}} days"
   },
   "create": {
     "name": "Name",

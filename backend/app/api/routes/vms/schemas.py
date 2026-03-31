@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field, field_validator
 
 _VM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 _USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
-_SSH_KEY_RE = re.compile(r"^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)) ")
+_SSH_KEY_RE = re.compile(
+    r"^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521))"
+    r" [A-Za-z0-9+/]{43,}={0,3}(\s+\S.*)?$"
+)
 
 
 class VMRole(StrEnum):

@@ -21,7 +21,7 @@ export default function ShareModal({ shareUsers, shareInput, setShareInput, load
           <button onClick={onClose} className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300 cursor-pointer"><X size={16} /></button>
         </div>
 
-        <img src="/assets/pinguins/PinguinsVP.svg" alt="Pinguins VP" className="w-28 h-28 mx-auto" />
+        <img src="/assets/pinguins/PinguinsVP.svg" alt="Pinguins VP" className="w-64 h-64 mx-auto" />
 
         <div className="flex flex-col gap-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700 rounded-lg p-3 text-xs text-neutral-500 dark:text-neutral-400">
           <p className="font-semibold text-neutral-700 dark:text-neutral-300">{t('share.findUserId')}</p>

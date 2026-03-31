@@ -13,7 +13,10 @@
     "years_other": "{{count}} 年",
     "months": "{{count}} 个月",
     "days_one": "{{count}} 天",
-    "days_other": "{{count}} 天"
+    "days_other": "{{count}} 天",
+    "subscriptionExpired": "您的订阅已过期！",
+    "subscriptionExpiredDesc": "您的虚拟机将在 {{days}} 天后被删除。请尽快续订以避免数据丢失。",
+    "subscriptionExpiredSince": "已过期 {{count}} 天"
   },
   "create": {
     "name": "名称",

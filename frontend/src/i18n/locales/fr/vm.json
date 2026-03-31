@@ -13,7 +13,10 @@
     "years_other": "{{count}} ans",
     "months": "{{count}} mois",
     "days_one": "{{count}} jour",
-    "days_other": "{{count}} jours"
+    "days_other": "{{count}} jours",
+    "subscriptionExpired": "Votre cotisation a expiré !",
+    "subscriptionExpiredDesc": "Vos machines virtuelles seront supprimées dans {{days}} jours. Renouvelez votre cotisation dès que possible pour éviter la perte de vos données.",
+    "subscriptionExpiredSince": "Expirée depuis {{count}} jours"
   },
   "create": {
     "name": "Nom",
