@@ -5,7 +5,32 @@ import { apiFetch } from '../api'
 export interface AdminTemplate {
   template_id: number
   name: string
+  version: string | null
+  min_cpu_cores: number
+  min_ram_gb: number
+  min_disk_gb: number
+  comment: string | null
   is_active: boolean
+}
+
+export interface AdminTemplateCreatePayload {
+  template_id: number
+  name: string
+  version?: string | null
+  min_cpu_cores?: number
+  min_ram_gb?: number
+  min_disk_gb?: number
+  comment?: string | null
+}
+
+export interface AdminTemplateUpdatePayload {
+  name?: string
+  version?: string | null
+  min_cpu_cores?: number
+  min_ram_gb?: number
+  min_disk_gb?: number
+  comment?: string | null
+  is_active?: boolean
 }
 
 export function useAdminTemplates() {
@@ -20,13 +45,26 @@ export function useAdminTemplates() {
   })
 
   const createMutation = useMutation({
-    mutationFn: ({ template_id, name }: { template_id: number; name: string }) =>
+    mutationFn: (payload: AdminTemplateCreatePayload) =>
       apiFetch<AdminTemplate>('/api/admin/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_id, name }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['templates-admin'] }),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ template_id, ...fields }: AdminTemplateUpdatePayload & { template_id: number }) =>
+      apiFetch<AdminTemplate>(`/api/admin/templates/${template_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['templates-admin'] })
+      qc.invalidateQueries({ queryKey: ['templates'] })
+    },
   })
 
   const removeMutation = useMutation({
@@ -46,8 +84,13 @@ export function useAdminTemplates() {
   })
 
   const create = useCallback(
-    (template_id: number, name: string) => createMutation.mutateAsync({ template_id, name }),
+    (payload: AdminTemplateCreatePayload) => createMutation.mutateAsync(payload),
     [createMutation],
+  )
+
+  const update = useCallback(
+    (template_id: number, fields: AdminTemplateUpdatePayload) => updateMutation.mutateAsync({ template_id, ...fields }),
+    [updateMutation],
   )
 
   const remove = useCallback(
@@ -65,5 +108,5 @@ export function useAdminTemplates() {
     [qc],
   )
 
-  return { templates, loading, create, remove, toggleActive, refresh }
+  return { templates, loading, create, update, remove, toggleActive, refresh }
 }

@@ -34,16 +34,17 @@ export default function CreateVMModal({ onClose }: Props) {
   const maxRam = remaining ? Math.floor(remaining.ram_mb / 1024) : 1
   const maxDisk = remaining?.disk_gb ?? 1
 
-  const minCpu = resources?.minimums?.cpu_cores ?? 1
-  const minRam = resources?.minimums ? Math.ceil(resources.minimums.ram_mb / 1024) : 1
-  const minDisk = resources?.minimums?.disk_gb ?? 10
-
   const [name, setName] = useState('')
   const [templateId, setTemplateId] = useState<number | ''>('')
 
   useEffect(() => {
     if (templates.length > 0 && templateId === '') setTemplateId(templates[0].template_id)
   }, [templates])
+
+  const selectedTemplate = templates.find(t => t.template_id === templateId)
+  const minCpu = selectedTemplate?.min_cpu_cores ?? 1
+  const minRam = selectedTemplate?.min_ram_gb ?? 1
+  const minDisk = selectedTemplate?.min_disk_gb ?? 10
 
   const [cpu, setCpu] = useState<number | ''>(2)
   const [ram, setRam] = useState<number | ''>(2)
@@ -53,7 +54,7 @@ export default function CreateVMModal({ onClose }: Props) {
     setCpu(prev => prev === '' ? minCpu : Math.max(prev, minCpu))
     setRam(prev => prev === '' ? minRam : Math.max(prev, minRam))
     setDisk(prev => prev === '' ? minDisk : Math.max(prev, minDisk))
-  }, [minCpu, minRam, minDisk])
+  }, [minCpu, minRam, minDisk, templateId])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [sshKey, setSshKey] = useState('')
@@ -257,10 +258,15 @@ export default function CreateVMModal({ onClose }: Props) {
                 <label className={labelClass}>{t('create.template')}</label>
                 <select className={inputClass} value={templateId} onChange={e => setTemplateId(Number(e.target.value))} required>
                   <option value="">{t('create.selectTemplate')}</option>
-                  {templates.map(t => (
-                    <option key={t.template_id} value={t.template_id}>{t.name}</option>
+                  {templates.map(tpl => (
+                    <option key={tpl.template_id} value={tpl.template_id}>
+                      {tpl.name}{tpl.version ? ` (${tpl.version})` : ''}
+                    </option>
                   ))}
                 </select>
+                {selectedTemplate?.comment && (
+                  <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-0.5">{selectedTemplate.comment}</p>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="flex flex-col gap-1">

@@ -54,6 +54,11 @@ export type Resources = z.infer<typeof ResourcesSchema>
 export const TemplateSchema = z.object({
   template_id: z.number(),
   name: z.string(),
+  version: z.string().nullable().optional(),
+  min_cpu_cores: z.number().optional().default(1),
+  min_ram_gb: z.number().optional().default(2),
+  min_disk_gb: z.number().optional().default(10),
+  comment: z.string().nullable().optional(),
 })
 
 export const TemplateListSchema = z.object({
