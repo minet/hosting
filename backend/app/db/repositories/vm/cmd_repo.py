@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -222,14 +224,55 @@ class VmCmdRepo:
             await self.db.flush()
         return True
 
-    async def insert_template(self, *, template_id: int, name: str) -> None:
+    async def insert_template(
+        self,
+        *,
+        template_id: int,
+        name: str,
+        version: str | None = None,
+        min_cpu_cores: int = 1,
+        min_ram_gb: int = 2,
+        min_disk_gb: int = 10,
+        comment: str | None = None,
+    ) -> None:
         """Insert a new template row.
 
         :param template_id: Proxmox VMID of the template.
         :param name: Human-readable name.
+        :param version: Optional version string.
+        :param min_cpu_cores: Minimum CPU cores for this template.
+        :param min_ram_gb: Minimum RAM in GB for this template.
+        :param min_disk_gb: Minimum disk in GB for this template.
+        :param comment: Optional description.
         """
-        self.db.add(Template(template_id=template_id, name=name, is_active=True))
+        self.db.add(
+            Template(
+                template_id=template_id,
+                name=name,
+                version=version,
+                min_cpu_cores=min_cpu_cores,
+                min_ram_gb=min_ram_gb,
+                min_disk_gb=min_disk_gb,
+                comment=comment,
+                is_active=True,
+            )
+        )
         await self.db.flush()
+
+    async def update_template(self, template_id: int, **fields: Any) -> bool:
+        """Update arbitrary fields on a template.
+
+        :param template_id: The template identifier.
+        :param fields: Keyword arguments of column names to new values.
+        :returns: ``True`` if the template was found and updated, ``False`` otherwise.
+        """
+        tpl = await self.db.get(Template, template_id)
+        if tpl is None:
+            return False
+        for key, value in fields.items():
+            setattr(tpl, key, value)
+        await self.db.flush()
+        return True
 
     async def set_template_active(self, *, template_id: int, is_active: bool) -> bool:
         """Set the ``is_active`` flag on a template.

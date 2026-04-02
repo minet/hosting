@@ -61,6 +61,11 @@ class VMTemplateResponse(BaseModel):
 
     template_id: int
     name: str
+    version: str | None = None
+    min_cpu_cores: int = 1
+    min_ram_gb: int = 2
+    min_disk_gb: int = 10
+    comment: str | None = None
     is_active: bool = True
 
 
@@ -489,6 +494,23 @@ class AdminTemplateCreateBody(BaseModel):
 
     template_id: int = Field(ge=1001, le=1999)
     name: str = Field(min_length=1, max_length=128)
+    version: str | None = Field(default=None, max_length=64)
+    min_cpu_cores: int = Field(default=1, ge=1)
+    min_ram_gb: int = Field(default=2, ge=1)
+    min_disk_gb: int = Field(default=10, ge=1)
+    comment: str | None = Field(default=None, max_length=512)
+
+
+class AdminTemplateUpdateBody(BaseModel):
+    """Request body for updating a VM template (admin only)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    version: str | None = None
+    min_cpu_cores: int | None = Field(default=None, ge=1)
+    min_ram_gb: int | None = Field(default=None, ge=1)
+    min_disk_gb: int | None = Field(default=None, ge=1)
+    comment: str | None = None
+    is_active: bool | None = None
 
 
 class AdminTemplateActiveBody(BaseModel):

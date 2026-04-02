@@ -23,6 +23,7 @@ from app.api.routes.vms.schemas import (
     AdminRequestUpdateBody,
     AdminTemplateActiveBody,
     AdminTemplateCreateBody,
+    AdminTemplateUpdateBody,
     ResourcesResponse,
     TemplateListResponse,
     VMAssignIPv4Response,
@@ -431,7 +432,15 @@ async def create_template(
     """
     repo = VmCmdRepo(db)
     try:
-        await repo.insert_template(template_id=body.template_id, name=body.name)
+        await repo.insert_template(
+            template_id=body.template_id,
+            name=body.name,
+            version=body.version,
+            min_cpu_cores=body.min_cpu_cores,
+            min_ram_gb=body.min_ram_gb,
+            min_disk_gb=body.min_disk_gb,
+            comment=body.comment,
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -439,7 +448,40 @@ async def create_template(
             status_code=status.HTTP_409_CONFLICT,
             detail="Template with this ID or name already exists",
         ) from exc
-    return VMTemplateResponse(template_id=body.template_id, name=body.name, is_active=True)
+    return VMTemplateResponse(
+        template_id=body.template_id,
+        name=body.name,
+        version=body.version,
+        min_cpu_cores=body.min_cpu_cores,
+        min_ram_gb=body.min_ram_gb,
+        min_disk_gb=body.min_disk_gb,
+        comment=body.comment,
+        is_active=True,
+    )
+
+
+@router.patch("/admin/templates/{template_id}", response_model=VMTemplateResponse)
+async def update_template(
+    template_id: int,
+    body: AdminTemplateUpdateBody,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> VMTemplateResponse:
+    """Update a VM template's fields (admin only)."""
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not fields:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No fields to update")
+    cmd_repo = VmCmdRepo(db)
+    query_repo = VmQueryRepo(db)
+    try:
+        if not await cmd_repo.update_template(template_id, **fields):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Name already taken") from exc
+    row = await query_repo.get_template(template_id)
+    return VMTemplateResponse.model_validate(row)
 
 
 @router.patch("/admin/templates/{template_id}/active", response_model=VMTemplateResponse)

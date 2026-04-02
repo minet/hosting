@@ -149,7 +149,19 @@ class VmQueryService:
         :raises HTTPException: 503 on database errors.
         """
         rows = await self._db_call(self.repo.list_templates(active_only=True))
-        items = [{"template_id": row["template_id"], "name": row["name"], "is_active": row["is_active"]} for row in rows]
+        items = [
+            {
+                "template_id": row["template_id"],
+                "name": row["name"],
+                "version": row.get("version"),
+                "min_cpu_cores": row.get("min_cpu_cores", 1),
+                "min_ram_gb": row.get("min_ram_gb", 2),
+                "min_disk_gb": row.get("min_disk_gb", 10),
+                "comment": row.get("comment"),
+                "is_active": row["is_active"],
+            }
+            for row in rows
+        ]
         return {"items": items, "count": len(items)}
 
     async def get_resources(self, *, user_id: str) -> dict[str, Any]:
@@ -173,12 +185,7 @@ class VmQueryService:
             "ram_mb": max(limits["ram_mb"] - usage["ram_mb"], 0),
             "disk_gb": max(limits["disk_gb"] - usage["disk_gb"], 0),
         }
-        minimums = {
-            "cpu_cores": self.settings.vm_min_cpu_cores,
-            "ram_mb": self.settings.vm_min_ram_gb * 1024,
-            "disk_gb": self.settings.vm_min_disk_gb,
-        }
-        return {"usage": usage, "limits": limits, "remaining": remaining, "minimums": minimums}
+        return {"usage": usage, "limits": limits, "remaining": remaining}
 
     def _resolve_dns(self, vm_id: int, cname_map: dict[str, str]) -> str | None:
         dns_zone = self.settings.dns_zone.rstrip(".")
@@ -237,7 +244,16 @@ class VmQueryService:
             "cpu_cores": row["cpu_cores"],
             "ram_mb": row["ram_mb"],
             "disk_gb": row["disk_gb"],
-            "template": {"template_id": row["template_id"], "name": row["template_name"], "is_active": row.get("template_is_active", True)},
+            "template": {
+                "template_id": row["template_id"],
+                "name": row["template_name"],
+                "version": row.get("template_version"),
+                "min_cpu_cores": row.get("template_min_cpu_cores", 1),
+                "min_ram_gb": row.get("template_min_ram_gb", 2),
+                "min_disk_gb": row.get("template_min_disk_gb", 10),
+                "comment": row.get("template_comment"),
+                "is_active": row.get("template_is_active", True),
+            },
             "network": {"ipv4": row["ipv4"], "ipv6": row["ipv6"], "mac": row["mac"]},
             "current_user_role": role,
             "username": row.get("username") if role in ("owner", "admin") else None,

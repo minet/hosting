@@ -105,7 +105,7 @@ class VmCreateService:
             cmd.disk_gb,
         )
 
-        self._validate_limits(cmd)
+        await self._validate_limits(cmd)
         reservation = await self._reserve_db_slot(ctx=ctx, cmd=cmd)
         node = await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
         await self._finalize_db(ctx=ctx, res=reservation, node=node)
@@ -131,19 +131,25 @@ class VmCreateService:
         logger.info("vm_create_done user_id=%s vm_id=%s ipv4=%s", ctx.user_id, reservation.vm_id, ipv4)
         return result
 
-    def _validate_limits(self, cmd: VmCreateCmd) -> None:
+    async def _validate_limits(self, cmd: VmCreateCmd) -> None:
         """
-        Raise an HTTP 422 error if any resource value is below the configured minimum.
+        Raise an HTTP 422 error if any resource value is below the template minimum.
 
         :param cmd: Creation command to validate.
         :raises HTTPException: 422 when ``cpu_cores``, ``ram_gb``, or
-            ``disk_gb`` is below the configured minimum.
+            ``disk_gb`` is below the template's minimum.
         """
-        if cmd.cpu_cores < self.settings.vm_min_cpu_cores:
+        tpl = await self.query_repo.get_template(cmd.template_id)
+        if tpl is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        min_cpu = tpl.get("min_cpu_cores", 1)
+        min_ram = tpl.get("min_ram_gb", 2)
+        min_disk = tpl.get("min_disk_gb", 10)
+        if cmd.cpu_cores < min_cpu:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cpu_cores below minimum")
-        if cmd.ram_gb < self.settings.vm_min_ram_gb:
+        if cmd.ram_gb < min_ram:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ram_gb below minimum")
-        if cmd.disk_gb < self.settings.vm_min_disk_gb:
+        if cmd.disk_gb < min_disk:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="disk_gb below minimum")
 
     async def _reserve_db_slot(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> _DbReservation:

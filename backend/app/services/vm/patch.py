@@ -108,7 +108,8 @@ class VmPatchService:
             target_ram_mb = target_ram_mb if target_ram_mb is not None else int(current["ram_mb"])
             target_disk = target_disk if target_disk is not None else int(current["disk_gb"])
             if not is_admin:
-                self._validate_resize(
+                await self._validate_resize(
+                    template_id=int(current["template_id"]),
                     current_disk_gb=int(current["disk_gb"]),
                     target_cpu=target_cpu,
                     target_ram_mb=target_ram_mb,
@@ -229,25 +230,30 @@ class VmPatchService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
         return vm
 
-    def _validate_resize(
-        self, *, current_disk_gb: int, target_cpu: int, target_ram_mb: int, target_disk_gb: int
+    async def _validate_resize(
+        self, *, template_id: int, current_disk_gb: int, target_cpu: int, target_ram_mb: int, target_disk_gb: int
     ) -> None:
         """
         Validate that the target resource values are within acceptable bounds.
 
+        :param template_id: The template ID to look up minimum resources.
         :param current_disk_gb: The VM's current disk size in GB (used to
             prevent shrinking).
         :param target_cpu: Desired CPU core count.
         :param target_ram_mb: Desired RAM in megabytes.
         :param target_disk_gb: Desired disk size in gigabytes.
-        :raises HTTPException: 422 when values are below configured minimums,
+        :raises HTTPException: 422 when values are below template minimums,
             400 when disk shrink is requested.
         """
-        if target_cpu < self.settings.vm_min_cpu_cores:
+        tpl = await self.query_repo.get_template(template_id)
+        min_cpu = tpl.get("min_cpu_cores", 1) if tpl else 1
+        min_ram_mb = (tpl.get("min_ram_gb", 2) if tpl else 2) * 1024
+        min_disk = tpl.get("min_disk_gb", 10) if tpl else 10
+        if target_cpu < min_cpu:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cpu_cores below minimum")
-        if target_ram_mb < self.settings.vm_min_ram_gb * 1024:
+        if target_ram_mb < min_ram_mb:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ram_gb below minimum")
-        if target_disk_gb < self.settings.vm_min_disk_gb:
+        if target_disk_gb < min_disk:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="disk_gb below minimum")
         if target_disk_gb < current_disk_gb:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Disk shrink is not supported")

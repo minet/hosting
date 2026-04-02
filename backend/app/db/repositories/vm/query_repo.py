@@ -29,6 +29,11 @@ _VM_COLUMNS = (
     VM.disk_gb.label("disk_gb"),
     VM.template_id.label("template_id"),
     Template.name.label("template_name"),
+    Template.version.label("template_version"),
+    Template.min_cpu_cores.label("template_min_cpu_cores"),
+    Template.min_ram_gb.label("template_min_ram_gb"),
+    Template.min_disk_gb.label("template_min_disk_gb"),
+    Template.comment.label("template_comment"),
     Template.is_active.label("template_is_active"),
     func.host(VM.ipv4).label("ipv4"),
     func.host(VM.ipv6).label("ipv6"),
@@ -214,6 +219,11 @@ class VmQueryRepo:
         stmt = select(
             Template.template_id.label("template_id"),
             Template.name.label("name"),
+            Template.version.label("version"),
+            Template.min_cpu_cores.label("min_cpu_cores"),
+            Template.min_ram_gb.label("min_ram_gb"),
+            Template.min_disk_gb.label("min_disk_gb"),
+            Template.comment.label("comment"),
             Template.is_active.label("is_active"),
         ).order_by(Template.template_id.asc())
         if active_only:
@@ -224,7 +234,7 @@ class VmQueryRepo:
         """Return a single template by its identifier.
 
         :param template_id: The template identifier to look up.
-        :returns: A row dict containing ``template_id``, ``name``, and ``is_active``, or ``None``
+        :returns: A row dict with all template fields, or ``None``
             if the template does not exist.
         :rtype: dict[str, Any] or None
         """
@@ -232,6 +242,11 @@ class VmQueryRepo:
             select(
                 Template.template_id.label("template_id"),
                 Template.name.label("name"),
+                Template.version.label("version"),
+                Template.min_cpu_cores.label("min_cpu_cores"),
+                Template.min_ram_gb.label("min_ram_gb"),
+                Template.min_disk_gb.label("min_disk_gb"),
+                Template.comment.label("comment"),
                 Template.is_active.label("is_active"),
             )
             .where(Template.template_id == template_id)
