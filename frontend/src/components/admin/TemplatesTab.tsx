@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Loader, Plus, Trash2, Pencil, Check, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useAdminTemplates, AdminTemplate, AdminTemplateUpdatePayload } from '../../hooks/useAdminTemplates'
+import { useAdminTemplates } from '../../hooks/useAdminTemplates'
+import type { AdminTemplate, AdminTemplateUpdatePayload } from '../../hooks/useAdminTemplates'
 
 const inputCls = "text-sm border border-neutral-200 dark:border-neutral-600 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-blue-400 bg-transparent text-neutral-900 dark:text-neutral-100"
 
