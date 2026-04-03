@@ -142,6 +142,8 @@ class VmCreateService:
         tpl = await self.query_repo.get_template(cmd.template_id)
         if tpl is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        if not tpl.get("is_active", True):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
         min_cpu = tpl.get("min_cpu_cores", 1)
         min_ram = tpl.get("min_ram_gb", 2)
         min_disk = tpl.get("min_disk_gb", 10)

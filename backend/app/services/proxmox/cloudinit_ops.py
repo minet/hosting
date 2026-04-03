@@ -248,6 +248,29 @@ class CloudInitService:
         new_parts = [f"ip={vm_ipv4}/{ipv4_prefix}", f"gw={ipv4_gateway}", *ipv6_parts]
         return ",".join(new_parts)
 
+    def remove_vm_ipv4(self, *, node: str, vm_id: int, vm_ipv4: str) -> None:
+        """Remove the IPv4 address from the VM's ``ipconfig0`` cloud-init setting.
+
+        Reads the current ``ipconfig0``, strips any ``ip=`` and ``gw=`` segments
+        while preserving IPv6 segments, posts the updated configuration, then
+        removes the address from the ``hosting`` IP set.
+
+        :param node: Proxmox node name hosting the VM.
+        :type node: str
+        :param vm_id: VMID of the target virtual machine.
+        :type vm_id: int
+        :param vm_ipv4: IPv4 address to remove.
+        :type vm_ipv4: str
+        """
+        config = self._client.nodes(node).qemu(vm_id).config.get()
+        current_ipconfig0 = config.get("ipconfig0", "") if isinstance(config, dict) else ""
+        parts = [p.strip() for p in current_ipconfig0.split(",") if p.strip()]
+        remaining = [p for p in parts if not p.startswith("ip=") and not p.startswith("gw=")]
+        self._client.nodes(node).qemu(vm_id).config.post(ipconfig0=",".join(remaining))
+
+        firewall = self._client.nodes(node).qemu(vm_id).firewall
+        self._remove_ipv4_from_ipset(firewall=firewall, vm_ipv4=vm_ipv4)
+
     def _add_ipv4_to_ipset(self, *, firewall: Any, vm_ipv4: str) -> None:
         """Add the VM's IPv4 ``/32`` CIDR to the ``hosting`` IP set.
 
@@ -262,6 +285,20 @@ class CloudInitService:
         vm_cidr = f"{vm_ipv4}/32"
         with contextlib.suppress(ResourceException):
             firewall.ipset(ipset_name).post(cidr=vm_cidr)
+
+    def _remove_ipv4_from_ipset(self, *, firewall: Any, vm_ipv4: str) -> None:
+        """Remove the VM's IPv4 ``/32`` CIDR from the ``hosting`` IP set.
+
+        Silently ignores errors if the entry or IP set does not exist.
+
+        :param firewall: Proxmox firewall resource object for the VM.
+        :param vm_ipv4: IPv4 address to remove from the IP set.
+        :type vm_ipv4: str
+        """
+        ipset_name = "hosting"
+        vm_cidr = f"{vm_ipv4}/32"
+        with contextlib.suppress(ResourceException):
+            firewall.ipset(ipset_name)(vm_cidr).delete()
 
     def _encode_cloudinit_ssh_keys(self, raw_key: str) -> str:
         """Normalise and URL-encode an SSH public key for the Proxmox API.

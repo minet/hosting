@@ -288,6 +288,21 @@ class ProxmoxGateway:
             ipv4_gateway=gw4,
         )
 
+    def remove_vm_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+        """Remove an IPv4 address from the VM's cloud-init network configuration.
+
+        :param vm_id: VMID of the target virtual machine.
+        :type vm_id: int
+        :param vm_ipv4: IPv4 address string to remove.
+        :type vm_ipv4: str
+        :raises ProxmoxError: On API failures.
+        """
+        self._guard(lambda: self._do_remove_ipv4(vm_id=vm_id, vm_ipv4=vm_ipv4))
+
+    def _do_remove_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        self._cloudinit.remove_vm_ipv4(node=node, vm_id=vm_id, vm_ipv4=vm_ipv4)
+
     def setup_vm_firewall(self, *, vm_id: int, vm_ipv6: str, node: str) -> None:
         """Enable the Proxmox firewall and IPv6 IP-set filter on a VM.
 

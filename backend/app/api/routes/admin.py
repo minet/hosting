@@ -373,6 +373,12 @@ async def remove_vm_ipv4(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found or has no IPv4")
     await RequestRepo(db).reject_active(vm_id=vm_id, type="ipv4")
     await db.commit()
+    # Best-effort: remove IPv4 from Proxmox cloud-init and firewall ipset
+    try:
+        gw = get_proxmox_gateway()
+        await asyncio.to_thread(gw.remove_vm_ipv4, vm_id=vm_id, vm_ipv4=old_ipv4)
+    except ProxmoxError:
+        pass
     # Best-effort: delete the A record from PowerDNS
     async with DnsService(settings=get_settings()) as dns_svc:
         await dns_svc.delete_records(vm_id=vm_id)
