@@ -37,23 +37,28 @@ _WARN_INTERVAL = timedelta(days=30)
 
 
 def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str) -> int | None:
-    """Extract cotise_end_ms from a Keycloak user profile dict."""
+    """Extract cotise_end_ms from a Keycloak user profile dict.
+
+    Checks in order:
+    1. profile["cotise_end_ms"] — pre-computed by fetch_keycloak_user_profile
+    2. profile[claim_key] — flattened top-level attribute (LDAP federated users)
+    3. profile["attributes"][claim_key] — raw nested attributes
+    """
     if not profile:
         return None
-    attrs = profile.get("attributes") or {}
-    values = attrs.get(claim_key)
-    if isinstance(values, list) and values:
+
+    for raw in (
+        profile.get("cotise_end_ms"),
+        profile.get(claim_key),
+        (profile.get("attributes") or {}).get(claim_key),
+    ):
+        if raw is None:
+            continue
         try:
-            return int(values[0])
+            return int(raw[0] if isinstance(raw, list) else raw)
         except (ValueError, TypeError):
-            return None
-    # Also check flat key (fetch_keycloak_user_profile flattens attrs)
-    raw = profile.get("cotise_end_ms")
-    if raw is not None:
-        try:
-            return int(raw)
-        except (ValueError, TypeError):
-            return None
+            continue
+
     return None
 
 
