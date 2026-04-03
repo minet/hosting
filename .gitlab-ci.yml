@@ -158,8 +158,7 @@ dns_retransfer_preprod:
     HOSTING_RETRANSFER: "true"
     HOSTING_DNS_ZONE: hdev.minet.net
   rules:
-    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
-      when: manual
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "pre-prod"'
 
 dns_retransfer_prod:
   stage: retransfer
@@ -171,5 +170,4 @@ dns_retransfer_prod:
     HOSTING_RETRANSFER: "true"
     HOSTING_DNS_ZONE: h.minet.net
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"'
