@@ -571,12 +571,13 @@ async def list_orphaned_vms(
     _: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    """Return VMs on the Proxmox cluster that have no ``preprod``/``prod`` tag
-    and whose VMID is not registered in the templates table.
+    """Return VMs on the Proxmox cluster whose VMID is neither in the ``vms``
+    table nor in the ``templates`` table.
 
     Requires Proxmox to be configured. Returns an empty list otherwise.
     """
     from app.db.models.template import Template
+    from app.db.models.vm import VM as VMModel
 
     settings = get_settings()
     if not settings.proxmox_configured:
@@ -588,25 +589,45 @@ async def list_orphaned_vms(
     template_ids_result = await db.execute(select(Template.template_id))
     template_ids: set[int] = {row[0] for row in template_ids_result.all()}
 
+    vm_ids_result = await db.execute(select(VMModel.vm_id))
+    vm_ids: set[int] = {row[0] for row in vm_ids_result.all()}
+
+    known_ids = template_ids | vm_ids
+
     orphaned = []
     for vm in cluster_vms:
         vmid = vm.get("vmid")
-        if vmid is None:
+        if vmid is None or vmid in known_ids:
             continue
         tags_raw: str = vm.get("tags") or ""
         tag_list = {t.strip().lower() for t in tags_raw.split(";") if t.strip()}
-        has_env_tag = bool(tag_list & {"preprod", "prod"})
-        is_template = vmid in template_ids
-        if not has_env_tag and not is_template:
-            orphaned.append({
-                "vmid": vmid,
-                "name": vm.get("name"),
-                "node": vm.get("node"),
-                "status": vm.get("status"),
-                "tags": tags_raw,
-            })
+        if tag_list & {"preprod", "prod"}:
+            continue
+        orphaned.append({
+            "vmid": vmid,
+            "name": vm.get("name"),
+            "node": vm.get("node"),
+            "status": vm.get("status"),
+            "tags": tags_raw,
+        })
 
     return orphaned
+
+
+@router.delete("/admin/vms/orphaned/{vmid}", status_code=204)
+async def delete_orphaned_vm(
+    vmid: int,
+    _: AuthCtx = Depends(require_admin),
+) -> None:
+    """Delete an orphaned VM directly from Proxmox (no DB record to clean up)."""
+    settings = get_settings()
+    if not settings.proxmox_configured:
+        raise HTTPException(status_code=503, detail="Proxmox not configured")
+    gateway = get_proxmox_gateway()
+    try:
+        await asyncio.to_thread(gateway.delete_vm, vm_id=vmid)
+    except ProxmoxError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/admin/vms/expired")

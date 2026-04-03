@@ -162,7 +162,12 @@ async def run_purge(
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
 
         if cotise_end_ms is None:
-            logger.warning("purge: cannot determine cotise_end for user %s, skipping vm %s", owner_id, vm_id)
+            logger.warning(
+                "purge: cannot determine cotise_end for user %s, skipping vm %s — raw profile: %s",
+                owner_id,
+                vm_id,
+                profile,
+            )
             continue
 
         cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=UTC)

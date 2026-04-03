@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { Loader, RefreshCw, AlertTriangle } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { Loader, RefreshCw, AlertTriangle, Trash2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { usePagination } from '../../hooks/usePagination'
@@ -25,6 +25,22 @@ function useOrphanedVMs() {
 export default function OrphanedVMsTab() {
   const { data, loading, error, refresh } = useOrphanedVMs()
   const { shown, hasMore, remaining, showMore } = usePagination(data)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete(vmid: number) {
+    if (!confirm(`Supprimer la VM #${vmid} de Proxmox ? Cette action est irréversible.`)) return
+    setDeleting(vmid)
+    setDeleteError(null)
+    try {
+      await apiFetch(`/api/admin/vms/orphaned/${vmid}`, { method: 'DELETE' })
+      refresh()
+    } catch (e) {
+      setDeleteError((e as Error).message)
+    } finally {
+      setDeleting(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -52,7 +68,6 @@ export default function OrphanedVMsTab() {
           <AlertTriangle size={16} className="text-amber-500" />
           <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-200">VMs orphelines</h1>
           <span className="text-xs text-neutral-400 dark:text-neutral-500">({data.length})</span>
-
         </div>
         <button onClick={refresh} className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium transition-colors cursor-pointer">
           <RefreshCw size={12} /> Actualiser
@@ -60,8 +75,12 @@ export default function OrphanedVMsTab() {
       </div>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400 shrink-0">
-        VMs sur le cluster sans tag <code className="font-mono bg-neutral-100 dark:bg-neutral-800 px-1 rounded">preprod</code>/<code className="font-mono bg-neutral-100 dark:bg-neutral-800 px-1 rounded">prod</code> et non enregistrées comme template.
+        VMs présentes sur le cluster mais absentes de la base de données (ni VM utilisateur, ni template).
       </p>
+
+      {deleteError && (
+        <p className="text-xs text-red-500 shrink-0">{deleteError}</p>
+      )}
 
       <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden shadow-sm overflow-x-auto shrink-0">
         <table className="w-full text-sm border-collapse min-w-[500px]">
@@ -72,11 +91,12 @@ export default function OrphanedVMsTab() {
               <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Nœud</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Statut</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">Tags</th>
+              <th className="px-3 py-2" />
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
             {data.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500 text-xs">Aucune VM orpheline</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500 text-xs">Aucune VM orpheline</td></tr>
             )}
             {shown.map(vm => (
               <tr key={vm.vmid} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
@@ -89,6 +109,19 @@ export default function OrphanedVMsTab() {
                   </span>
                 </td>
                 <td className="px-3 py-2 text-xs font-mono text-neutral-500 dark:text-neutral-400">{vm.tags || '—'}</td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    onClick={() => handleDelete(vm.vmid)}
+                    disabled={deleting === vm.vmid}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-950 border border-red-200 dark:border-red-800 transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {deleting === vm.vmid
+                      ? <Loader size={10} className="animate-spin" />
+                      : <Trash2 size={10} />
+                    }
+                    Supprimer
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
