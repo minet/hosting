@@ -218,10 +218,20 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
             return None
         attributes: dict[str, Any] = user.get("attributes") or {}
         flat_attrs = {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in attributes.items()}
+        # For LDAP-federated users, attributes are returned at the top level of the
+        # user dict rather than nested in "attributes". Try both locations.
+        cotise_end_ms = _extract_cotise_end_ms(attributes, cotise_key)
+        if cotise_end_ms is None:
+            raw = user.get(cotise_key) or flat_attrs.get(cotise_key)
+            if raw is not None:
+                try:
+                    cotise_end_ms = int(raw[0] if isinstance(raw, list) else raw)
+                except (ValueError, TypeError):
+                    pass
         return {
             **{k: v for k, v in user.items() if k != "attributes"},
             **flat_attrs,
-            "cotise_end_ms": _extract_cotise_end_ms(attributes, cotise_key),
+            "cotise_end_ms": cotise_end_ms,
         }
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_user_profile failed for username=%s: %s", username, exc)
