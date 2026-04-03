@@ -168,10 +168,11 @@ async def run_purge(
 
         if cotise_end_ms is None:
             logger.warning(
-                "purge: cannot determine cotise_end for user %s, skipping vm %s — raw profile: %s",
+                "purge: cannot determine cotise_end for user %s, skipping vm %s — claim_key=%r profile_keys=%s",
                 owner_id,
                 vm_id,
-                profile,
+                settings.auth_cotise_end_claim.strip(),
+                list(profile.keys()) if profile else None,
             )
             continue
 
