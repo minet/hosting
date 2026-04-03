@@ -571,11 +571,13 @@ async def list_orphaned_vms(
     _: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    """Return VMs present on the Proxmox cluster that are either unknown to the
-    application or lack a ``preprod`` / ``prod`` tag.
+    """Return VMs on the Proxmox cluster that have no ``preprod``/``prod`` tag
+    and whose VMID is not registered in the templates table.
 
     Requires Proxmox to be configured. Returns an empty list otherwise.
     """
+    from app.db.models.template import Template
+
     settings = get_settings()
     if not settings.proxmox_configured:
         return []
@@ -583,12 +585,8 @@ async def list_orphaned_vms(
     gateway = get_proxmox_gateway()
     cluster_vms: list[dict] = await asyncio.to_thread(gateway.cluster_resources, type="vm")
 
-    # All VM IDs known to the application
-    result = await db.execute(select(VMIPHistory.vm_id).where(VMIPHistory.vm_id.isnot(None)).distinct())
-    # Actually query the vms table directly
-    from app.db.models.vm import VM as VMModel
-    db_ids_result = await db.execute(select(VMModel.vm_id))
-    db_vm_ids: set[int] = {row[0] for row in db_ids_result.all()}
+    template_ids_result = await db.execute(select(Template.template_id))
+    template_ids: set[int] = {row[0] for row in template_ids_result.all()}
 
     orphaned = []
     for vm in cluster_vms:
@@ -598,16 +596,14 @@ async def list_orphaned_vms(
         tags_raw: str = vm.get("tags") or ""
         tag_list = {t.strip().lower() for t in tags_raw.split(";") if t.strip()}
         has_env_tag = bool(tag_list & {"preprod", "prod"})
-        in_db = vmid in db_vm_ids
-        if not has_env_tag or not in_db:
+        is_template = vmid in template_ids
+        if not has_env_tag and not is_template:
             orphaned.append({
                 "vmid": vmid,
                 "name": vm.get("name"),
                 "node": vm.get("node"),
                 "status": vm.get("status"),
                 "tags": tags_raw,
-                "in_db": in_db,
-                "has_env_tag": has_env_tag,
             })
 
     return orphaned

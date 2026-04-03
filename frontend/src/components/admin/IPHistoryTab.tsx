@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Loader, RefreshCw, Network, Search, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../../api'
 import { useDebounce } from '../../hooks/useDebounce'
+import { usePagination } from '../../hooks/usePagination'
 
 interface IPHistoryEntry {
   id: number
@@ -43,6 +44,9 @@ export default function IPHistoryTab() {
   const debouncedIp = useDebounce(ipFilter, 300)
   const debouncedOwner = useDebounce(ownerFilter, 300)
   const { data, loading, error, refresh } = useIPHistory(debouncedIp, debouncedOwner)
+  const { shown, hasMore, remaining, showMore, reset } = usePagination(data)
+
+  useEffect(() => { reset() }, [debouncedIp, debouncedOwner])
 
   if (error) {
     return (
@@ -119,7 +123,7 @@ export default function IPHistoryTab() {
             {!loading && data.length === 0 && (
               <tr><td colSpan={6} className="px-4 py-10 text-center text-neutral-400 dark:text-neutral-500 text-xs">Aucune entrée</td></tr>
             )}
-            {!loading && data.map(entry => (
+            {!loading && shown.map(entry => (
               <tr key={entry.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors">
                 <td className="px-3 py-2 text-xs font-mono text-neutral-500 dark:text-neutral-400">
                   {entry.vm_id !== null ? `#${entry.vm_id}` : <span className="text-neutral-300 dark:text-neutral-600">supprimée</span>}
@@ -139,6 +143,12 @@ export default function IPHistoryTab() {
           </tbody>
         </table>
       </div>
+
+      {hasMore && (
+        <button onClick={showMore} className="self-start text-xs text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 underline underline-offset-2 transition-colors">
+          Voir {remaining} de plus
+        </button>
+      )}
     </div>
   )
 }
