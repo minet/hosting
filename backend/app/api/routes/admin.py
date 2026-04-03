@@ -566,7 +566,7 @@ async def trigger_purge(
     return await run_purge(db=db, gateway=_gateway, settings=_settings)
 
 
-@router.get("/vms/orphaned")
+@router.get("/admin/vms/orphaned")
 async def list_orphaned_vms(
     _: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -613,7 +613,7 @@ async def list_orphaned_vms(
     return orphaned
 
 
-@router.get("/vms/expired")
+@router.get("/admin/vms/expired")
 async def list_expired_vms(
     _: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
@@ -691,7 +691,7 @@ async def list_expired_vms(
     return rows
 
 
-@router.get("/ip-history")
+@router.get("/admin/ip-history")
 async def list_ip_history(
     _: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
