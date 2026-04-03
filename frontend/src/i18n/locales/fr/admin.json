@@ -3,7 +3,10 @@
     "vms": "Machines virtuelles",
     "templates": "Templates",
     "dns": "DNS",
-    "proxmox": "Proxmox"
+    "proxmox": "Proxmox",
+    "orphaned": "VMs orphelines",
+    "expired": "Cotisations expirées",
+    "ip-history": "Historique IP"
   },
   "clearFilters": "Effacer les filtres",
   "noVM": "Aucune VM",

@@ -227,6 +227,12 @@ class VmCreateService:
             username=cmd.resource.username,
             ssh_public_key=cmd.resource.ssh_public_key,
         )
+        await self.cmd_repo.insert_ip_history(
+            vm_id=vm_id,
+            owner_id=ctx.user_id,
+            ipv4=None,
+            ipv6=vm_ipv6,
+        )
         await self.db.commit()
 
         logger.info("vm_create_reserved user_id=%s vm_id=%s ipv6=%s", ctx.user_id, vm_id, vm_ipv6)

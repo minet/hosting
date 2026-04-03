@@ -7,10 +7,12 @@ resource consumption, and network address assignment.
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +47,8 @@ from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.command import VmCommandService
 from app.services.vm.deps import get_vm_command_service, get_vm_query_service
+from app.db.models.vm_ip_history import VMIPHistory
+from app.db.models.vm_purge_mail import VMPurgeMail
 from app.services.vm.purge import run_purge
 from app.services.vm.query import VmQueryService
 
@@ -557,4 +561,180 @@ async def trigger_purge(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Manually trigger the expired-membership VM purge (admin only)."""
-    return await run_purge(db=db, gateway=get_proxmox_gateway(), settings=get_settings())
+    _settings = get_settings()
+    _gateway = get_proxmox_gateway() if _settings.proxmox_configured else None
+    return await run_purge(db=db, gateway=_gateway, settings=_settings)
+
+
+@router.get("/vms/orphaned")
+async def list_orphaned_vms(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return VMs present on the Proxmox cluster that are either unknown to the
+    application or lack a ``preprod`` / ``prod`` tag.
+
+    Requires Proxmox to be configured. Returns an empty list otherwise.
+    """
+    settings = get_settings()
+    if not settings.proxmox_configured:
+        return []
+
+    gateway = get_proxmox_gateway()
+    cluster_vms: list[dict] = await asyncio.to_thread(gateway.cluster_resources, type="vm")
+
+    # All VM IDs known to the application
+    result = await db.execute(select(VMIPHistory.vm_id).where(VMIPHistory.vm_id.isnot(None)).distinct())
+    # Actually query the vms table directly
+    from app.db.models.vm import VM as VMModel
+    db_ids_result = await db.execute(select(VMModel.vm_id))
+    db_vm_ids: set[int] = {row[0] for row in db_ids_result.all()}
+
+    orphaned = []
+    for vm in cluster_vms:
+        vmid = vm.get("vmid")
+        if vmid is None:
+            continue
+        tags_raw: str = vm.get("tags") or ""
+        tag_list = {t.strip().lower() for t in tags_raw.split(";") if t.strip()}
+        has_env_tag = bool(tag_list & {"preprod", "prod"})
+        in_db = vmid in db_vm_ids
+        if not has_env_tag or not in_db:
+            orphaned.append({
+                "vmid": vmid,
+                "name": vm.get("name"),
+                "node": vm.get("node"),
+                "status": vm.get("status"),
+                "tags": tags_raw,
+                "in_db": in_db,
+                "has_env_tag": has_env_tag,
+            })
+
+    return orphaned
+
+
+@router.get("/vms/expired")
+async def list_expired_vms(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Return VMs belonging to users with an expired membership, enriched with
+    purge statistics (mails sent, last warning date, deletion estimate).
+    """
+    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
+    from app.services.vm.purge import _SIX_MONTHS_S, _cotise_end_from_profile
+
+    settings = get_settings()
+    now = datetime.now(tz=UTC)
+
+    expired_members = await fetch_keycloak_group_members_async("/hosting_ended")
+    if not expired_members:
+        return []
+
+    expired_ids = {m["id"] for m in expired_members if m.get("id")}
+    query_repo = VmQueryRepo(db)
+    all_vms = await query_repo.list_vms_by_owners(expired_ids)
+
+    # Fetch purge mail stats in one query: count + last sent per vm_id
+    stats_result = await db.execute(
+        select(
+            VMPurgeMail.vm_id,
+            func.count(VMPurgeMail.id).label("total_mails"),
+            func.max(VMPurgeMail.sent_at).label("last_sent_at"),
+        )
+        .where(VMPurgeMail.mail_type == "warning")
+        .group_by(VMPurgeMail.vm_id)
+    )
+    mail_stats: dict[int, dict] = {
+        row.vm_id: {"total_mails": row.total_mails, "last_sent_at": row.last_sent_at}
+        for row in stats_result.all()
+    }
+
+    rows = []
+    for vm in all_vms:
+        owner_id = vm.get("owner_id")
+        if not owner_id:
+            continue
+
+        member = next((m for m in expired_members if m.get("id") == owner_id), None)
+        if not member:
+            continue
+
+        username = member.get("username")
+        profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
+        cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
+
+        days_expired: int | None = None
+        days_until_deletion: int | None = None
+        if cotise_end_ms is not None:
+            cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=UTC)
+            elapsed_s = (now - cotise_end).total_seconds()
+            if elapsed_s > 0:
+                days_expired = int(elapsed_s / 86400)
+                days_until_deletion = max(0, int((_SIX_MONTHS_S - elapsed_s) / 86400))
+
+        vm_id = vm["vm_id"]
+        stats = mail_stats.get(vm_id, {"total_mails": 0, "last_sent_at": None})
+
+        rows.append({
+            "vm_id": vm_id,
+            "vm_name": vm["name"],
+            "owner_id": owner_id,
+            "owner_username": member.get("username"),
+            "owner_email": member.get("email"),
+            "days_expired": days_expired,
+            "days_until_deletion": days_until_deletion,
+            "warnings_sent": stats["total_mails"],
+            "last_warning_at": stats["last_sent_at"].isoformat() if stats["last_sent_at"] else None,
+        })
+
+    return rows
+
+
+@router.get("/ip-history")
+async def list_ip_history(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    owner_id: str | None = Query(default=None),
+    ip: str | None = Query(default=None),
+) -> list[dict]:
+    """Return IP assignment history. Optionally filter by ``owner_id`` or ``ip``
+    (matched against both ipv4 and ipv6).
+    """
+    from sqlalchemy import cast, or_
+    from sqlalchemy.dialects.postgresql import INET
+    from sqlalchemy import Text, func as sqlfunc
+
+    stmt = select(
+        VMIPHistory.id,
+        VMIPHistory.vm_id,
+        VMIPHistory.owner_id,
+        sqlfunc.host(VMIPHistory.ipv4).label("ipv4"),
+        sqlfunc.host(VMIPHistory.ipv6).label("ipv6"),
+        VMIPHistory.assigned_at,
+        VMIPHistory.released_at,
+    ).order_by(VMIPHistory.assigned_at.desc())
+
+    if owner_id:
+        stmt = stmt.where(VMIPHistory.owner_id == owner_id)
+    if ip:
+        stmt = stmt.where(
+            or_(
+                cast(VMIPHistory.ipv4, Text).contains(ip),
+                cast(VMIPHistory.ipv6, Text).contains(ip),
+            )
+        )
+
+    rows = (await db.execute(stmt)).mappings().all()
+    return [
+        {
+            "id": r["id"],
+            "vm_id": r["vm_id"],
+            "owner_id": r["owner_id"],
+            "ipv4": r["ipv4"],
+            "ipv6": r["ipv6"],
+            "assigned_at": r["assigned_at"].isoformat() if r["assigned_at"] else None,
+            "released_at": r["released_at"].isoformat() if r["released_at"] else None,
+        }
+        for r in rows
+    ]

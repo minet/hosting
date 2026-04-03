@@ -13,9 +13,12 @@ import VMTableRow from '../components/admin/VMTableRow'
 import Th, { type SortKey, type SortDir, type ColId, DEFAULT_WIDTHS } from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
 import ProxmoxTab from '../components/admin/ProxmoxTab'
+import OrphanedVMsTab from '../components/admin/OrphanedVMsTab'
+import ExpiredVMsTab from '../components/admin/ExpiredVMsTab'
+import IPHistoryTab from '../components/admin/IPHistoryTab'
 
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
-type Tab = 'vms' | 'templates' | 'proxmox'
+type Tab = 'vms' | 'templates' | 'proxmox' | 'orphaned' | 'expired' | 'ip-history'
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
   const s = statuses.get(vmId)?.status
@@ -162,7 +165,7 @@ export default function AdminPage() {
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
     <div className="flex items-center gap-2">
-      {(['vms', 'templates', 'proxmox'] as Tab[]).map(tb => (
+      {(['vms', 'templates', 'proxmox', 'orphaned', 'expired', 'ip-history'] as Tab[]).map(tb => (
         <button key={tb} onClick={() => setTab(tb)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === tb ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
           {t(`tabs.${tb}`)}
@@ -192,6 +195,33 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <ProxmoxTab />
+      </div>
+    )
+  }
+
+  if (tab === 'orphaned') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
+        <OrphanedVMsTab />
+      </div>
+    )
+  }
+
+  if (tab === 'expired') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
+        <ExpiredVMsTab />
+      </div>
+    )
+  }
+
+  if (tab === 'ip-history') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
+        <IPHistoryTab />
       </div>
     )
   }

@@ -43,11 +43,9 @@ async def _purge_loop() -> None:
     while True:
         try:
             settings = get_settings()
-            if not settings.proxmox_configured:
-                logger.debug("purge_loop: Proxmox not configured, skipping")
-            else:
-                async with get_session_factory()() as session:
-                    await run_purge(db=session, gateway=get_proxmox_gateway(), settings=settings)
+            gateway = get_proxmox_gateway() if settings.proxmox_configured else None
+            async with get_session_factory()() as session:
+                await run_purge(db=session, gateway=gateway, settings=settings)
         except asyncio.CancelledError:
             raise
         except Exception:

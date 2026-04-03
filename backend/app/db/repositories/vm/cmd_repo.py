@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from datetime import UTC, datetime
 
 from app.db.models.quota_lock import QuotaLock
 from app.db.models.resource import Resource
 from app.db.models.template import Template
 from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
+from app.db.models.vm_ip_history import VMIPHistory
 
 
 class VmCmdRepo:
@@ -310,6 +313,37 @@ class VmCmdRepo:
         await self.db.delete(tpl)
         await self.db.flush()
         return True
+
+    async def insert_ip_history(self, *, vm_id: int, owner_id: str, ipv4: str | None, ipv6: str | None) -> None:
+        """Create a vm_ip_history row when a VM is provisioned.
+
+        :param vm_id: The VM identifier.
+        :param owner_id: Keycloak user UUID of the VM owner.
+        :param ipv4: IPv4 address assigned to the VM, or ``None``.
+        :param ipv6: IPv6 address assigned to the VM, or ``None``.
+        """
+        self.db.add(VMIPHistory(vm_id=vm_id, owner_id=owner_id, ipv4=ipv4, ipv6=ipv6))
+        await self.db.flush()
+
+    async def release_ip_history(self, vm_id: int) -> None:
+        """Set released_at on the active vm_ip_history row for this VM.
+
+        Called just before deleting a VM so the history record captures the
+        release timestamp. Also snapshots the current ipv4 from the VM row.
+
+        :param vm_id: The VM identifier being deleted.
+        """
+        vm = await self.db.get(VM, vm_id)
+        result = await self.db.scalars(
+            select(VMIPHistory).where(VMIPHistory.vm_id == vm_id, VMIPHistory.released_at.is_(None))
+        )
+        entry = result.first()
+        if entry is not None:
+            entry.released_at = datetime.now(tz=UTC)
+            if vm is not None:
+                entry.ipv4 = vm.ipv4
+            self.db.add(entry)
+            await self.db.flush()
 
     async def delete_vm_with_related(self, vm_id: int) -> bool:
         """Delete a VM and all its related resources and access entries.

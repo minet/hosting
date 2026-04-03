@@ -3,7 +3,10 @@
     "vms": "虚拟机",
     "templates": "模板",
     "dns": "DNS",
-    "proxmox": "Proxmox"
+    "proxmox": "Proxmox",
+    "orphaned": "孤立虚拟机",
+    "expired": "过期会员",
+    "ip-history": "IP历史"
   },
   "clearFilters": "清除筛选",
   "noVM": "无虚拟机",

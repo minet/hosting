@@ -90,6 +90,23 @@ async def notify_new_request(
     await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
 
 
+async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int) -> None:
+    """Notify Discord that a VM has been deleted by the purge (expired membership)."""
+    tag = _env_tag()
+    embed = {
+        "title": f"[{tag}] VM supprimée — cotisation expirée",
+        "description": f"La VM **{vm_name}** (`#{vm_id}`) a été supprimée automatiquement après {days_expired} jours de cotisation expirée.",
+        "color": _env_color(0xE74C3C),
+        "fields": [
+            {"name": "VM", "value": f"`{vm_name}` (#{vm_id})", "inline": True},
+            {"name": "Expiré depuis", "value": f"{days_expired} jours", "inline": True},
+        ],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
+    }
+    await _send_webhook(content=f"<@&{ROLE_ERROR}>", embeds=[embed])
+
+
 async def notify_ipv4_exhausted() -> None:
     """Notify Discord that the IPv4 pool is exhausted."""
     tag = _env_tag()
