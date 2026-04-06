@@ -103,6 +103,7 @@ class DnsService:
             zone = resp.json()
             if zone.get("soa_edit_api") != "INCREASE":
                 await client.put(self._zone_url(), json={"kind": "Native", "soa_edit_api": "INCREASE"})
+            await self._ensure_cds(client)
             return
         await client.post(
             f"{self._api_url}/api/v1/servers/localhost/zones",
@@ -117,6 +118,18 @@ class DnsService:
         await client.patch(
             self._zone_url(),
             json={"rrsets": [_rrset(f"{self._zone}.", "SOA", self._soa_record(), ttl=3600)]},
+        )
+        await self._ensure_cds(client)
+
+    async def _ensure_cds(self, client: httpx.AsyncClient) -> None:
+        """Ensure PUBLISH-CDS metadata is set so BIND can auto-sync DS records."""
+        meta_url = f"{self._zone_url()}/metadata/PUBLISH-CDS"
+        resp = await client.get(meta_url)
+        if resp.status_code == 200 and resp.json().get("metadata"):
+            return
+        await client.post(
+            f"{self._zone_url()}/metadata",
+            json={"kind": "PUBLISH-CDS", "metadata": ["2"]},
         )
 
     async def create_records(
