@@ -8,7 +8,7 @@ const inputCls = "text-sm border border-neutral-200 dark:border-neutral-600 roun
 
 function CreateTemplateModal({ onClose, onCreate }: {
   onClose: () => void
-  onCreate: (data: { template_id: number; name: string; version: string | null; min_cpu_cores: number; min_ram_gb: number; min_disk_gb: number; comment: string | null }) => Promise<void>
+  onCreate: (data: { template_id: number; name: string; version: string | null; min_cpu_cores: number; min_ram_gb: number; min_disk_gb: number; comment: string | null }) => Promise<unknown>
 }) {
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
