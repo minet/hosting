@@ -104,7 +104,7 @@ async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
     }
-    await _send_webhook(content=f"<@&{ROLE_ERROR}>", embeds=[embed])
+    await _send_webhook(content="", embeds=[embed])
 
 
 async def notify_ipv4_exhausted() -> None:
