@@ -414,6 +414,7 @@ class VmCreateService:
             used = await self.query_repo.list_used_ipv4()
             ipv4 = allocate_next_vm_ipv4(used_ipv4=used)
             await self.cmd_repo.update_vm_ipv4(vm_id, ipv4)
+            await self.cmd_repo.update_ip_history_ipv4(vm_id, ipv4)
             await self.db.commit()
             logger.info("vm_create_ipv4_assigned vm_id=%s ipv4=%s", vm_id, ipv4)
             # Check if pool is now exhausted

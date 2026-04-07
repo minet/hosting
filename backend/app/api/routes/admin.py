@@ -630,6 +630,163 @@ async def delete_orphaned_vm(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.get("/admin/users/eligible")
+async def list_eligible_users(
+    _: AuthCtx = Depends(require_admin),
+) -> list[dict]:
+    """Return Keycloak users who have signed the hosting charter AND have an
+    active cotisation (i.e. charter-signed minus hosting_ended).
+    """
+    charte_members, ended_members = await asyncio.gather(
+        fetch_keycloak_group_members_async("/hosting-charte"),
+        fetch_keycloak_group_members_async("/hosting_ended"),
+    )
+    ended_ids = {m.get("id") for m in ended_members if m.get("id")}
+    return [m for m in charte_members if m.get("id") and m["id"] not in ended_ids]
+
+
+@router.get("/admin/vms/orphaned/{vmid}/config")
+async def get_orphaned_vm_config(
+    vmid: int,
+    _: AuthCtx = Depends(require_admin),
+) -> dict:
+    """Return the Proxmox config of an orphaned VM (resources, IPs, MAC)."""
+    import re
+    settings = get_settings()
+    if not settings.proxmox_configured:
+        raise HTTPException(status_code=503, detail="Proxmox not configured")
+    gateway = get_proxmox_gateway()
+    try:
+        config = await asyncio.to_thread(gateway.get_vm_full_config, vm_id=vmid)
+    except ProxmoxError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    # Extract resources
+    from app.services.proxmox.utils import resolve_vm_mac, root_disk_key, disk_size_gb
+    cpu_cores = config.get("cores", 1)
+    ram_mb = config.get("memory", 512)
+    disk_key = root_disk_key(config)
+    disk_gb_val = disk_size_gb(config.get(disk_key, "")) if disk_key else None
+    mac = resolve_vm_mac(config)
+
+    # Parse ipconfig0 for IPs
+    ipv4 = None
+    ipv6 = None
+    ipconfig0 = config.get("ipconfig0", "")
+    if ipconfig0:
+        m4 = re.search(r"ip=(\d+\.\d+\.\d+\.\d+)", ipconfig0)
+        if m4:
+            ipv4 = m4.group(1)
+        m6 = re.search(r"ip6=([0-9a-fA-F:]+)", ipconfig0)
+        if m6:
+            ipv6 = m6.group(1)
+
+    return {
+        "vmid": vmid,
+        "cpu_cores": cpu_cores,
+        "ram_mb": ram_mb,
+        "disk_gb": disk_gb_val,
+        "ipv4": ipv4,
+        "ipv6": ipv6,
+        "mac": mac,
+    }
+
+
+@router.post("/admin/vms/orphaned/{vmid}/adopt", status_code=201)
+async def adopt_orphaned_vm(
+    vmid: int,
+    body: dict,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Adopt an orphaned VM: create DB records and assign it to a user.
+
+    Body must include ``user_id`` and ``template_id``.
+    Resources and IPs are read from the Proxmox config.
+    """
+    import re
+    user_id = body.get("user_id")
+    template_id = body.get("template_id")
+    if not user_id or template_id is None:
+        raise HTTPException(status_code=422, detail="user_id and template_id are required")
+
+    settings = get_settings()
+    if not settings.proxmox_configured:
+        raise HTTPException(status_code=503, detail="Proxmox not configured")
+
+    # Verify the VM is genuinely orphaned (not already in DB)
+    from app.db.models.vm import VM as VMModel
+    existing = await db.get(VMModel, vmid)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="VM already exists in database")
+
+    # Read config from Proxmox
+    gateway = get_proxmox_gateway()
+    try:
+        config = await asyncio.to_thread(gateway.get_vm_full_config, vm_id=vmid)
+    except ProxmoxError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    from app.services.proxmox.utils import resolve_vm_mac, root_disk_key, disk_size_gb
+    cpu_cores = config.get("cores", 1)
+    ram_mb = config.get("memory", 512)
+    disk_key = root_disk_key(config)
+    disk_gb_val = disk_size_gb(config.get(disk_key, "")) if disk_key else 10
+
+    mac = resolve_vm_mac(config)
+    ipv4 = None
+    ipv6 = None
+    ipconfig0 = config.get("ipconfig0", "")
+    if ipconfig0:
+        m4 = re.search(r"ip=(\d+\.\d+\.\d+\.\d+)", ipconfig0)
+        if m4:
+            ipv4 = m4.group(1)
+        m6 = re.search(r"ip6=([0-9a-fA-F:]+)", ipconfig0)
+        if m6:
+            ipv6 = m6.group(1)
+
+    name = config.get("name") or f"orphan-{vmid}"
+
+    # Create DB records
+    cmd_repo = VmCmdRepo(db)
+    try:
+        cmd_repo.db.add(
+            VMModel(
+                vm_id=vmid,
+                name=name,
+                cpu_cores=cpu_cores,
+                disk_gb=disk_gb_val or 10,
+                ram_mb=ram_mb,
+                template_id=template_id,
+                ipv4=ipv4,
+                ipv6=ipv6,
+                mac=mac,
+            )
+        )
+        from app.db.models.vm_access import VMAccess
+        from app.db.models.resource import Resource
+        cmd_repo.db.add(VMAccess(vm_id=vmid, user_id=user_id, role_owner=True))
+        cmd_repo.db.add(Resource(vm_id=vmid, username="unknown", ssh_public_key=""))
+        await cmd_repo.insert_ip_history(vm_id=vmid, owner_id=user_id, ipv4=ipv4, ipv6=ipv6)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Conflict: VM or IP already exists") from exc
+
+    return {
+        "vm_id": vmid,
+        "name": name,
+        "owner_id": user_id,
+        "cpu_cores": cpu_cores,
+        "ram_mb": ram_mb,
+        "disk_gb": disk_gb_val,
+        "ipv4": ipv4,
+        "ipv6": ipv6,
+        "mac": mac,
+        "template_id": template_id,
+    }
+
+
 @router.get("/admin/vms/expired")
 async def list_expired_vms(
     _: AuthCtx = Depends(require_admin),

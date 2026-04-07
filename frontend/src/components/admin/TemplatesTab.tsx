@@ -6,8 +6,12 @@ import type { AdminTemplate, AdminTemplateUpdatePayload } from '../../hooks/useA
 
 const inputCls = "text-sm border border-neutral-200 dark:border-neutral-600 rounded-md px-2.5 py-1.5 focus:outline-none focus:border-blue-400 bg-transparent text-neutral-900 dark:text-neutral-100"
 
-export default function TemplatesTab() {
-  const { templates, loading, create, update, remove, toggleActive } = useAdminTemplates()
+function CreateTemplateModal({ onClose, onCreate }: {
+  onClose: () => void
+  onCreate: (data: { template_id: number; name: string; version: string | null; min_cpu_cores: number; min_ram_gb: number; min_disk_gb: number; comment: string | null }) => Promise<void>
+}) {
+  const { t } = useTranslation('admin')
+  const tc = useTranslation().t
   const [newId, setNewId] = useState('')
   const [newName, setNewName] = useState('')
   const [newVersion, setNewVersion] = useState('')
@@ -17,19 +21,15 @@ export default function TemplatesTab() {
   const [newComment, setNewComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editFields, setEditFields] = useState<AdminTemplateUpdatePayload>({})
-  const { t } = useTranslation('admin')
-  const tc = useTranslation().t
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     const id = parseInt(newId, 10)
     if (!id || id < 1001 || id > 1999 || !newName.trim()) return
     setSubmitting(true)
     try {
-      await create({
+      await onCreate({
         template_id: id,
         name: newName.trim(),
         version: newVersion.trim() || null,
@@ -38,19 +38,117 @@ export default function TemplatesTab() {
         min_disk_gb: parseInt(newMinDisk, 10) || 10,
         comment: newComment.trim() || null,
       })
-      setNewId('')
-      setNewName('')
-      setNewVersion('')
-      setNewMinCpu('1')
-      setNewMinRam('2')
-      setNewMinDisk('10')
-      setNewComment('')
+      onClose()
     } catch (err: any) {
       setError(err.message ?? tc('error'))
     } finally {
       setSubmitting(false)
     }
   }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-2xl p-6 flex flex-col gap-5 max-w-md w-full mx-4" onClick={e => e.stopPropagation()}>
+        <div>
+          <h2 className="text-base font-bold text-neutral-800 dark:text-neutral-200">{t('templates.add')}</h2>
+          <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+            Enregistrer un template Proxmox existant dans la base.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.proxmoxId')}</label>
+              <input
+                type="number" min={1001} max={1999} value={newId} onChange={e => setNewId(e.target.value)}
+                placeholder="1001–1999"
+                className={inputCls}
+                required
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.name')}</label>
+              <input
+                type="text" value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="ex: Debian 12"
+                className={inputCls}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.version')}</label>
+            <input
+              type="text" value={newVersion} onChange={e => setNewVersion(e.target.value)}
+              placeholder="ex: 12"
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minCpu')}</label>
+              <input
+                type="number" min={1} value={newMinCpu} onChange={e => setNewMinCpu(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minRam')}</label>
+              <input
+                type="number" min={1} value={newMinRam} onChange={e => setNewMinRam(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minDisk')}</label>
+              <input
+                type="number" min={1} value={newMinDisk} onChange={e => setNewMinDisk(e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.comment')}</label>
+            <input
+              type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
+              placeholder={t('templates.commentPlaceholder')}
+              className={inputCls}
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">{error}</p>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} disabled={submitting}
+              className="flex-1 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 text-sm font-semibold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-40">
+              Annuler
+            </button>
+            <button type="submit" disabled={submitting}
+              className="flex-1 py-2 rounded-lg bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer flex items-center justify-center gap-2">
+              {submitting ? <Loader size={14} className="animate-spin" /> : <Plus size={14} />}
+              {t('templates.add')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export default function TemplatesTab() {
+  const { templates, loading, create, update, remove, toggleActive } = useAdminTemplates()
+  const [showCreate, setShowCreate] = useState(false)
+  const [error, setError] = useState('')
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editFields, setEditFields] = useState<AdminTemplateUpdatePayload>({})
+  const { t } = useTranslation('admin')
+  const tc = useTranslation().t
 
   async function handleDelete(templateId: number) {
     setError('')
@@ -106,77 +204,27 @@ export default function TemplatesTab() {
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      {showCreate && (
+        <CreateTemplateModal
+          onClose={() => setShowCreate(false)}
+          onCreate={create}
+        />
+      )}
+
       <div className="flex items-center justify-between shrink-0">
         <h1 className="text-base font-semibold text-neutral-800 dark:text-neutral-200">Templates</h1>
-        <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
-          {loading ? tc('loading') : t('templates.count', { count: templates.length })}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
+            {loading ? tc('loading') : t('templates.count', { count: templates.length })}
+          </span>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <Plus size={12} /> {t('templates.add')}
+          </button>
+        </div>
       </div>
-
-      {/* Add form */}
-      <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-3 shrink-0">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.proxmoxId')}</label>
-          <input
-            type="number" min={1001} max={1999} value={newId} onChange={e => setNewId(e.target.value)}
-            placeholder="1001–1999"
-            className={`w-28 ${inputCls}`}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1 flex-1 min-w-[120px]">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.name')}</label>
-          <input
-            type="text" value={newName} onChange={e => setNewName(e.target.value)}
-            placeholder="ex: Debian 12"
-            className={inputCls}
-            required
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.version')}</label>
-          <input
-            type="text" value={newVersion} onChange={e => setNewVersion(e.target.value)}
-            placeholder="ex: 12"
-            className={`w-20 ${inputCls}`}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minCpu')}</label>
-          <input
-            type="number" min={1} value={newMinCpu} onChange={e => setNewMinCpu(e.target.value)}
-            className={`w-16 ${inputCls}`}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minRam')}</label>
-          <input
-            type="number" min={1} value={newMinRam} onChange={e => setNewMinRam(e.target.value)}
-            className={`w-16 ${inputCls}`}
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.minDisk')}</label>
-          <input
-            type="number" min={1} value={newMinDisk} onChange={e => setNewMinDisk(e.target.value)}
-            className={`w-16 ${inputCls}`}
-          />
-        </div>
-        <div className="flex flex-col gap-1 flex-1 min-w-[120px]">
-          <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">{t('templates.comment')}</label>
-          <input
-            type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
-            placeholder={t('templates.commentPlaceholder')}
-            className={inputCls}
-          />
-        </div>
-        <button
-          type="submit" disabled={submitting}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
-        >
-          <Plus size={14} /> {t('templates.add')}
-        </button>
-      </form>
 
       {error && (
         <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">{error}</p>

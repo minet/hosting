@@ -18,8 +18,6 @@ from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
 from app.services.discord import notify_new_request
-from app.services.proxmox.allocation import allocate_next_vm_ipv4
-from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxUnavailableError
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
 from app.db.repositories.vm import VmQueryRepo
@@ -224,15 +222,6 @@ async def create_request(
         vm = await query_repo.get_vm(vm_id)
         if vm and vm.get("ipv4") is not None:
             raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="This VM already has an IPv4 address")
-        # Check if there are IPv4 addresses left before accepting the request
-        try:
-            used_ipv4 = await query_repo.list_used_ipv4()
-            allocate_next_vm_ipv4(used_ipv4=used_ipv4)
-        except (ProxmoxUnavailableError, ProxmoxConfigError):
-            raise HTTPException(
-                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Plus d'adresse IPv4 disponible dans le pool",
-            )
     row = await repo.create(vm_id=vm_id, user_id=ctx.user_id, type=body.type, dns_label=body.dns_label)
     await db.commit()
     await notify_new_request(

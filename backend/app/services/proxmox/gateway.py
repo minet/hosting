@@ -450,6 +450,16 @@ class ProxmoxGateway:
         """
         return self._guard(lambda: self._status(vm_id=vm_id))
 
+    def get_vm_full_config(self, *, vm_id: int) -> dict[str, Any]:
+        """Return the full Proxmox configuration dict for a VM.
+
+        :param vm_id: VMID of the target VM.
+        :returns: VM configuration dictionary.
+        :rtype: dict[str, Any]
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._get_config(node=node_for_vm(client=self._client, vm_id=vm_id), vm_id=vm_id))
+
     def get_vm_mac(self, *, vm_id: int) -> str | None:
         """Return the MAC address of a VM's primary network interface.
 

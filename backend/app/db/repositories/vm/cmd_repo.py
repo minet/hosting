@@ -325,6 +325,21 @@ class VmCmdRepo:
         self.db.add(VMIPHistory(vm_id=vm_id, owner_id=owner_id, ipv4=ipv4, ipv6=ipv6))
         await self.db.flush()
 
+    async def update_ip_history_ipv4(self, vm_id: int, ipv4: str) -> None:
+        """Update the active vm_ip_history row with the newly assigned IPv4.
+
+        :param vm_id: The VM identifier.
+        :param ipv4: The IPv4 address that was just assigned.
+        """
+        result = await self.db.scalars(
+            select(VMIPHistory).where(VMIPHistory.vm_id == vm_id, VMIPHistory.released_at.is_(None))
+        )
+        entry = result.first()
+        if entry is not None:
+            entry.ipv4 = ipv4
+            self.db.add(entry)
+            await self.db.flush()
+
     async def release_ip_history(self, vm_id: int) -> None:
         """Set released_at on the active vm_ip_history row for this VM.
 

@@ -405,6 +405,7 @@ class VmCommandService:
                 detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
             ) from exc
 
+        await self._cmd_repo.update_ip_history_ipv4(vm_id, ipv4)
         await self._cmd_repo.add_pending_change(vm_id, "ipv4")
 
         # Check if the pool is now exhausted after this allocation
