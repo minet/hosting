@@ -71,6 +71,9 @@ services:
       AUTH_ADMIN_GROUPS: ${AUTH_ADMIN_GROUPS:-admin}
       AUTH_USER_GROUPS: ${AUTH_USER_GROUPS:-cluster-dev}
       AUTH_COTISE_END_CLAIM: ${AUTH_COTISE_END_CLAIM:-departureDate}
+      # Security — set to real proxy IP in pre-prod/prod; SESSION_COOKIE_SECURE=true required when exposed over HTTPS
+      TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       # Proxmox — defaults to luna.priv.minet.net, TOKEN_ID/SECRET in backend/.env
       PROXMOX_BASE_URL: ${PROXMOX_BASE_URL:-https://192.168.103.59:8006}
       PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID}

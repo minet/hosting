@@ -164,7 +164,7 @@ export default function AdminPage() {
 
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 overflow-x-auto shrink-0 min-w-0">
       {(['vms', 'templates', 'proxmox', 'orphaned', 'expired', 'ip-history'] as Tab[]).map(tb => (
         <button key={tb} onClick={() => setTab(tb)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === tb ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>

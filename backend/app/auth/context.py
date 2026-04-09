@@ -159,6 +159,33 @@ def get_auth_ctx(
     return build_auth_ctx(payload, settings)
 
 
+def passes_preprod_gates(ctx: AuthCtx, settings: Settings) -> bool:
+    """Return whether *ctx* passes the pre-prod identity gates.
+
+    In production this always returns ``True``.  In pre-prod the user must
+    have an LDAP account (``ldapLogin`` claim) **and** belong to at least one
+    group listed in ``AUTH_USER_GROUPS`` (when that setting is non-empty).
+    Admins bypass the LDAP check but still need group membership.
+
+    :param ctx: Authentication context to evaluate.
+    :param settings: Application settings providing the gate configuration.
+    :returns: ``True`` when the user is allowed through; ``False`` otherwise.
+    :rtype: bool
+    """
+    if not settings.is_preprod:
+        return True
+    attrs = ctx.payload.get(settings.auth_attributes_namespace, {})
+    ldap_login = _claim_value(ctx.payload, "ldapLogin") or (
+        _claim_value(attrs, "ldapLogin") if isinstance(attrs, dict) else None
+    )
+    if not ldap_login and not ctx.is_admin:
+        return False
+    required = csv_values(settings.auth_user_groups)
+    if not required:
+        return True
+    return bool(ctx.groups.intersection(required))
+
+
 def require_user(
     ctx: AuthCtx = Depends(get_auth_ctx),
     settings: Settings = Depends(get_settings),
@@ -176,21 +203,9 @@ def require_user(
     :raises ~fastapi.HTTPException: ``403`` if the user does not belong to
         any of the required groups (pre-prod only).
     """
-    if not settings.is_preprod:
-        return ctx
-    # In pre-prod, only users with an LDAP account are allowed.
-    attrs = ctx.payload.get(settings.auth_attributes_namespace, {})
-    ldap_login = _claim_value(ctx.payload, "ldapLogin") or (
-        _claim_value(attrs, "ldapLogin") if isinstance(attrs, dict) else None
-    )
-    if not ldap_login and not ctx.is_admin:
+    if not passes_preprod_gates(ctx, settings):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
-    required = csv_values(settings.auth_user_groups)
-    if not required:
-        return ctx
-    if ctx.groups.intersection(required):
-        return ctx
-    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return ctx
 
 
 def require_admin(ctx: AuthCtx = Depends(get_auth_ctx)) -> AuthCtx:

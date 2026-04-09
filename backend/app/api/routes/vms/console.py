@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, WebSocket
 from fastapi.websockets import WebSocketState
 
 from app.auth import AuthCtx, require_user
-from app.auth.context import build_auth_ctx
+from app.auth.context import build_auth_ctx, passes_preprod_gates
 from app.core.config import get_settings
 from app.core.security.token import get_token_service
 from app.core.sessions import get_access_token
@@ -238,10 +238,13 @@ async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
         return None
     try:
         payload = get_token_service(settings=settings).decode(access_token)
-        return build_auth_ctx(payload, settings)
+        ctx = build_auth_ctx(payload, settings)
     except (ValueError, KeyError, OSError):
         logger.warning("terminal_ws _ws_auth failed", exc_info=True)
         return None
+    if not passes_preprod_gates(ctx, settings):
+        return None
+    return ctx
 
 
 # ---------------------------------------------------------------------------

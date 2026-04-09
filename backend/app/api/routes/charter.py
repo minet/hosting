@@ -24,6 +24,7 @@ _jinja_env = Environment(loader=FileSystemLoader(str(_TEMPLATES_DIR)), autoescap
 
 from app.auth import AuthCtx, require_user
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import RateLimiter
 from app.core.sessions import get_refresh_token, set_token_cookies
 from app.services.auth.helpers import refresh_access_token
 from app.services.auth.keycloak_admin import (
@@ -131,7 +132,7 @@ def _refresh_session_token(request: Request, response: Response, settings: Setti
         logger.warning("Could not refresh token after charter signature — user may need to re-login")
 
 
-@router.post("/sign")
+@router.post("/sign", dependencies=[Depends(RateLimiter(max_calls=5, window_seconds=60))])
 async def sign_charter(
     request: Request,
     response: Response,

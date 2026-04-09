@@ -14,6 +14,54 @@ from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxUnavailableEr
 from app.services.proxmox.utils import used_vm_ids
 
 
+def _resolve_ipv4_gateway(raw: str, network: IPv4Network) -> IPv4Address:
+    """Resolve a gateway value that is either a full IPv4 address or a host offset.
+
+    :param raw: A full IPv4 address string (e.g. ``"10.0.0.1"``) or an integer
+        offset string (e.g. ``"1"``).
+    :param network: The subnet the gateway must belong to.
+    :returns: The resolved gateway :class:`~ipaddress.IPv4Address`.
+    :rtype: IPv4Address
+    :raises ProxmoxConfigError: If the value is invalid or outside the subnet.
+    """
+    try:
+        return IPv4Address(raw)
+    except ValueError:
+        pass
+    try:
+        offset = max(int(raw), 1)
+    except ValueError as exc:
+        raise ProxmoxConfigError(f"Invalid gateway value: {raw!r}") from exc
+    host_space = (1 << (32 - network.prefixlen)) - 1
+    if offset > host_space:
+        raise ProxmoxConfigError(f"Gateway offset {offset} exceeds subnet {network}")
+    return IPv4Address(network.network_address + offset)
+
+
+def _resolve_ipv6_gateway(raw: str, network: IPv6Network) -> IPv6Address:
+    """Resolve a gateway value that is either a full IPv6 address or a host offset.
+
+    :param raw: A full IPv6 address string (e.g. ``"2001:db8::1"``) or an integer
+        offset string (e.g. ``"1"``).
+    :param network: The subnet the gateway must belong to.
+    :returns: The resolved gateway :class:`~ipaddress.IPv6Address`.
+    :rtype: IPv6Address
+    :raises ProxmoxConfigError: If the value is invalid or outside the subnet.
+    """
+    try:
+        return IPv6Address(raw)
+    except ValueError:
+        pass
+    try:
+        offset = max(int(raw), 1)
+    except ValueError as exc:
+        raise ProxmoxConfigError(f"Invalid gateway value: {raw!r}") from exc
+    host_space = (1 << (128 - network.prefixlen)) - 1
+    if offset > host_space:
+        raise ProxmoxConfigError(f"Gateway offset {offset} exceeds subnet {network}")
+    return IPv6Address(network.network_address + offset)
+
+
 def vm_id_min() -> int:
     """Return the configured minimum VM ID.
 
@@ -108,12 +156,7 @@ def ipv6_network_settings() -> tuple[IPv6Network, IPv6Address, int]:
     except ValueError as exc:
         raise ProxmoxConfigError("Invalid VM_IPV6_SUBNET configuration") from exc
 
-    host_space = (1 << (128 - network.prefixlen)) - 1
-    gateway_host = max(int(settings.vm_ipv6_gateway_host), 1)
-    if gateway_host > host_space:
-        raise ProxmoxConfigError("Invalid VM_IPV6_GATEWAY_HOST for subnet")
-
-    gateway_ip = network.network_address + gateway_host
+    gateway_ip = _resolve_ipv6_gateway(settings.vm_ipv6_gateway_host, network)
     return network, gateway_ip, int(network.prefixlen)
 
 
@@ -194,13 +237,7 @@ def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
         except ValueError as exc:
             raise ProxmoxConfigError(f"Invalid VM_IPV4_SUBNETS entry: {raw_subnet}") from exc
 
-        host_space = (1 << (32 - network.prefixlen)) - 1
-        try:
-            gateway_host = max(int(raw_gateways[i]), 1)
-        except ValueError as exc:
-            raise ProxmoxConfigError(f"Invalid VM_IPV4_GATEWAY_HOSTS entry: {raw_gateways[i]}") from exc
-        if gateway_host > host_space:
-            raise ProxmoxConfigError(f"Invalid gateway host {gateway_host} for subnet {raw_subnet}")
+        gateway_ip = _resolve_ipv4_gateway(raw_gateways[i], network)
 
         # Use configured netmask if provided, otherwise fall back to subnet prefix
         if raw_netmasks[i]:
@@ -213,8 +250,7 @@ def ipv4_network_settings() -> list[tuple[IPv4Network, IPv4Address, int]]:
         else:
             netmask = int(network.prefixlen)
 
-        gateway_ip = network.network_address + gateway_host
-        results.append((network, IPv4Address(gateway_ip), netmask))
+        results.append((network, gateway_ip, netmask))
 
     return results
 

@@ -28,7 +28,7 @@ from app.services.auth.helpers import refresh_access_token
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.get("/login")
+@router.get("/login", dependencies=[Depends(RateLimiter(max_calls=20, window_seconds=60))])
 def auth_login(
     request: FastAPIRequest,
     frontend_redirect: str | None = Query(default=None),

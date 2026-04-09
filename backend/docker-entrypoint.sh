@@ -36,4 +36,4 @@ else:
 alembic upgrade head
 # Single worker required: _active_terminals in console.py is process-local.
 # Do NOT add --workers >1 without switching to a shared store (Redis).
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*' "$@"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="${TRUSTED_PROXY_IPS:-127.0.0.1}" "$@"
