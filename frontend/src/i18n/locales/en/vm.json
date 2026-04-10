@@ -5,7 +5,7 @@
   "configureNewVM": "Configure your new virtual machine",
   "newVM": "New VM",
   "welcome": {
-    "title": "Welcome {{name}} to Hosting!",
+    "title": "Hello {{name}}, welcome to Hosting!",
     "description": "This service is free if you already have a MiNET account with an active subscription. It allows you to create virtual machines and experiment with them.",
     "limits": "You have a maximum of <cores>{{cpu}} cores</cores>, <ram>{{ram}} GB of RAM</ram> and <disk>{{disk}} GB of disk</disk> to distribute across your machines.",
     "subscriptionExpires": "Your subscription expires in",
