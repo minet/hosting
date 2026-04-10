@@ -164,7 +164,7 @@ export default function AdminPage() {
 
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
-    <div className="flex items-center gap-2 overflow-x-auto shrink-0 min-w-0">
+    <div className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0">
       {(['vms', 'templates', 'proxmox', 'orphaned', 'expired', 'ip-history'] as Tab[]).map(tb => (
         <button key={tb} onClick={() => setTab(tb)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === tb ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
@@ -228,19 +228,17 @@ export default function AdminPage() {
 
   return (
     <div className="flex flex-col gap-3 h-full">
-      <div className="flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2 border-b border-neutral-200 dark:border-neutral-700 pb-2 w-full justify-between">
-          {tabBar}
-          <div className="flex items-center gap-3">
-            {hasFilters && (
-              <button onClick={() => setFilters(EMPTY_FILTERS)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors">
-                <X size={11} /> {t('clearFilters')}
-              </button>
-            )}
-            <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
-              {loading ? tc('loading') : `${sorted.length} / ${vms.length}`}
-            </span>
-          </div>
+      <div className="flex items-center gap-2 shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2 min-w-0">
+        {tabBar}
+        <div className="flex items-center gap-3 shrink-0">
+          {hasFilters && (
+            <button onClick={() => setFilters(EMPTY_FILTERS)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors">
+              <X size={11} /> {t('clearFilters')}
+            </button>
+          )}
+          <span className="text-xs text-neutral-400 dark:text-neutral-500 font-mono">
+            {loading ? tc('loading') : `${sorted.length} / ${vms.length}`}
+          </span>
         </div>
       </div>
 
