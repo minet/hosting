@@ -34,7 +34,7 @@ from app.services.auth.helpers import (
     keycloak_realm_browser_base,
     safe_frontend_redirect,
 )
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile
+from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
 
 
 class AuthMeResponse(TypedDict):
@@ -52,6 +52,7 @@ class AuthMeResponse(TypedDict):
     cotise_end_ms: int | None
     date_signed_hosting: str | None
     ldap_login: str | None
+    maintenance: bool
 
 
 def login_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
@@ -151,7 +152,7 @@ def callback_redirect(
     return redirect
 
 
-def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
+async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     """Return authenticated user claims from a decoded token payload."""
     settings = get_settings()
 
@@ -178,15 +179,16 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     date_signed_hosting = _get("dateSignedHosting")
     ldap_login = _get("ldapLogin")
 
-    if not nom or not prenom or cotise_end is None or date_signed_hosting is None or ldap_login is None:
-        profile = fetch_keycloak_user_profile(username) if username else None
+    if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
+        profile = await fetch_keycloak_user_profile_async(username) if username else None
         if profile:
             nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
             prenom = prenom or profile.get("prenom") or profile.get("firstName") or profile.get("first_name")
             departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
             date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
-            ldap_login = ldap_login or profile.get("ldapLogin")
+
+    from app.core.maintenance import is_maintenance
 
     return {
         "sub": payload.get("sub"),
@@ -201,6 +203,7 @@ def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "cotise_end_ms": cotise_end,
         "date_signed_hosting": date_signed_hosting,
         "ldap_login": ldap_login,
+        "maintenance": is_maintenance(),
     }
 
 

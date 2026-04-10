@@ -15,7 +15,21 @@ class RequestRepo:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
 
+    async def delete_rejected(self, *, vm_id: int, type: str, dns_label: str | None = None) -> None:
+        """Delete rejected requests for the given VM and type (and dns_label if provided)."""
+        stmt = select(Request).where(
+            Request.vm_id == vm_id,
+            Request.type == type,
+            Request.status == "rejected",
+        )
+        if dns_label is not None:
+            stmt = stmt.where(Request.dns_label == dns_label)
+        rows = (await self._db.scalars(stmt)).all()
+        for row in rows:
+            await self._db.delete(row)
+
     async def create(self, *, vm_id: int, user_id: str, type: str, dns_label: str | None) -> dict[str, Any]:
+        await self.delete_rejected(vm_id=vm_id, type=type, dns_label=dns_label)
         req = Request(vm_id=vm_id, user_id=user_id, type=type, dns_label=dns_label)
         self._db.add(req)
         await self._db.flush()
@@ -58,6 +72,16 @@ class RequestRepo:
         )
         rows = (await self._db.execute(stmt)).all()
         return [{**self._to_dict(req), "vm_name": vm_name} for req, vm_name in rows]
+
+    async def reject_active(self, *, vm_id: int, type: str) -> None:
+        """Reject all pending/approved requests of the given type for a VM."""
+        stmt = select(Request).where(
+            Request.vm_id == vm_id,
+            Request.type == type,
+            Request.status != "rejected",
+        )
+        for req in (await self._db.scalars(stmt)).all():
+            req.status = "rejected"
 
     async def get(self, request_id: int) -> dict[str, Any] | None:
         req = await self._db.get(Request, request_id)

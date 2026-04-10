@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { useTranslation } from 'react-i18next'
 import { API_BASE, apiFetch, logoutUrl } from '../api'
 
 interface Props {
@@ -13,6 +14,9 @@ export default function CharterPage({ onSigned }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const { t } = useTranslation('charter')
+  const tc = useTranslation().t
+  const { t: tAuth } = useTranslation('auth')
 
   useEffect(() => {
     fetch(`${API_BASE}/api/charte`, { credentials: 'include' })
@@ -32,7 +36,6 @@ export default function CharterPage({ onSigned }: Props) {
     }
 
     el.addEventListener('scroll', onScroll)
-    // Check immediately in case content is short enough to not need scrolling
     onScroll()
     return () => el.removeEventListener('scroll', onScroll)
   }, [charterText])
@@ -43,43 +46,43 @@ export default function CharterPage({ onSigned }: Props) {
     setError(null)
     try {
       await apiFetch('/api/charter/sign', { method: 'POST' })
-      // Token already refreshed server-side — just reload user state
       onSigned()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Une erreur est survenue.')
+      setError(e instanceof Error ? e.message : tc('errorOccurred'))
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-3xl bg-white border border-neutral-200 rounded-xl shadow-md flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
+    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-3xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-md flex flex-col overflow-hidden" style={{ maxHeight: '90vh' }}>
         {/* Header */}
-        <div className="px-8 py-5 border-b border-neutral-200 flex items-center gap-4 shrink-0">
-          <img src="/assets/logo/text_hosting_dark.png" alt="Hosting" className="h-7" />
+        <div className="px-8 py-5 border-b border-neutral-200 dark:border-neutral-700 flex items-center gap-4 shrink-0">
+          <img src="/assets/logo/text_hosting_dark.png" alt="Hosting" className="h-7 dark:hidden" />
+          <img src="/assets/logo/text_hosting_light.png" alt="Hosting" className="h-7 hidden dark:block" />
           <div>
-            <h1 className="text-lg font-semibold text-neutral-900">Charte d'utilisation</h1>
-            <p className="text-xs text-neutral-500">Vous devez accepter la charte pour accéder à la plateforme Hosting MiNET.</p>
+            <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t('title')}</h1>
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">{t('subtitle')}</p>
           </div>
         </div>
 
         {/* Charter content */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-8 py-6 text-sm text-neutral-700 leading-relaxed"
+          className="flex-1 overflow-y-auto px-8 py-6 text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed"
           style={{ minHeight: 0 }}
         >
           {charterText === null ? (
-            <p className="text-neutral-400 italic">Chargement de la charte…</p>
+            <p className="text-neutral-400 dark:text-neutral-500 italic">{t('loadingCharter')}</p>
           ) : (
             <ReactMarkdown
               components={{
-                h1: ({ children }) => <h1 className="text-xl font-bold text-neutral-900 mt-6 mb-2">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-base font-semibold text-neutral-800 mt-5 mb-1.5 border-b border-neutral-100 pb-1">{children}</h2>,
-                p: ({ children }) => <p className="mb-3 text-neutral-700 leading-relaxed">{children}</p>,
-                ul: ({ children }) => <ul className="mb-3 pl-5 space-y-1 list-disc text-neutral-700">{children}</ul>,
+                h1: ({ children }) => <h1 className="text-xl font-bold text-neutral-900 dark:text-neutral-100 mt-6 mb-2">{children}</h1>,
+                h2: ({ children }) => <h2 className="text-base font-semibold text-neutral-800 dark:text-neutral-200 mt-5 mb-1.5 border-b border-neutral-100 dark:border-neutral-800 pb-1">{children}</h2>,
+                p: ({ children }) => <p className="mb-3 text-neutral-700 dark:text-neutral-300 leading-relaxed">{children}</p>,
+                ul: ({ children }) => <ul className="mb-3 pl-5 space-y-1 list-disc text-neutral-700 dark:text-neutral-300">{children}</ul>,
                 li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">{children}</a>,
+                a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{children}</a>,
               }}
             >
               {charterText}
@@ -89,42 +92,41 @@ export default function CharterPage({ onSigned }: Props) {
 
         {/* Scroll hint */}
         {!hasScrolledToBottom && charterText !== null && (
-          <div className="text-center text-xs text-neutral-400 py-2 border-t border-neutral-100 bg-white shrink-0">
-            Faites défiler jusqu'en bas pour pouvoir accepter la charte
+          <div className="text-center text-xs text-neutral-400 dark:text-neutral-500 py-2 border-t border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
+            {t('scrollHint')}
           </div>
         )}
 
         {/* Footer actions */}
-        <div className="px-8 py-5 border-t border-neutral-200 bg-neutral-50 shrink-0 flex flex-col gap-4">
+        <div className="px-8 py-5 border-t border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 shrink-0 flex flex-col gap-4">
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
+            <p className="text-sm text-red-600 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-md px-3 py-2">{error}</p>
           )}
           <label className={`flex items-start gap-3 select-none ${hasScrolledToBottom ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}>
             <input
               type="checkbox"
-              className="mt-0.5 w-4 h-4 accent-neutral-900 shrink-0"
+              className="mt-0.5 w-4 h-4 accent-neutral-900 dark:accent-neutral-100 shrink-0"
               checked={checked}
               disabled={!hasScrolledToBottom}
               onChange={(e) => setChecked(e.target.checked)}
             />
-            <span className="text-sm text-neutral-700">
-              J'ai lu et j'accepte la charte d'utilisation de la plateforme Hosting MiNET dans son intégralité.
-              Un exemplaire signé me sera envoyé par email.
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">
+              {t('accept')}
             </span>
           </label>
           <div className="flex items-center gap-3">
             <button
               onClick={handleSign}
               disabled={!checked || !hasScrolledToBottom || loading}
-              className="px-5 py-2 bg-neutral-900 text-white text-sm font-medium rounded-md hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-5 py-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-sm font-medium rounded-md hover:bg-neutral-700 dark:hover:bg-neutral-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {loading ? 'Enregistrement…' : 'Signer et continuer'}
+              {loading ? t('signing') : t('signAndContinue')}
             </button>
             <a
               href={logoutUrl()}
-              className="text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
+              className="text-sm text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
             >
-              Se déconnecter
+              {tAuth('logout')}
             </a>
           </div>
         </div>

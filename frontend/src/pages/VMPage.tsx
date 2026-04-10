@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Play, TerminalSquare } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Play, TerminalSquare } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { apiFetch, ApiError } from '../api'
 
 const VMTerminal = lazy(() => import('../components/VMTerminal'))
@@ -32,6 +33,7 @@ export default function VMPage() {
   const navigate = useNavigate()
   const resources = useResources()
   const me = useUser()
+  const { t } = useTranslation('vm')
   const vmStatusEntry = useVMStatus(Number(vmId))
   const isDesktop = useMediaQuery('(min-width: 768px)')
 
@@ -40,10 +42,13 @@ export default function VMPage() {
   const [mobileTermOpen, setMobileTermOpen] = useState(false)
   const [overlayHeight, setOverlayHeight] = useState(0)
   const [onboot, setOnboot] = useState<boolean | null>(null)
+  const [deprecatedBannerDismissed, setDeprecatedBannerDismissed] = useState(false)
 
   const running = vmStatusEntry?.status === 'running'
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
   const canAccessConsole = !me.is_admin || (vm?.current_user_role === 'owner')
+  const templateDeprecated = vm !== null && vm.template.is_active === false
+  const hasPendingChanges = vm !== null && Array.isArray(vm.pending_changes) && vm.pending_changes.length > 0
   const uptime = vmStatusEntry?.uptime ?? null
   const realmPrefix = me.user_id ? me.user_id.split(':').slice(0, 2).join(':') : null
 
@@ -69,9 +74,12 @@ export default function VMPage() {
     })
   }, [vmId])
 
-  // Refresh tasks when status changes
+  // Refresh tasks + VM detail when status changes
   useEffect(() => {
     if (!vmId || !vmStatusEntry?.status) return
+    apiFetch<VMDetail>(`/api/vms/${vmId}`)
+      .then(vmData => setVm(vmData))
+      .catch(() => {})
     apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`)
       .then(r => setTasks(r.items))
       .catch(() => { /* tasks are non-critical, keep previous state */ })
@@ -91,6 +99,26 @@ export default function VMPage() {
 
   return (
     <>
+    {templateDeprecated && !deprecatedBannerDismissed && (
+      <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-b-xl shadow-sm">
+        <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+        <span className="flex-1">{t('deprecated.banner')}</span>
+        <button
+          onClick={() => setDeprecatedBannerDismissed(true)}
+          className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[11px] font-semibold transition-colors cursor-pointer"
+        >
+          OK
+        </button>
+      </div>
+    )}
+    {hasPendingChanges && (
+      <div className={`fixed ${templateDeprecated && !deprecatedBannerDismissed ? 'top-24' : 'top-14'} left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-xs font-medium rounded-b-xl shadow-sm`}>
+        <AlertTriangle size={13} className="shrink-0 text-blue-500" />
+        <span className="flex-1">
+          {t('pendingChanges.banner', { changes: vm!.pending_changes!.map(c => t(`pendingChanges.${c}`)).join(', ') })}
+        </span>
+      </div>
+    )}
     {showDestroyModal && (
       <DestroyModal
         vmName={vm?.name}
@@ -146,14 +174,14 @@ export default function VMPage() {
     {me.is_admin && (
       <button
         onClick={() => navigate('/admin')}
-        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 transition-colors mb-1 cursor-pointer"
+        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors mb-1 cursor-pointer"
       >
         <ArrowLeft size={13} />
-        Retour au tableau admin
+        {t('actions.backToAdmin')}
       </button>
     )}
 
-    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-2 xl:h-full [&>*]:min-w-0">
+    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-3 xl:h-full [&>*]:min-w-0">
 
       {vm ? (
         <VMInfoCard
@@ -182,51 +210,60 @@ export default function VMPage() {
       />
 
       {/* Bouton terminal mobile */}
-      {vmId && running && canAccessConsole && (
+      {vmId && running && canAccessConsole && !templateDeprecated && (
         <button
           onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
-          className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-white text-sm font-semibold transition-colors cursor-pointer h-12"
+          className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 border border-neutral-700 dark:border-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors cursor-pointer h-12"
         >
           <TerminalSquare size={15} className="shrink-0" />
-          Lancer le terminal
+          {t('actions.launchTerminal')}
         </button>
       )}
 
       {/* Terminal — tablette & desktop uniquement */}
       {vmId && isDesktop && (
-        <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 shadow-md rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
-          {running && canAccessConsole && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
-          {running && !canAccessConsole && (
+        <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
+          {running && canAccessConsole && !templateDeprecated && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
+          {templateDeprecated && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <TerminalSquare size={24} className="text-neutral-500" />
-              <p className="text-sm text-white/70 font-medium">Console non disponible</p>
-              <p className="text-xs text-neutral-500 text-center px-6">En tant qu'administrateur, vous ne pouvez pas accéder à la console des VMs d'autres utilisateurs.</p>
+              <AlertTriangle size={24} className="text-amber-500" />
+              <p className="text-sm text-white/70 font-medium">{t('deprecated.title')}</p>
+              <p className="text-xs text-neutral-500 text-center px-6">{t('deprecated.terminalDisabled')}</p>
             </div>
           )}
-          {!running && (
+          {!templateDeprecated && running && !canAccessConsole && (
             <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <p className="text-sm text-white/70 font-medium">La VM est éteinte</p>
+              <TerminalSquare size={24} className="text-neutral-500" />
+              <p className="text-sm text-white/70 font-medium">{t('console.notAvailable')}</p>
+              <p className="text-xs text-neutral-500 text-center px-6">{t('console.adminRestriction')}</p>
+            </div>
+          )}
+          {!templateDeprecated && !running && (
+            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+              <p className="text-sm text-white/70 font-medium">{t('console.vmStopped')}</p>
               <button
                 onClick={() => doAction('start')}
                 disabled={!!loadingAction}
                 className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
               >
                 <Play size={14} />
-                Allumer la VM
+                {t('actions.startVM')}
               </button>
             </div>
           )}
         </div>
       )}
 
-      <VMResourcesCard
-        vm={vm}
-        running={running}
-        isOwner={isOwner}
-        onOpenResModal={() => res.setResModalOpen(true)}
-      />
-
-      <VMHistoryCard tasks={tasks} />
+      <div className="md:col-span-3 xl:col-span-3 flex gap-2 overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
+        <VMResourcesCard
+          vm={vm}
+          running={running}
+          isOwner={isOwner}
+          templateDeprecated={templateDeprecated}
+          onOpenResModal={() => res.setResModalOpen(true)}
+        />
+        <VMHistoryCard tasks={tasks} />
+      </div>
 
       <VMAccessCard
         vm={vm}

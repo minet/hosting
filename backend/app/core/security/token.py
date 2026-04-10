@@ -12,7 +12,6 @@ round-trip to Keycloak on every request.
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any
 
@@ -175,16 +174,6 @@ class TokenService:
 
 
 _token_service: TokenService | None = None
-_token_service_lock = asyncio.Lock()
-
-
-async def _init_token_service(settings: Settings) -> TokenService:
-    """Create the TokenService singleton under an async lock."""
-    global _token_service
-    async with _token_service_lock:
-        if _token_service is None:
-            _token_service = TokenService(settings=settings)
-        return _token_service
 
 
 def get_token_service(settings: Settings = Depends(get_settings)) -> TokenService:
@@ -199,10 +188,6 @@ def get_token_service(settings: Settings = Depends(get_settings)) -> TokenServic
     if _token_service is None:
         _token_service = TokenService(settings=settings)
     return _token_service
-
-
-def decode_token(token: str, settings: Settings | None = None) -> TokenPayload:
-    return get_token_service(settings=settings or get_settings()).decode(token)
 
 
 def get_token_payload(

@@ -161,6 +161,7 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
+        tags: str | None = None,
     ) -> str:
         """Clone a template and configure a new VM with the supplied parameters.
 
@@ -188,6 +189,7 @@ class ProxmoxGateway:
                 username=username,
                 password=password,
                 ssh_public_key=ssh_public_key,
+                tags=tags,
             )
         )
 
@@ -203,6 +205,7 @@ class ProxmoxGateway:
         username: str,
         password: str | None,
         ssh_public_key: str,
+        tags: str | None = None,
     ) -> str:
         """Internal implementation of VM creation.
 
@@ -244,6 +247,7 @@ class ProxmoxGateway:
             vm_ipv6=vm_ipv6,
             ipv6_prefix=prefix,
             ipv6_gateway=gw6,
+            tags=tags,
         )
         self._client.nodes(target_node).qemu(vm_id).config.post(**payload)
 
@@ -283,6 +287,21 @@ class ProxmoxGateway:
             ipv4_prefix=prefix,
             ipv4_gateway=gw4,
         )
+
+    def remove_vm_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+        """Remove an IPv4 address from the VM's cloud-init network configuration.
+
+        :param vm_id: VMID of the target virtual machine.
+        :type vm_id: int
+        :param vm_ipv4: IPv4 address string to remove.
+        :type vm_ipv4: str
+        :raises ProxmoxError: On API failures.
+        """
+        self._guard(lambda: self._do_remove_ipv4(vm_id=vm_id, vm_ipv4=vm_ipv4))
+
+    def _do_remove_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        self._cloudinit.remove_vm_ipv4(node=node, vm_id=vm_id, vm_ipv4=vm_ipv4)
 
     def setup_vm_firewall(self, *, vm_id: int, vm_ipv6: str, node: str) -> None:
         """Enable the Proxmox firewall and IPv6 IP-set filter on a VM.
@@ -430,6 +449,16 @@ class ProxmoxGateway:
         :raises ProxmoxError: On API failures.
         """
         return self._guard(lambda: self._status(vm_id=vm_id))
+
+    def get_vm_full_config(self, *, vm_id: int) -> dict[str, Any]:
+        """Return the full Proxmox configuration dict for a VM.
+
+        :param vm_id: VMID of the target VM.
+        :returns: VM configuration dictionary.
+        :rtype: dict[str, Any]
+        :raises ProxmoxError: On API failures.
+        """
+        return self._guard(lambda: self._get_config(node=node_for_vm(client=self._client, vm_id=vm_id), vm_id=vm_id))
 
     def get_vm_mac(self, *, vm_id: int) -> str | None:
         """Return the MAC address of a VM's primary network interface.

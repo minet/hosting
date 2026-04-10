@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field, field_validator
 
 _VM_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 _USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]*$")
-_SSH_KEY_RE = re.compile(r"^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)) ")
+_SSH_KEY_RE = re.compile(
+    r"^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521))"
+    r" [A-Za-z0-9+/]{43,}={0,3}(\s+\S.*)?$"
+)
 
 
 class VMRole(StrEnum):
@@ -58,6 +61,12 @@ class VMTemplateResponse(BaseModel):
 
     template_id: int
     name: str
+    version: str | None = None
+    min_cpu_cores: int = 1
+    min_ram_gb: int = 2
+    min_disk_gb: int = 10
+    comment: str | None = None
+    is_active: bool = True
 
 
 class VMNetworkResponse(BaseModel):
@@ -107,6 +116,7 @@ class VMDetailResponse(BaseModel):
     username: str | None = None
     ssh_public_key: str | None = None
     dns: str | None = None
+    pending_changes: list[str] | None = None
 
 
 class VMTaskItemResponse(BaseModel):
@@ -291,7 +301,7 @@ class VMCreateResourceBody(BaseModel):
 class VMCreateBody(BaseModel):
     """Request body for creating a new virtual machine."""
 
-    name: str = Field(min_length=1, max_length=10)
+    name: str = Field(min_length=1)
     template_id: int = Field(ge=1)
     cpu_cores: int = Field(ge=1)
     ram_gb: int = Field(ge=1)
@@ -309,6 +319,11 @@ class VMCreateBody(BaseModel):
         :returns: The validated name string unchanged.
         :raises ValueError: If the name contains disallowed characters or has an invalid prefix.
         """
+        from app.core.config import get_settings
+
+        max_length = get_settings().vm_name_max_length
+        if len(v) > max_length:
+            raise ValueError(f"name must be at most {max_length} characters")
         if not _VM_NAME_RE.match(v):
             raise ValueError(
                 "name must start with alphanumeric and contain only alphanumeric characters and hyphens"
@@ -479,3 +494,26 @@ class AdminTemplateCreateBody(BaseModel):
 
     template_id: int = Field(ge=1001, le=1999)
     name: str = Field(min_length=1, max_length=128)
+    version: str | None = Field(default=None, max_length=64)
+    min_cpu_cores: int = Field(default=1, ge=1)
+    min_ram_gb: int = Field(default=2, ge=1)
+    min_disk_gb: int = Field(default=10, ge=1)
+    comment: str | None = Field(default=None, max_length=512)
+
+
+class AdminTemplateUpdateBody(BaseModel):
+    """Request body for updating a VM template (admin only)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    version: str | None = None
+    min_cpu_cores: int | None = Field(default=None, ge=1)
+    min_ram_gb: int | None = Field(default=None, ge=1)
+    min_disk_gb: int | None = Field(default=None, ge=1)
+    comment: str | None = None
+    is_active: bool | None = None
+
+
+class AdminTemplateActiveBody(BaseModel):
+    """Request body for toggling a template's active state (admin only)."""
+
+    is_active: bool

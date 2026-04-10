@@ -15,11 +15,11 @@ export default function Layout({ children }: Props) {
 
   return (
     <VMModalContext.Provider value={() => setVmModalOpen(true)}>
-      <div className="flex flex-col h-screen bg-white text-neutral-900">
+      <div className="flex flex-col h-screen bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 overflow-x-hidden">
         <Header onBurgerClick={() => setMobileOpen((o) => !o)} />
         <div className="flex-1 overflow-hidden relative">
           <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} onCreateVM={() => setVmModalOpen(true)} />
-          <main className="h-full overflow-y-auto p-6 md:pl-20">{children}</main>
+          <main className="h-full overflow-y-auto overflow-x-hidden p-6 md:pl-20">{children}</main>
         </div>
         {vmModalOpen && <CreateVMModal onClose={() => setVmModalOpen(false)} />}
       </div>

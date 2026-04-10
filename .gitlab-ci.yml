@@ -1,15 +1,20 @@
 stages:
   - docker
   - deploy
+  - retransfer
 
 variables:
   IMAGE_REGISTRY_BASE: $CI_REGISTRY_IMAGE
 
-# ── Docker stage ──────────────────────────────────────────────────────────────
+# ── Helper ────────────────────────────────────────────────────────────────────
 
 .kaniko_auth: &kaniko_auth
   before_script:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_JOB_TOKEN" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+
+# ── Docker stage ──────────────────────────────────────────────────────────────
+# Images are tagged with the branch slug (main / pre-prod).
+# Stack files in swarm-prod reference these tags directly.
 
 docker_backend:
   stage: docker
@@ -21,17 +26,23 @@ docker_backend:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/backend"
       --dockerfile "$CI_PROJECT_DIR/backend/Dockerfile"
-      --destination "$IMAGE_REGISTRY_BASE/backend:latest"
+      --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_REF_SLUG"
       --destination "$IMAGE_REGISTRY_BASE/backend:$CI_COMMIT_SHORT_SHA"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/backend/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
-    - changes:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - backend/**/*
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
         - backend/**/*
 
-docker_frontend:
+# Frontend is built with baked-in VITE_* values that differ per environment.
+
+docker_frontend_prod:
   stage: docker
   image:
     name: gcr.io/kaniko-project/executor:v1.23.0-debug
@@ -41,17 +52,47 @@ docker_frontend:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/frontend"
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
-      --destination "$IMAGE_REGISTRY_BASE/frontend:latest"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:main"
       --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
-      --build-arg "VITE_API_URL=${VITE_API_URL:-https://hosting-dev.minet.net}"
-      --build-arg "VITE_DNS_ZONE=${VITE_DNS_ZONE:-hdev.minet.net}"
-      --build-arg "VITE_RESTRICTED_ROLES=${VITE_RESTRICTED_ROLES:-/adh6_admin,/cluster-dev}"
+      --build-arg "VITE_API_URL=https://hosting.minet.net"
+      --build-arg "VITE_DNS_ZONE=h.minet.net"
+      --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
+      --build-arg "VITE_VM_NAME_MAX_LENGTH=60"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
       --snapshot-mode=redo
       --use-new-run
+      --compressed-caching=false
   rules:
-    - changes:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - frontend/**/*
+
+docker_frontend_preprod:
+  stage: docker
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.0-debug
+    entrypoint: [""]
+  <<: *kaniko_auth
+  script:
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/frontend"
+      --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:pre-prod"
+      --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
+      --build-arg "VITE_API_URL=https://hosting-dev.minet.net"
+      --build-arg "VITE_DNS_ZONE=hdev.minet.net"
+      --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
+      --build-arg "VITE_APP_ENV=preprod"
+      --build-arg "VITE_VM_NAME_MAX_LENGTH=60"
+      --cache=true
+      --cache-repo "$IMAGE_REGISTRY_BASE/frontend/cache"
+      --snapshot-mode=redo
+      --use-new-run
+      --compressed-caching=false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
         - frontend/**/*
 
 docker_pdns:
@@ -64,19 +105,35 @@ docker_pdns:
     - /kaniko/executor
       --context "$CI_PROJECT_DIR/pdns"
       --dockerfile "$CI_PROJECT_DIR/pdns/Dockerfile"
-      --destination "$IMAGE_REGISTRY_BASE/pdns:latest"
+      --destination "$IMAGE_REGISTRY_BASE/pdns:$CI_COMMIT_REF_SLUG"
       --destination "$IMAGE_REGISTRY_BASE/pdns:$CI_COMMIT_SHORT_SHA"
       --cache=true
       --cache-repo "$IMAGE_REGISTRY_BASE/pdns/cache"
       --snapshot-mode=redo
       --use-new-run
   rules:
-    - changes:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - pdns/**/*
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+      changes:
         - pdns/**/*
 
 # ── Deploy stage ──────────────────────────────────────────────────────────────
 
-deploy:
+deploy_prod:
+  stage: deploy
+  trigger:
+    project: minet/configurations/push/swarm-prod
+    branch: main
+    strategy: depend
+    inputs:
+      folder_name: hosting.minet.net
+      image_registry: $CI_REGISTRY_IMAGE
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+deploy_preprod:
   stage: deploy
   trigger:
     project: minet/configurations/push/swarm-prod
@@ -85,3 +142,32 @@ deploy:
     inputs:
       folder_name: hosting-dev.minet.net
       image_registry: $CI_REGISTRY_IMAGE
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "pre-prod"'
+
+# ── DNS retransfer ───────────────────────────────────────────────────────────
+# After deploy, tell BIND (ns1/ns2) to retransfer hdev/h.minet.net from PowerDNS.
+
+dns_retransfer_preprod:
+  stage: retransfer
+  needs: [deploy_preprod]
+  trigger:
+    project: minet/configurations/push/dns
+    branch: main
+  variables:
+    HOSTING_RETRANSFER: "true"
+    HOSTING_DNS_ZONE: hdev.minet.net
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "pre-prod"'
+
+dns_retransfer_prod:
+  stage: retransfer
+  needs: [deploy_prod]
+  trigger:
+    project: minet/configurations/push/dns
+    branch: main
+  variables:
+    HOSTING_RETRANSFER: "true"
+    HOSTING_DNS_ZONE: h.minet.net
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "main"'

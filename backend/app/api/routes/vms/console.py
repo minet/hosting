@@ -29,7 +29,7 @@ from fastapi import APIRouter, Depends, WebSocket
 from fastapi.websockets import WebSocketState
 
 from app.auth import AuthCtx, require_user
-from app.auth.context import build_auth_ctx
+from app.auth.context import build_auth_ctx, passes_preprod_gates
 from app.core.config import get_settings
 from app.core.security.token import get_token_service
 from app.core.sessions import get_access_token
@@ -136,7 +136,6 @@ class _VmSession:
             pass
 
 
-# vm_id -> session  (process-local, single worker)
 _sessions: dict[int, _VmSession] = {}
 _sessions_lock = asyncio.Lock()
 
@@ -239,10 +238,13 @@ async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
         return None
     try:
         payload = get_token_service(settings=settings).decode(access_token)
-        return build_auth_ctx(payload, settings)
+        ctx = build_auth_ctx(payload, settings)
     except (ValueError, KeyError, OSError):
         logger.warning("terminal_ws _ws_auth failed", exc_info=True)
         return None
+    if not passes_preprod_gates(ctx, settings):
+        return None
+    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -250,12 +252,11 @@ async def _ws_auth(websocket: WebSocket) -> AuthCtx | None:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/{vm_id}/termproxy")
+@router.post("/{vm_id}/termproxy", dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def get_termproxy(
     vm_id: int,
     ctx: AuthCtx = Depends(require_user),
     access: VmAccessService = Depends(get_vm_access_service),
-    _rl=Depends(RateLimiter(max_calls=10, window_seconds=60)),
 ) -> dict:
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     gateway = get_proxmox_gateway()

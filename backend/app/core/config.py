@@ -64,13 +64,13 @@ class Settings(BaseSettings):
     resource_max_cpu_cores: int = Field(default=6, alias="RESOURCE_MAX_CPU_CORES")
     resource_max_ram_gb: int = Field(default=9, alias="RESOURCE_MAX_RAM_GB")
     resource_max_disk_gb: int = Field(default=30, alias="RESOURCE_MAX_DISK_GB")
-    vm_min_cpu_cores: int = Field(default=1, alias="VM_MIN_CPU_CORES")
-    vm_min_ram_gb: int = Field(default=2, alias="VM_MIN_RAM_GB")
-    vm_min_disk_gb: int = Field(default=10, alias="VM_MIN_DISK_GB")
+    vm_auto_assign_ipv4: bool = Field(default=False, alias="VM_AUTO_ASSIGN_IPV4")
     vm_ipv4_subnets: str | None = Field(default=None, alias="VM_IPV4_SUBNETS")
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
+    vm_ipv4_netmasks: str = Field(default="", alias="VM_IPV4_NETMASKS")
     vm_ipv6_subnet: str = Field(default="2001:660:3203:40a::/64", alias="VM_IPV6_SUBNET")
-    vm_ipv6_gateway_host: int = Field(default=1, alias="VM_IPV6_GATEWAY_HOST")
+    vm_ipv6_gateway_host: str = Field(default="1", alias="VM_IPV6_GATEWAY_HOST")
+    vm_name_max_length: int = Field(default=10, alias="VM_NAME_MAX_LENGTH")
     vm_id_min: int = Field(default=2001, alias="VM_ID_MIN")
     proxmox_base_url: str | None = Field(default="https://luna.priv.minet.net:8006", alias="PROXMOX_BASE_URL")
     proxmox_verify_tls: bool = Field(default=False, alias="PROXMOX_VERIFY_TLS")
@@ -93,6 +93,8 @@ class Settings(BaseSettings):
     dns_zone: str = Field(default="h.lan", alias="DNS_ZONE")
     dns_nameservers: str = Field(default="ns1.minet.net.,ns2.minet.net.", alias="DNS_NAMESERVERS")
 
+    discord_webhook_url: str | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
+
     @staticmethod
     def _is_configured(value: str | None) -> bool:
         """Check whether a configuration value is a non-blank string.
@@ -114,13 +116,18 @@ class Settings(BaseSettings):
         return self._is_configured(self.proxmox_base_url) and self._is_configured(self.proxmox_password)
 
     @property
+    def proxmox_token_configured(self) -> bool:
+        """Return ``True`` when Proxmox token auth settings are present."""
+        return self._is_configured(self.proxmox_base_url) and self._is_configured(self.proxmox_token_id) and self._is_configured(self.proxmox_token_secret)
+
+    @property
     def proxmox_configured(self) -> bool:
         """Return ``True`` when any Proxmox authentication method is available.
 
         :returns: Whether Proxmox connectivity is configured.
         :rtype: bool
         """
-        return self.proxmox_password_configured
+        return self.proxmox_password_configured or self.proxmox_token_configured
 
     @property
     def is_production(self) -> bool:

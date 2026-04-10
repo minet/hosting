@@ -1,0 +1,44 @@
+{
+  "loading": "加载中…",
+  "error": "错误",
+  "errorOccurred": "发生了一个错误",
+  "retry": "重试",
+  "cancel": "取消",
+  "close": "关闭",
+  "apply": "应用",
+  "save": "保存",
+  "delete": "删除",
+  "edit": "编辑",
+  "modify": "修改",
+  "send": "发送",
+  "saved": "已保存 ✓",
+  "noData": "暂无数据",
+  "unknownError": "未知错误",
+  "sessionExpired": "会话已过期，请重新登录。",
+  "errorStatus": "错误 {{status}}",
+  "cores_one": "核心",
+  "cores_other": "核心",
+  "gb": "GB",
+  "lightMode": "浅色模式",
+  "darkMode": "深色模式",
+  "timeframes": {
+    "hour": "1小时",
+    "day": "1天",
+    "week": "1周",
+    "month": "1月",
+    "year": "1年"
+  },
+  "maintenance": {
+    "title": "维护中",
+    "description": "Hosting 服务正在维护中，暂时不可用。请稍后再试。"
+  },
+  "units": {
+    "gbPerSec": "GB/s",
+    "mbPerSec": "MB/s",
+    "kbPerSec": "KB/s",
+    "bPerSec": "B/s",
+    "kb": "KB",
+    "mb": "MB",
+    "tb": "TB"
+  }
+}

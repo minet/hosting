@@ -52,7 +52,7 @@ async def stream_vm_statuses(
 
     Reads from the centralized VM status cache (one Proxmox poll for the
     entire application) and emits a JSON event only when a VM's status
-    changes.  A heartbeat comment is sent every cycle to keep the
+    changes. A heartbeat comment is sent every cycle to keep the
     connection alive.
 
     A fresh database session is created and released on every poll cycle so

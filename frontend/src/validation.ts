@@ -1,6 +1,6 @@
 const VM_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
 const USERNAME_RE = /^[a-z_][a-z0-9_-]*$/
-const SSH_KEY_RE = /^(ssh-(rsa|ed25519|dss)|ecdsa-sha2-nistp(256|384|521)) /
+const SSH_KEY_RE = /^(ssh-(rsa|ed25519)|ecdsa-sha2-nistp(256|384|521)) [A-Za-z0-9+/]{43,}={0,3}(\s+\S.*)?$/
 const DNS_LABEL_RE = /^[a-z0-9][a-z0-9-]{0,61}([a-z0-9])?$/
 
 export function validateVmName(v: string): string | null {

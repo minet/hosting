@@ -18,5 +18,7 @@ from app.db.models.resource import Resource
 from app.db.models.template import Template
 from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
+from app.db.models.vm_ip_history import VMIPHistory
+from app.db.models.vm_purge_mail import VMPurgeMail
 
-__all__ = ["VM", "Base", "QuotaLock", "Request", "Resource", "Template", "VMAccess"]
+__all__ = ["VM", "Base", "QuotaLock", "Request", "Resource", "Template", "VMAccess", "VMIPHistory", "VMPurgeMail"]

@@ -1,7 +1,7 @@
 """SQLAlchemy model for virtual machines."""
 
 from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import INET, MACADDR
+from sqlalchemy.dialects.postgresql import ARRAY, INET, MACADDR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.models import Base
@@ -44,6 +44,7 @@ class VM(Base):
     ipv4: Mapped[str | None] = mapped_column(INET, nullable=True)
     ipv6: Mapped[str | None] = mapped_column(INET, nullable=True)
     mac: Mapped[str | None] = mapped_column(MACADDR, nullable=True)
+    pending_changes: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
 
     template = relationship("Template", back_populates="vms")
     access_entries = relationship("VMAccess", back_populates="vm")

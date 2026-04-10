@@ -67,6 +67,7 @@ class VmDeleteService:
             raise_proxmox_as_http(exc, unavailable="Unable to delete VM on Proxmox")
 
         try:
+            await self.cmd_repo.release_ip_history(vm_id)
             deleted = await self.cmd_repo.delete_vm_with_related(vm_id)
             await self.db.commit()
         except SQLAlchemyError as exc:

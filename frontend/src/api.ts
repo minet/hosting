@@ -26,7 +26,7 @@ async function extractErrorMessage(res: Response): Promise<string> {
     }
     if (typeof body?.message === 'string') return body.message
   } catch { /* not JSON */ }
-  return res.statusText || `Erreur ${res.status}`
+  return res.statusText || `Error ${res.status}`
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit, schema?: ZodType<T>): Promise<T> {

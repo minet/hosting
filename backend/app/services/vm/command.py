@@ -21,6 +21,7 @@ from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
+from app.services.discord import notify_ipv4_exhausted
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.gateway import ProxmoxGateway
@@ -172,6 +173,8 @@ class VmCommandService:
             await asyncio.to_thread(self._gateway.start_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to start VM on Proxmox")
+        await self._cmd_repo.clear_pending_changes(vm_id)
+        await self._db.commit()
         return {"vm_id": vm_id, "action": "start", "status": "ok"}
 
     async def stop(self, *, vm_id: int) -> dict[str, Any]:
@@ -202,6 +205,8 @@ class VmCommandService:
             await asyncio.to_thread(self._gateway.restart_vm, vm_id=vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to restart VM on Proxmox")
+        await self._cmd_repo.clear_pending_changes(vm_id)
+        await self._db.commit()
         return {"vm_id": vm_id, "action": "restart", "status": "ok"}
 
     async def get_onboot(self, *, vm_id: int) -> dict[str, Any]:
@@ -357,7 +362,6 @@ class VmCommandService:
             await self._db.rollback()
             raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="VM already has an IPv4 address assigned")
 
-        await self._cmd_repo.lock_ipv4_allocation()
         used_ipv4 = await self._query_repo.list_used_ipv4()
         try:
             ipv4 = allocate_next_vm_ipv4(used_ipv4=used_ipv4)
@@ -401,9 +405,14 @@ class VmCommandService:
                 detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
             ) from exc
 
+        await self._cmd_repo.update_ip_history_ipv4(vm_id, ipv4)
+        await self._cmd_repo.add_pending_change(vm_id, "ipv4")
+
+        # Check if the pool is now exhausted after this allocation
         try:
-            await asyncio.to_thread(self._gateway.restart_vm, vm_id=vm_id)
-        except ProxmoxError:
-            logger.warning("Non-fatal: restart after IPv4 assignment failed for vm_id=%s", vm_id, exc_info=True)
+            remaining_used = await self._query_repo.list_used_ipv4()
+            allocate_next_vm_ipv4(used_ipv4=remaining_used)
+        except (ProxmoxUnavailableError, ProxmoxConfigError):
+            await notify_ipv4_exhausted()
 
         return ipv4

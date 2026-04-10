@@ -29,9 +29,16 @@ _VM_COLUMNS = (
     VM.disk_gb.label("disk_gb"),
     VM.template_id.label("template_id"),
     Template.name.label("template_name"),
+    Template.version.label("template_version"),
+    Template.min_cpu_cores.label("template_min_cpu_cores"),
+    Template.min_ram_gb.label("template_min_ram_gb"),
+    Template.min_disk_gb.label("template_min_disk_gb"),
+    Template.comment.label("template_comment"),
+    Template.is_active.label("template_is_active"),
     func.host(VM.ipv4).label("ipv4"),
     func.host(VM.ipv6).label("ipv6"),
     cast(VM.mac, Text).label("mac"),
+    VM.pending_changes.label("pending_changes"),
 )
 
 
@@ -202,27 +209,46 @@ class VmQueryRepo:
         )
         return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
-    async def list_templates(self) -> list[dict[str, Any]]:
+    async def list_templates(self, *, active_only: bool = False) -> list[dict[str, Any]]:
         """Return all templates ordered by template ID ascending.
 
-        :returns: A list of row dicts each containing ``template_id`` and ``name``.
+        :param active_only: If ``True``, only return templates where ``is_active`` is ``True``.
+        :returns: A list of row dicts each containing ``template_id``, ``name``, and ``is_active``.
         :rtype: list[dict[str, Any]]
         """
-        stmt = select(Template.template_id.label("template_id"), Template.name.label("name")).order_by(
-            Template.template_id.asc()
-        )
+        stmt = select(
+            Template.template_id.label("template_id"),
+            Template.name.label("name"),
+            Template.version.label("version"),
+            Template.min_cpu_cores.label("min_cpu_cores"),
+            Template.min_ram_gb.label("min_ram_gb"),
+            Template.min_disk_gb.label("min_disk_gb"),
+            Template.comment.label("comment"),
+            Template.is_active.label("is_active"),
+        ).order_by(Template.template_id.asc())
+        if active_only:
+            stmt = stmt.where(Template.is_active.is_(True))
         return [dict(row) for row in (await self.db.execute(stmt)).mappings().all()]
 
     async def get_template(self, template_id: int) -> dict[str, Any] | None:
         """Return a single template by its identifier.
 
         :param template_id: The template identifier to look up.
-        :returns: A row dict containing ``template_id`` and ``name``, or ``None``
+        :returns: A row dict with all template fields, or ``None``
             if the template does not exist.
         :rtype: dict[str, Any] or None
         """
         stmt = (
-            select(Template.template_id.label("template_id"), Template.name.label("name"))
+            select(
+                Template.template_id.label("template_id"),
+                Template.name.label("name"),
+                Template.version.label("version"),
+                Template.min_cpu_cores.label("min_cpu_cores"),
+                Template.min_ram_gb.label("min_ram_gb"),
+                Template.min_disk_gb.label("min_disk_gb"),
+                Template.comment.label("comment"),
+                Template.is_active.label("is_active"),
+            )
             .where(Template.template_id == template_id)
             .limit(1)
         )

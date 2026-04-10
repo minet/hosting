@@ -1,0 +1,137 @@
+{
+  "virtualMachines": "Machines virtuelles",
+  "createVM": "Créer une VM",
+  "configureVM": "Créez et configurez votre machine",
+  "configureNewVM": "Configurez votre nouvelle machine virtuelle",
+  "newVM": "Nouvelle VM",
+  "welcome": {
+    "title": "Bienvenue {{name}} sur Hosting !",
+    "description": "Ce service est gratuit si vous possédez déjà un compte MiNET avec une cotisation. Il vous permet de créer des machines virtuelles et de vous amuser dessus.",
+    "limits": "Vous disposez d'un maximum de <cores>{{cpu}} cœurs</cores>, <ram>{{ram}} Go de RAM</ram> et <disk>{{disk}} Go de disque</disk> à répartir à votre guise sur des machines.",
+    "subscriptionExpires": "Votre cotisation expire dans",
+    "years_one": "{{count}} an",
+    "years_other": "{{count}} ans",
+    "months": "{{count}} mois",
+    "days_one": "{{count}} jour",
+    "days_other": "{{count}} jours",
+    "subscriptionExpired": "Votre cotisation a expiré !",
+    "subscriptionExpiredDesc": "Vos machines virtuelles seront supprimées dans {{days}} jours. Renouvelez votre cotisation dès que possible pour éviter la perte de vos données.",
+    "subscriptionExpiredSince": "Expirée depuis {{count}} jours"
+  },
+  "create": {
+    "name": "Nom",
+    "nameHint": "max {{max}} car., lettres, chiffres, tirets",
+    "nameValidation": "Lettres, chiffres et tirets uniquement, commence par un caractère alphanumerique",
+    "nameError": "Lettres, chiffres et tirets uniquement",
+    "template": "Template",
+    "selectTemplate": "Sélectionner un template",
+    "cpu": "CPU",
+    "ramGb": "RAM Go",
+    "diskGb": "Disque Go",
+    "max": "max {{max}}",
+    "sshAccess": "Accès SSH",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "sshKey": "Clé SSH publique",
+    "sshKeyHelp": "Comment générer une clé ?",
+    "createButton": "Créer la VM",
+    "steps": {
+      "reserving": "Réservation des ressources...",
+      "cloning": "Clonage du template en cours...",
+      "configuring": "Configuration de la VM...",
+      "resizing": "Redimensionnement du disque...",
+      "migrating": "Migration vers le nœud optimal...",
+      "migratingInProgress": "Migration en cours...",
+      "provisioning": "Provisionnement en cours...",
+      "success": "VM créée avec succès !",
+      "successNoIpv4": "VM créée avec succès, mais aucune adresse IPv4 n'est disponible pour le moment."
+    },
+    "errorCreating": "Une erreur est survenue lors de la création de la VM.",
+    "quotaExhausted": "Quota épuisé",
+    "quotaExhaustedDesc": "Vous avez utilisé toutes vos ressources allouées. Supprimez une VM pour en créer une nouvelle."
+  },
+  "destroy": {
+    "title": "Supprimer <red>{{name}}</red> ?",
+    "warning": "Cette action est irréversible. La VM et toutes ses données seront définitivement supprimées.",
+    "confirmTitle": "Êtes-vous vraiment sûr ?",
+    "confirmWarning": "Cette suppression est définitive. Il n'y aura aucun moyen de récupérer vos données.",
+    "confirmButton": "Oui, supprimer"
+  },
+  "resources": {
+    "title": "Modifier les ressources",
+    "allocated": "Ressources allouées",
+    "disk": "Disque"
+  },
+  "access": {
+    "title": "Accès VM",
+    "sshWorks": "marche direct !",
+    "user": "Utilisateur",
+    "password": "Mot de passe",
+    "sshKey": "Clé SSH",
+    "ownerOnly": "Réservé au propriétaire",
+    "stopFirst": "Éteignez la VM d'abord"
+  },
+  "info": {
+    "request": "Demander",
+    "sharedVM": "Cette VM vous a été partagée"
+  },
+  "actions": {
+    "alreadyOn": "Déjà allumée",
+    "vmOff": "VM éteinte",
+    "startVM": "Allumer la VM",
+    "launchTerminal": "Lancer le terminal",
+    "backToAdmin": "Retour au tableau admin"
+  },
+  "pendingChanges": {
+    "banner": "Votre VM a des changements de configuration en attente ({{changes}}). Redémarrez la VM pour les appliquer.",
+    "ipv4": "adresse IPv4",
+    "resources": "ressources",
+    "cloudinit": "configuration cloud-init"
+  },
+  "deprecated": {
+    "banner": "Votre VM utilise une template dépréciée. Il vous est conseillé de la recréer avec une template à jour. La modification des ressources et le terminal sont désactivés.",
+    "title": "Template dépréciée",
+    "terminalDisabled": "Le terminal est désactivé. Recréez votre VM avec une template à jour.",
+    "resourcesDisabled": "Non disponible avec une template dépréciée"
+  },
+  "console": {
+    "notAvailable": "Console non disponible",
+    "adminRestriction": "En tant qu'administrateur, vous ne pouvez pas accéder à la console des VMs d'autres utilisateurs.",
+    "vmStopped": "La VM est éteinte"
+  },
+  "history": {
+    "title": "Historique",
+    "noRecentAction": "Aucune action récente"
+  },
+  "share": {
+    "title": "Partager la VM",
+    "findUserId": "Comment trouver l'ID d'un utilisateur ?",
+    "findUserIdDesc": "Chaque membre MiNET possède un numéro d'adhérent visible sur la page d'accueil de Hosting, affiché en petit à côté de son prénom sous la forme <mono>#12345</mono>.",
+    "sharedAccess": "Accès partagés",
+    "sharedRights": "Droits de l'utilisateur partagé",
+    "rightsList": {
+      "viewStatus": "Voir le statut et les métriques de la VM",
+      "accessTerminal": "Accéder au terminal",
+      "startStopRestart": "Démarrer / arrêter / redémarrer"
+    },
+    "cannotModify": "Il ne peut pas modifier les ressources, les accès ni supprimer la VM.",
+    "memberNumber": "Numéro d'adhérent",
+    "shareButton": "Partager"
+  },
+  "request": {
+    "title": "Faire une demande",
+    "previousRequests": "Demandes précédentes",
+    "retryWith": "Réessayer avec ces paramètres",
+    "requestType": "Type de demande",
+    "ipv4Address": "Adresse IPv4",
+    "dnsName": "Nom DNS",
+    "alreadyHasIpv4": "Cette VM a déjà une adresse IPv4.",
+    "ipv4Pending": "Une demande IPv4 est déjà en cours.",
+    "dnsPending": "Une demande DNS est déjà en cours.",
+    "subdomain": "Sous-domaine souhaité",
+    "ipv4Desc": "Une adresse IPv4 publique sera attribuée manuellement par l'équipe MiNET suite à votre demande."
+  },
+  "metrics": {
+    "network": "Réseau"
+  }
+}

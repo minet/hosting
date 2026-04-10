@@ -6,10 +6,11 @@ export interface VMDetail {
   cpu_cores: number
   ram_mb: number
   disk_gb: number
-  template: { template_id: number; name: string }
+  template: { template_id: number; name: string; is_active: boolean }
   network: { ipv4: string | null; ipv6: string | null; mac: string | null }
   current_user_role: 'owner' | 'shared' | 'admin'
   dns: string | null
+  pending_changes: string[] | null
 }
 
 export interface VMTask {

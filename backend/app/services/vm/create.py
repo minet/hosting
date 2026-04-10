@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
+from app.services.discord import notify_ipv4_exhausted
 from app.services.dns import DnsService
-from app.services.proxmox.allocation import allocate_next_vm_ipv6
-from app.services.proxmox.errors import ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
+from app.services.proxmox.allocation import allocate_next_vm_ipv4, allocate_next_vm_ipv6
+from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError, ProxmoxVMNotFound
 from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.errors import raise_proxmox_as_http
 from app.services.vm.query import VmQueryService
@@ -104,34 +105,53 @@ class VmCreateService:
             cmd.disk_gb,
         )
 
-        self._validate_limits(cmd)
+        await self._validate_limits(cmd)
         reservation = await self._reserve_db_slot(ctx=ctx, cmd=cmd)
         node = await self._provision_on_proxmox(ctx=ctx, cmd=cmd, res=reservation)
         await self._finalize_db(ctx=ctx, res=reservation, node=node)
 
-        result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
+        # Auto-assign IPv4 if enabled and available (best-effort)
+        ipv4 = await self._try_assign_ipv4(vm_id=reservation.vm_id) if self.settings.vm_auto_assign_ipv4 else None
+
+        # DNS records are created regardless of IPv4 availability
         async with DnsService(settings=self.settings) as dns:
             await dns.create_records(
                 vm_id=reservation.vm_id,
-                ipv4=result.get("network", {}).get("ipv4"),
+                ipv4=ipv4,
                 ipv6=reservation.vm_ipv6,
             )
-        logger.info("vm_create_done user_id=%s vm_id=%s", ctx.user_id, reservation.vm_id)
+
+        if ipv4:
+            try:
+                await asyncio.to_thread(self.gateway.assign_vm_ipv4, vm_id=reservation.vm_id, vm_ipv4=ipv4)
+            except ProxmoxError:
+                logger.warning("vm_create_ipv4_proxmox_config_failed vm_id=%s ipv4=%s", reservation.vm_id, ipv4, exc_info=True)
+
+        result = await self.query_service.get_user_vm(vm_id=reservation.vm_id, user_id=ctx.user_id)
+        logger.info("vm_create_done user_id=%s vm_id=%s ipv4=%s", ctx.user_id, reservation.vm_id, ipv4)
         return result
 
-    def _validate_limits(self, cmd: VmCreateCmd) -> None:
+    async def _validate_limits(self, cmd: VmCreateCmd) -> None:
         """
-        Raise an HTTP 422 error if any resource value is below the configured minimum.
+        Raise an HTTP 422 error if any resource value is below the template minimum.
 
         :param cmd: Creation command to validate.
         :raises HTTPException: 422 when ``cpu_cores``, ``ram_gb``, or
-            ``disk_gb`` is below the configured minimum.
+            ``disk_gb`` is below the template's minimum.
         """
-        if cmd.cpu_cores < self.settings.vm_min_cpu_cores:
+        tpl = await self.query_repo.get_template(cmd.template_id)
+        if tpl is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        if not tpl.get("is_active", True):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+        min_cpu = tpl.get("min_cpu_cores", 1)
+        min_ram = tpl.get("min_ram_gb", 2)
+        min_disk = tpl.get("min_disk_gb", 10)
+        if cmd.cpu_cores < min_cpu:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cpu_cores below minimum")
-        if cmd.ram_gb < self.settings.vm_min_ram_gb:
+        if cmd.ram_gb < min_ram:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ram_gb below minimum")
-        if cmd.disk_gb < self.settings.vm_min_disk_gb:
+        if cmd.disk_gb < min_disk:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="disk_gb below minimum")
 
     async def _reserve_db_slot(self, *, ctx: AuthCtx, cmd: VmCreateCmd) -> _DbReservation:
@@ -207,6 +227,12 @@ class VmCreateService:
             username=cmd.resource.username,
             ssh_public_key=cmd.resource.ssh_public_key,
         )
+        await self.cmd_repo.insert_ip_history(
+            vm_id=vm_id,
+            owner_id=ctx.user_id,
+            ipv4=None,
+            ipv6=vm_ipv6,
+        )
         await self.db.commit()
 
         logger.info("vm_create_reserved user_id=%s vm_id=%s ipv6=%s", ctx.user_id, vm_id, vm_ipv6)
@@ -254,6 +280,7 @@ class VmCreateService:
                 username=cmd.resource.username,
                 password=cmd.resource.password,
                 ssh_public_key=cmd.resource.ssh_public_key,
+                tags=f"{self.settings.app_env}-hosting",
             )
             logger.info("vm_create_proxmox_clone_ok user_id=%s vm_id=%s node=%s", ctx.user_id, res.vm_id, node)
             return node
@@ -376,6 +403,42 @@ class VmCreateService:
         except SQLAlchemyError:
             await self.db.rollback()
             logger.exception("vm_create_compensate_db_failed vm_id=%s", vm_id)
+
+    async def _try_assign_ipv4(self, *, vm_id: int) -> str | None:
+        """Best-effort IPv4 allocation during VM creation.
+
+        Returns the allocated IPv4 or ``None`` if none is available.
+        """
+        try:
+            await self.cmd_repo.lock_ipv4_allocation()
+            used = await self.query_repo.list_used_ipv4()
+            ipv4 = allocate_next_vm_ipv4(used_ipv4=used)
+            await self.cmd_repo.update_vm_ipv4(vm_id, ipv4)
+            await self.cmd_repo.update_ip_history_ipv4(vm_id, ipv4)
+            await self.db.commit()
+            logger.info("vm_create_ipv4_assigned vm_id=%s ipv4=%s", vm_id, ipv4)
+            # Check if pool is now exhausted
+            try:
+                remaining = await self.query_repo.list_used_ipv4()
+                allocate_next_vm_ipv4(used_ipv4=remaining)
+            except (ProxmoxUnavailableError, ProxmoxConfigError):
+                await notify_ipv4_exhausted()
+            return ipv4
+        except (ProxmoxConfigError, ProxmoxUnavailableError):
+            logger.info("vm_create_no_ipv4_available vm_id=%s", vm_id)
+            await self.db.rollback()
+            return None
+        except (IntegrityError, SQLAlchemyError):
+            logger.warning("vm_create_ipv4_db_error vm_id=%s", vm_id, exc_info=True)
+            await self.db.rollback()
+            return None
+        except Exception:
+            logger.warning("vm_create_ipv4_unexpected vm_id=%s", vm_id, exc_info=True)
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+            return None
 
     async def _allocate_vm_id(self) -> int:
         """

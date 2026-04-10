@@ -1,0 +1,44 @@
+{
+  "loading": "Loading…",
+  "error": "Error",
+  "errorOccurred": "An error occurred",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "close": "Close",
+  "apply": "Apply",
+  "save": "Save",
+  "delete": "Delete",
+  "edit": "Edit",
+  "modify": "Modify",
+  "send": "Send",
+  "saved": "Saved ✓",
+  "noData": "No data",
+  "unknownError": "Unknown error",
+  "sessionExpired": "Session expired, please log in again.",
+  "errorStatus": "Error {{status}}",
+  "cores_one": "core",
+  "cores_other": "cores",
+  "gb": "GB",
+  "lightMode": "Light mode",
+  "darkMode": "Dark mode",
+  "timeframes": {
+    "hour": "1h",
+    "day": "1d",
+    "week": "1w",
+    "month": "1mo",
+    "year": "1y"
+  },
+  "maintenance": {
+    "title": "Maintenance in progress",
+    "description": "The Hosting service is temporarily unavailable for maintenance. Please try again in a few minutes."
+  },
+  "units": {
+    "gbPerSec": "GB/s",
+    "mbPerSec": "MB/s",
+    "kbPerSec": "KB/s",
+    "bPerSec": "B/s",
+    "kb": "KB",
+    "mb": "MB",
+    "tb": "TB"
+  }
+}

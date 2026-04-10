@@ -1,0 +1,137 @@
+{
+  "virtualMachines": "虚拟机",
+  "createVM": "创建虚拟机",
+  "configureVM": "创建并配置您的机器",
+  "configureNewVM": "配置您的新虚拟机",
+  "newVM": "新建虚拟机",
+  "welcome": {
+    "title": "欢迎 {{name}} 来到 Hosting！",
+    "description": "如果您已拥有 MiNET 账户并有有效订阅，此服务免费。您可以创建虚拟机并进行实验。",
+    "limits": "您最多可分配 <cores>{{cpu}} 个核心</cores>、<ram>{{ram}} GB 内存</ram>和 <disk>{{disk}} GB 磁盘</disk>到您的机器上。",
+    "subscriptionExpires": "您的订阅将在以下时间到期",
+    "years_one": "{{count}} 年",
+    "years_other": "{{count}} 年",
+    "months": "{{count}} 个月",
+    "days_one": "{{count}} 天",
+    "days_other": "{{count}} 天",
+    "subscriptionExpired": "您的订阅已过期！",
+    "subscriptionExpiredDesc": "您的虚拟机将在 {{days}} 天后被删除。请尽快续订以避免数据丢失。",
+    "subscriptionExpiredSince": "已过期 {{count}} 天"
+  },
+  "create": {
+    "name": "名称",
+    "nameHint": "最多{{max}}个字符，字母、数字、连字符",
+    "nameValidation": "仅限字母、数字和连字符，以字母数字开头",
+    "nameError": "仅限字母、数字和连字符",
+    "template": "模板",
+    "selectTemplate": "选择模板",
+    "cpu": "CPU",
+    "ramGb": "内存 GB",
+    "diskGb": "磁盘 GB",
+    "max": "最大 {{max}}",
+    "sshAccess": "SSH 访问",
+    "username": "用户名",
+    "password": "密码",
+    "sshKey": "SSH 公钥",
+    "sshKeyHelp": "如何生成密钥？",
+    "createButton": "创建虚拟机",
+    "steps": {
+      "reserving": "正在预留资源...",
+      "cloning": "正在克隆模板...",
+      "configuring": "正在配置虚拟机...",
+      "resizing": "正在调整磁盘大小...",
+      "migrating": "正在迁移到最佳节点...",
+      "migratingInProgress": "迁移中...",
+      "provisioning": "正在配置中...",
+      "success": "虚拟机创建成功！",
+      "successNoIpv4": "虚拟机创建成功，但目前没有可用的 IPv4 地址。"
+    },
+    "errorCreating": "创建虚拟机时发生错误。",
+    "quotaExhausted": "配额已用尽",
+    "quotaExhaustedDesc": "您已使用所有已分配资源。请删除一个虚拟机以创建新的。"
+  },
+  "destroy": {
+    "title": "删除 <red>{{name}}</red>？",
+    "warning": "此操作不可逆。虚拟机及其所有数据将被永久删除。",
+    "confirmTitle": "您真的确定吗？",
+    "confirmWarning": "此删除操作是永久性的。将无法恢复您的数据。",
+    "confirmButton": "是的，删除"
+  },
+  "resources": {
+    "title": "修改资源",
+    "allocated": "已分配资源",
+    "disk": "磁盘"
+  },
+  "access": {
+    "title": "虚拟机访问",
+    "sshWorks": "可直接连接！",
+    "user": "用户",
+    "password": "密码",
+    "sshKey": "SSH 密钥",
+    "ownerOnly": "仅限所有者",
+    "stopFirst": "请先关闭虚拟机"
+  },
+  "info": {
+    "request": "申请",
+    "sharedVM": "此虚拟机已与您共享"
+  },
+  "actions": {
+    "alreadyOn": "已在运行",
+    "vmOff": "虚拟机已关闭",
+    "startVM": "启动虚拟机",
+    "launchTerminal": "打开终端",
+    "backToAdmin": "返回管理面板"
+  },
+  "pendingChanges": {
+    "banner": "您的虚拟机有待处理的配置更改（{{changes}}）。请重启虚拟机以应用更改。",
+    "ipv4": "IPv4 地址",
+    "resources": "资源",
+    "cloudinit": "cloud-init 配置"
+  },
+  "deprecated": {
+    "banner": "您的虚拟机使用了已弃用的模板。建议使用最新模板重新创建。资源修改和终端已禁用。",
+    "title": "已弃用的模板",
+    "terminalDisabled": "终端已禁用。请使用最新模板重新创建您的虚拟机。",
+    "resourcesDisabled": "已弃用的模板不可用"
+  },
+  "console": {
+    "notAvailable": "控制台不可用",
+    "adminRestriction": "作为管理员，您无法访问其他用户虚拟机的控制台。",
+    "vmStopped": "虚拟机已关闭"
+  },
+  "history": {
+    "title": "历史记录",
+    "noRecentAction": "无近期操作"
+  },
+  "share": {
+    "title": "共享虚拟机",
+    "findUserId": "如何找到用户ID？",
+    "findUserIdDesc": "每位 MiNET 会员都有一个会员号，显示在 Hosting 首页，位于其名字旁边，格式为 <mono>#12345</mono>。",
+    "sharedAccess": "共享访问",
+    "sharedRights": "共享用户权限",
+    "rightsList": {
+      "viewStatus": "查看虚拟机状态和指标",
+      "accessTerminal": "访问终端",
+      "startStopRestart": "启动 / 停止 / 重启"
+    },
+    "cannotModify": "他们无法修改资源、访问设置或删除虚拟机。",
+    "memberNumber": "会员号",
+    "shareButton": "共享"
+  },
+  "request": {
+    "title": "提交申请",
+    "previousRequests": "以前的申请",
+    "retryWith": "使用这些参数重试",
+    "requestType": "申请类型",
+    "ipv4Address": "IPv4 地址",
+    "dnsName": "DNS 名称",
+    "alreadyHasIpv4": "此虚拟机已有 IPv4 地址。",
+    "ipv4Pending": "IPv4 申请正在处理中。",
+    "dnsPending": "DNS 申请正在处理中。",
+    "subdomain": "期望的子域名",
+    "ipv4Desc": "公共 IPv4 地址将由 MiNET 团队在您申请后手动分配。"
+  },
+  "metrics": {
+    "network": "网络"
+  }
+}

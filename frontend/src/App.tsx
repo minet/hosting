@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/queryClient'
@@ -17,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const VMPage = lazy(() => import('./pages/VMPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const MaintenancePage = lazy(() => import('./pages/MaintenancePage'))
 
 // Roles that trigger the access denied page (unless the user is also an admin).
 // Configure via VITE_RESTRICTED_ROLES (comma-separated), e.g.:
@@ -26,16 +28,18 @@ const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
   .map((r: string) => r.trim().replace(/^\//, ''))
   .filter(Boolean)
 
-const DEV_MODE = import.meta.env.DEV
+const IS_PREPROD = import.meta.env.VITE_APP_ENV === 'preprod'
 
-function isAccessDenied(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): boolean {
-  if (me.is_admin) return false
-  if (DEV_MODE && !me.ldap_login) return true
-  return RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))
+function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): 'preprod' | 'restricted' | null {
+  if (me.is_admin) return null
+  if (IS_PREPROD && !me.ldap_login) return 'preprod'
+  if (RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))) return 'restricted'
+  return null
 }
 
 function PageFallback() {
-  return <div className="flex items-center justify-center h-full text-xs text-neutral-400">Chargement…</div>
+  const { t } = useTranslation()
+  return <div className="flex items-center justify-center h-full text-xs text-neutral-400 dark:text-neutral-500">{t('loading')}</div>
 }
 
 function RouteBoundary({ children }: { children: ReactNode }) {
@@ -54,7 +58,12 @@ export default function App() {
 
   if (auth.status !== 'authenticated') return null
 
-  if (isAccessDenied(auth.me)) return <AccessDenied />
+  const denied = accessDeniedReason(auth.me)
+  if (denied) return <AccessDenied reason={denied} />
+
+  if (!auth.me.is_admin && auth.me.maintenance) {
+    return <Suspense fallback={null}><MaintenancePage /></Suspense>
+  }
 
   if (!auth.me.is_admin && !auth.me.date_signed_hosting) {
     return <CharterPage onSigned={auth.refresh} />
