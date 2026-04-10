@@ -5,7 +5,7 @@
   "configureNewVM": "Configurez votre nouvelle machine virtuelle",
   "newVM": "Nouvelle VM",
   "welcome": {
-    "title": "Bienvenue {{name}} sur Hosting !",
+    "title": "Bienvenue sur Hosting {{name}} !",
     "description": "Ce service est gratuit si vous possédez déjà un compte MiNET avec une cotisation. Il vous permet de créer des machines virtuelles et de vous amuser dessus.",
     "limits": "Vous disposez d'un maximum de <cores>{{cpu}} cœurs</cores>, <ram>{{ram}} Go de RAM</ram> et <disk>{{disk}} Go de disque</disk> à répartir à votre guise sur des machines.",
     "subscriptionExpires": "Votre cotisation expire dans",
