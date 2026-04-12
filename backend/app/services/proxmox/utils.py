@@ -133,6 +133,19 @@ def invalidate_vm_node_cache(vm_id: int) -> None:
     _vm_node_cache.pop(vm_id, None)
 
 
+def cache_vm_node(*, vm_id: int, node: str) -> None:
+    """Seed the node cache for *vm_id* with a known node.
+
+    Call this immediately after VM creation so that subsequent operations
+    (get_onboot, start, assign_ipv4, etc.) bypass the cluster/resources lookup,
+    which has a propagation delay right after a cross-node clone.
+
+    :param vm_id: The VMID to cache.
+    :param node: The Proxmox node hosting the VM.
+    """
+    _vm_node_cache[vm_id] = (node, time.monotonic())
+
+
 def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     """Return the node hosting a VM, with a short TTL cache.
 
