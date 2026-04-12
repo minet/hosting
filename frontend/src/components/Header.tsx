@@ -43,8 +43,8 @@ export default function Header({ onBurgerClick }: Props) {
         <span className="text-xs text-neutral-400 font-medium">v3.0</span>
       </div>
       <div className="flex items-center gap-3">
-        {/* Language dropdown */}
-        <div className="relative" ref={langRef}>
+        {/* Language dropdown — hidden on mobile (moved to sidebar) */}
+        <div className="relative hidden md:block" ref={langRef}>
           <button
             onClick={() => setLangOpen(!langOpen)}
             className="flex items-center gap-1.5 px-2.5 py-1.5 border border-neutral-200 dark:border-neutral-700 rounded-md text-[11px] font-semibold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
