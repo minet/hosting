@@ -4,6 +4,12 @@ import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useVMList, useVMStatus } from '../contexts/VMStatusContext'
 
+const LANGS = [
+  { code: 'fr', label: 'FR', flag: '🇫🇷' },
+  { code: 'en', label: 'EN', flag: '🇬🇧' },
+  { code: 'zh', label: '中文', flag: '🇨🇳' },
+]
+
 function VMSidebarItem({ vm, expanded, onMobileClose }: { vm: { vm_id: number; name: string; role: string }; expanded: boolean; onMobileClose: () => void }) {
   const entry = useVMStatus(vm.vm_id)
   const running = entry?.status === 'running'
@@ -35,6 +41,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
   const expanded = hovered || mobileOpen
   const vms = useVMList()
   const { t } = useTranslation('vm')
+  const { i18n } = useTranslation()
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : ''
@@ -90,7 +97,24 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
           </div>
         </nav>
 
-        <div className="mt-auto p-4 md:hidden">
+        <div className="mt-auto p-4 flex flex-col gap-2 md:hidden">
+          {/* Language selector */}
+          <div className="flex gap-1">
+            {LANGS.map(l => (
+              <button
+                key={l.code}
+                onClick={() => i18n.changeLanguage(l.code)}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                  i18n.language?.startsWith(l.code)
+                    ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 border-neutral-900 dark:border-neutral-100'
+                    : 'border-neutral-200 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <span>{l.flag}</span>
+                <span>{l.label}</span>
+              </button>
+            ))}
+          </div>
           <a
             href="https://github.com/andinox/hosting"
             target="_blank"
