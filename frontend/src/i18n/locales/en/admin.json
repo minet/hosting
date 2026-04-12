@@ -100,6 +100,9 @@
   "maintenance": {
     "enable": "Enable maintenance",
     "disable": "Disable maintenance",
-    "active": "Maintenance active"
+    "active": "Maintenance active",
+    "confirmTitle": "Enable maintenance?",
+    "confirmBody": "Users will no longer be able to access the service. Make sure members have been notified before enabling.",
+    "confirmBtn": "Enable"
   }
 }

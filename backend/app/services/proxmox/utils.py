@@ -123,6 +123,16 @@ def vm_node_from_cluster(*, client: ProxmoxAPI, vm_id: int) -> str | None:
     return None
 
 
+def invalidate_vm_node_cache(vm_id: int) -> None:
+    """Remove the cached node entry for *vm_id*, forcing a fresh cluster lookup.
+
+    Call this when a VM is known to have moved (e.g. after migration).
+
+    :param vm_id: The VMID whose cache entry should be evicted.
+    """
+    _vm_node_cache.pop(vm_id, None)
+
+
 def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     """Return the node hosting a VM, with a short TTL cache.
 
@@ -317,6 +327,7 @@ def _as_int(value: Any) -> int | None:
 __all__ = [
     "clone_node_for_template",
     "disk_size_gb",
+    "invalidate_vm_node_cache",
     "least_loaded_node",
     "node_for_vm",
     "resolve_vm_mac",
