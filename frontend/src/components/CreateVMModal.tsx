@@ -17,7 +17,7 @@ interface TaskItem {
   endtime: number | null
 }
 
-const VM_NAME_MAX_LENGTH = Number(import.meta.env.VITE_VM_NAME_MAX_LENGTH) || 10
+const VM_NAME_MAX_LENGTH = 60
 
 const inputClass = "w-full border border-neutral-200 dark:border-neutral-600 rounded-md px-3 py-2 text-sm text-neutral-800 dark:text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 bg-white dark:bg-neutral-800"
 const labelClass = "text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wide"
@@ -114,7 +114,7 @@ export default function CreateVMModal({ onClose }: Props) {
     e.preventDefault()
     if (!templateId) return
     if (cpu === '' || ram === '' || disk === '') return
-    if (!VM_NAME_RE.test(name) || name.length > 10) return
+    if (!VM_NAME_RE.test(name) || name.length > VM_NAME_MAX_LENGTH) return
     setCreating(true)
     setError(null)
     setDone(false)

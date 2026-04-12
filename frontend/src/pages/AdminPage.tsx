@@ -10,6 +10,7 @@ import { useAdminGroupMembers } from '../hooks/useAdminGroupMembers'
 import { useAllStatuses } from '../contexts/VMStatusContext'
 import { useDebounce } from '../hooks/useDebounce'
 import VMTableRow from '../components/admin/VMTableRow'
+import ConfirmModal from '../components/ConfirmModal'
 import Th, { type SortKey, type SortDir, type ColId, DEFAULT_WIDTHS } from '../components/admin/Th'
 import TemplatesTab from '../components/admin/TemplatesTab'
 import ProxmoxTab from '../components/admin/ProxmoxTab'
@@ -41,6 +42,8 @@ export default function AdminPage() {
   const tc = useTranslation().t
   const me = useUser()
   const [maintenance, setMaintenance] = useState(me.maintenance ?? false)
+  const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false)
+  const [togglingMaintenance, setTogglingMaintenance] = useState(false)
   const { vms, loading, refresh: refreshVMs } = useAdminVMs()
   const { pendingByVm, updateRequest } = useAdminRequests(refreshVMs)
   const statuses = useAllStatuses()
@@ -181,9 +184,39 @@ export default function AdminPage() {
   }, [refreshVMs])
 
   async function toggleMaintenance() {
+    if (!maintenance) {
+      setMaintenanceConfirmOpen(true)
+      return
+    }
     const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
     setMaintenance(res.maintenance)
   }
+
+  async function confirmEnableMaintenance() {
+    setTogglingMaintenance(true)
+    try {
+      const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
+      setMaintenance(res.maintenance)
+      setMaintenanceConfirmOpen(false)
+    } finally {
+      setTogglingMaintenance(false)
+    }
+  }
+
+  // ─── Maintenance confirm modal ────────────────────────────────────────────
+  const maintenanceModal = maintenanceConfirmOpen ? (
+    <ConfirmModal
+      title={t('maintenance.confirmTitle')}
+      confirmLabel={t('maintenance.confirmBtn')}
+      cancelLabel={tc('cancel')}
+      danger
+      loading={togglingMaintenance}
+      onConfirm={confirmEnableMaintenance}
+      onClose={() => setMaintenanceConfirmOpen(false)}
+    >
+      <p className="text-sm text-neutral-600 dark:text-neutral-400">{t('maintenance.confirmBody')}</p>
+    </ConfirmModal>
+  ) : null
 
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
@@ -209,6 +242,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <TemplatesTab />
+        {maintenanceModal}
       </div>
     )
   }
@@ -218,6 +252,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <ProxmoxTab />
+        {maintenanceModal}
       </div>
     )
   }
@@ -227,6 +262,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <OrphanedVMsTab />
+        {maintenanceModal}
       </div>
     )
   }
@@ -236,6 +272,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <ExpiredVMsTab />
+        {maintenanceModal}
       </div>
     )
   }
@@ -245,6 +282,7 @@ export default function AdminPage() {
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <IPHistoryTab />
+        {maintenanceModal}
       </div>
     )
   }
@@ -320,6 +358,7 @@ export default function AdminPage() {
       <div className="text-xs text-neutral-400 dark:text-neutral-500 text-right font-mono shrink-0">
         Rows: {sorted.length}&nbsp;&nbsp;Total Rows: {vms.length}
       </div>
+      {maintenanceModal}
     </div>
   )
 }

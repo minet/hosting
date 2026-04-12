@@ -23,6 +23,7 @@ from app.services.proxmox.tasks import TaskService, clamp_task_limit, ensure_upi
 from app.services.proxmox.utils import (
     clone_node_for_template,
     disk_size_gb,
+    invalidate_vm_node_cache,
     least_loaded_node,
     node_for_vm,
     resolve_vm_mac,
@@ -430,14 +431,28 @@ class ProxmoxGateway:
     def _status_action(self, *, vm_id: int, action: str) -> None:
         """Execute a power-state action on a VM and wait for the resulting task.
 
+        If Proxmox returns 404 (VM not found on the cached node — it may have
+        migrated after creation), the node cache is invalidated and the action
+        is retried once against the freshly resolved node.
+
         :param vm_id: VMID of the target VM.
         :param action: Proxmox status action name (e.g. ``"start"``, ``"stop"``,
             ``"reboot"``).
         """
+        from app.services.proxmox.errors import ResourceException
+
         node = node_for_vm(client=self._client, vm_id=vm_id)
         timeout = task_timeout_seconds()
-        status = self._client.nodes(node).qemu(vm_id).status
-        result = getattr(status, action).post()
+        try:
+            result = getattr(self._client.nodes(node).qemu(vm_id).status, action).post()
+        except ResourceException as exc:
+            if getattr(exc, "status_code", None) == 404:
+                # VM moved to a different node (post-creation migration); retry fresh.
+                invalidate_vm_node_cache(vm_id)
+                node = node_for_vm(client=self._client, vm_id=vm_id)
+                result = getattr(self._client.nodes(node).qemu(vm_id).status, action).post()
+            else:
+                raise
         self._tasks.wait_if_async(node=node, result=result, timeout_seconds=timeout)
 
     def get_vm_status(self, *, vm_id: int) -> dict[str, Any]:
