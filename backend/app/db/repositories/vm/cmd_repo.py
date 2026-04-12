@@ -360,6 +360,53 @@ class VmCmdRepo:
             self.db.add(entry)
             await self.db.flush()
 
+    async def change_template(self, vm_id: int, template_id: int) -> bool:
+        """Update the template reference of a VM.
+
+        :param vm_id: The VM identifier.
+        :param template_id: The new template ID to assign.
+        :returns: ``True`` if the VM was found and updated, ``False`` otherwise.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+        vm.template_id = template_id
+        self.db.add(vm)
+        await self.db.flush()
+        return True
+
+    async def change_owner(self, vm_id: int, new_owner_id: str) -> bool:
+        """Transfer ownership of a VM to a new user.
+
+        Removes the current owner's ``role_owner`` flag and either promotes an
+        existing shared-access entry for ``new_owner_id`` or inserts a new one.
+        The previous owner loses their access entirely if they had no other entry.
+
+        :param vm_id: The VM identifier.
+        :param new_owner_id: Keycloak UUID of the new owner.
+        :returns: ``True`` if the VM was found and ownership transferred, ``False`` otherwise.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+
+        # Remove all existing owner entries
+        await self.db.execute(
+            delete(VMAccess).where(VMAccess.vm_id == vm_id, VMAccess.role_owner == True)  # noqa: E712
+        )
+
+        # Upsert new owner entry (new user may already have shared access)
+        await self.db.execute(
+            pg_insert(VMAccess)
+            .values(vm_id=vm_id, user_id=new_owner_id, role_owner=True)
+            .on_conflict_do_update(
+                index_elements=["vm_id", "user_id"],
+                set_={"role_owner": True},
+            )
+        )
+        await self.db.flush()
+        return True
+
     async def delete_vm_with_related(self, vm_id: int) -> bool:
         """Delete a VM and all its related resources and access entries.
 

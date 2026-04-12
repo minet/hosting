@@ -90,6 +90,12 @@
     "reject": "Rejeter",
     "requestIpv4": "Demande IPv4"
   },
+  "changeOwner": {
+    "title": "Changer le propriétaire"
+  },
+  "removeFromDB": "Supprimer de la base de données",
+  "removeFromDBConfirm": "Supprimer la VM #{{id}} ({{name}}) de la base de données ?\n\nCette action ne supprime PAS la VM sur Proxmox.",
+  "removeFromDBConfirmBtn": "Supprimer",
   "revealIdentity": "Révéler l'identité",
   "maintenance": {
     "enable": "Activer la maintenance",

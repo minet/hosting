@@ -42,6 +42,7 @@ from app.services.auth.keycloak_admin import (
     fetch_keycloak_group_members_async,
     fetch_keycloak_user_by_id_async,
 )
+from app.services.discord import notify_request_approved
 from app.services.dns import DnsService
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
@@ -191,7 +192,7 @@ async def list_pending_requests(
 async def update_request_status(
     request_id: int,
     body: AdminRequestUpdateBody,
-    _: AuthCtx = Depends(require_admin),
+    admin_ctx: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> AdminRequestResponse:
@@ -205,6 +206,7 @@ async def update_request_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
     settings = get_settings()
+    approved_by = admin_ctx.payload.get("preferred_username") or admin_ctx.user_id
 
     if body.status == "approved" and row["type"] == "ipv4":
         ipv4 = await cmd.allocate_and_assign_ipv4(vm_id=row["vm_id"])
@@ -214,6 +216,7 @@ async def update_request_status(
         ipv6 = vm.get("ipv6") if vm else None
         async with DnsService(settings=settings) as dns_svc:
             await dns_svc.create_records(vm_id=row["vm_id"], ipv4=ipv4, ipv6=ipv6)
+        await notify_request_approved(vm_id=row["vm_id"], request_type="ipv4", approved_by=approved_by)
     elif body.status == "approved" and row["type"] == "dns":
         dns_label = row.get("dns_label")
         if not dns_label:
@@ -232,6 +235,7 @@ async def update_request_status(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail=f"Failed to create DNS record in PowerDNS: {exc}",
                 ) from exc
+        await notify_request_approved(vm_id=row["vm_id"], request_type="dns", approved_by=approved_by, dns_label=dns_label)
     else:
         await db.commit()
 
@@ -564,6 +568,84 @@ async def trigger_purge(
     _settings = get_settings()
     _gateway = get_proxmox_gateway() if _settings.proxmox_configured else None
     return await run_purge(db=db, gateway=_gateway, settings=_settings)
+
+
+@router.patch("/admin/vms/{vm_id}/template", status_code=204)
+async def change_vm_template(
+    vm_id: int,
+    body: dict,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Change the template associated with a VM in the database (admin only).
+
+    Does NOT re-provision the VM on Proxmox — only updates the DB reference.
+
+    :param vm_id: The VM identifier.
+    :param body: Must contain ``template_id`` (int).
+    :raises HTTPException 422: If ``template_id`` is missing or not an int.
+    :raises HTTPException 404: If the VM or template is not found.
+    """
+    raw = body.get("template_id")
+    if raw is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="template_id is required")
+    try:
+        template_id = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="template_id must be an integer")
+
+    from app.db.models.template import Template
+    if await db.get(Template, template_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+
+    if not await VmCmdRepo(db).change_template(vm_id=vm_id, template_id=template_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+    await db.commit()
+
+
+@router.patch("/admin/vms/{vm_id}/owner", status_code=204)
+async def change_vm_owner(
+    vm_id: int,
+    body: dict,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Transfer ownership of a VM to another user (admin only).
+
+    :param vm_id: The VM identifier.
+    :param body: Must contain ``new_owner_id`` (Keycloak UUID of the new owner).
+    :raises HTTPException 422: If ``new_owner_id`` is missing.
+    :raises HTTPException 404: If the VM is not found.
+    """
+    new_owner_id = body.get("new_owner_id")
+    if not new_owner_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="new_owner_id is required")
+    if not await VmCmdRepo(db).change_owner(vm_id=vm_id, new_owner_id=new_owner_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+    await db.commit()
+
+
+@router.delete("/admin/vms/{vm_id}", status_code=204)
+async def remove_vm_from_db(
+    vm_id: int,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove a VM and all its related records from the database (admin only).
+
+    Does NOT touch Proxmox. Use this to clean up stale DB records for VMs
+    that no longer exist on the hypervisor.
+
+    :param vm_id: The VM identifier to delete.
+    :param _: Authenticated admin context (injected).
+    :param db: Database session (injected).
+    :raises HTTPException 404: If the VM is not found in the database.
+    """
+    repo = VmCmdRepo(db)
+    await repo.release_ip_history(vm_id)
+    if not await repo.delete_vm_with_related(vm_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+    await db.commit()
 
 
 @router.get("/admin/vms/orphaned")

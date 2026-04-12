@@ -157,6 +157,29 @@ export default function AdminPage() {
     refreshVMs()
   }, [refreshVMs])
 
+  const handleRemoveFromDB = useCallback(async (vmId: number) => {
+    await apiFetch(`/api/admin/vms/${vmId}`, { method: 'DELETE' })
+    refreshVMs()
+  }, [refreshVMs])
+
+  const handleChangeOwner = useCallback(async (vmId: number, newOwnerId: string) => {
+    await apiFetch(`/api/admin/vms/${vmId}/owner`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_owner_id: newOwnerId }),
+    })
+    refreshVMs()
+  }, [refreshVMs])
+
+  const handleChangeTemplate = useCallback(async (vmId: number, templateId: number) => {
+    await apiFetch(`/api/admin/vms/${vmId}/template`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId }),
+    })
+    refreshVMs()
+  }, [refreshVMs])
+
   async function toggleMaintenance() {
     const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
     setMaintenance(res.maintenance)
@@ -266,6 +289,7 @@ export default function AdminPage() {
               <Th col="owner_id"     label={t('columns.owner')} width={colWidths.owner_id}    {...thProps}
                 filter={{ active: !!filters.owner, type: 'text', value: filters.owner, onChange: v => setFilter('owner', v), placeholder: `${t('columns.name')}…` }} />
               <Th col="cotise"       label={t('columns.subscription')} width={colWidths.cotise}      {...thProps} />
+              <th className="px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider bg-neutral-50 dark:bg-neutral-800 w-10 min-w-10" />
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -284,6 +308,9 @@ export default function AdminPage() {
                 onUpdateRequest={updateRequest}
                 onRemoveIpv4={handleRemoveIpv4}
                 onRemoveDns={handleRemoveDns}
+                onRemoveFromDB={handleRemoveFromDB}
+                onChangeOwner={handleChangeOwner}
+                onChangeTemplate={handleChangeTemplate}
               />
             ))}
           </tbody>
