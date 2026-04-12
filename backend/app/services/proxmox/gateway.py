@@ -21,6 +21,7 @@ from app.services.proxmox.errors import (
 from app.services.proxmox.models import CloudInitPatchSpec
 from app.services.proxmox.tasks import TaskService, clamp_task_limit, ensure_upid, normalize_vm_tasks
 from app.services.proxmox.utils import (
+    cache_vm_node,
     clone_node_for_template,
     disk_size_gb,
     invalidate_vm_node_cache,
@@ -252,9 +253,14 @@ class ProxmoxGateway:
         )
         self._client.nodes(target_node).qemu(vm_id).config.post(**payload)
 
+        # Seed the node cache immediately so subsequent operations (get_onboot,
+        # start, assign_ipv4, etc.) bypass the cluster/resources lookup which
+        # has a propagation delay right after creation.
+        cache_vm_node(vm_id=vm_id, node=target_node)
+
         return target_node
 
-    def assign_vm_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+    def assign_vm_ipv4(self, *, vm_id: int, vm_ipv4: str, node: str | None = None) -> None:
         """Inject an IPv4 address into the VM's cloud-init network configuration.
 
         Reads the configured ``VM_IPV4_SUBNET`` and ``VM_IPV4_GATEWAY_HOST`` to
@@ -264,25 +270,31 @@ class ProxmoxGateway:
         :type vm_id: int
         :param vm_ipv4: IPv4 address string to assign.
         :type vm_ipv4: str
+        :param node: Proxmox node hosting the VM. If omitted, resolved via the
+            cluster resources API. Pass the known node during VM creation to
+            avoid the cluster propagation race.
+        :type node: str | None
         :raises ProxmoxError: On API or configuration failures.
         :raises ProxmoxConfigError: If ``VM_IPV4_SUBNET`` is not configured.
         """
-        self._guard(lambda: self._do_assign_ipv4(vm_id=vm_id, vm_ipv4=vm_ipv4))
+        self._guard(lambda: self._do_assign_ipv4(vm_id=vm_id, vm_ipv4=vm_ipv4, node=node))
 
-    def _do_assign_ipv4(self, *, vm_id: int, vm_ipv4: str) -> None:
+    def _do_assign_ipv4(self, *, vm_id: int, vm_ipv4: str, node: str | None = None) -> None:
         """Internal implementation of IPv4 assignment.
 
         :param vm_id: VMID of the target virtual machine.
         :type vm_id: int
         :param vm_ipv4: IPv4 address string to assign.
         :type vm_ipv4: str
+        :param node: Proxmox node hosting the VM, or ``None`` to resolve via cluster.
+        :type node: str | None
         """
         from app.services.proxmox.allocation import ipv4_network_settings_for_ip
 
         _, gw4, prefix = ipv4_network_settings_for_ip(vm_ipv4)
-        node = node_for_vm(client=self._client, vm_id=vm_id)
+        resolved_node = node or node_for_vm(client=self._client, vm_id=vm_id)
         self._cloudinit.assign_vm_ipv4(
-            node=node,
+            node=resolved_node,
             vm_id=vm_id,
             vm_ipv4=vm_ipv4,
             ipv4_prefix=prefix,

@@ -123,7 +123,7 @@ class VmCreateService:
 
         if ipv4:
             try:
-                await asyncio.to_thread(self.gateway.assign_vm_ipv4, vm_id=reservation.vm_id, vm_ipv4=ipv4)
+                await asyncio.to_thread(self.gateway.assign_vm_ipv4, vm_id=reservation.vm_id, vm_ipv4=ipv4, node=node)
             except ProxmoxError:
                 logger.warning("vm_create_ipv4_proxmox_config_failed vm_id=%s ipv4=%s", reservation.vm_id, ipv4, exc_info=True)
 
