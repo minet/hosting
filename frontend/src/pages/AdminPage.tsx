@@ -162,6 +162,15 @@ export default function AdminPage() {
     refreshVMs()
   }, [refreshVMs])
 
+  const handleChangeOwner = useCallback(async (vmId: number, newOwnerId: string) => {
+    await apiFetch(`/api/admin/vms/${vmId}/owner`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_owner_id: newOwnerId }),
+    })
+    refreshVMs()
+  }, [refreshVMs])
+
   async function toggleMaintenance() {
     const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
     setMaintenance(res.maintenance)
@@ -291,6 +300,7 @@ export default function AdminPage() {
                 onRemoveIpv4={handleRemoveIpv4}
                 onRemoveDns={handleRemoveDns}
                 onRemoveFromDB={handleRemoveFromDB}
+                onChangeOwner={handleChangeOwner}
               />
             ))}
           </tbody>

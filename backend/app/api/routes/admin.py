@@ -570,6 +570,28 @@ async def trigger_purge(
     return await run_purge(db=db, gateway=_gateway, settings=_settings)
 
 
+@router.patch("/admin/vms/{vm_id}/owner", status_code=204)
+async def change_vm_owner(
+    vm_id: int,
+    body: dict,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Transfer ownership of a VM to another user (admin only).
+
+    :param vm_id: The VM identifier.
+    :param body: Must contain ``new_owner_id`` (Keycloak UUID of the new owner).
+    :raises HTTPException 422: If ``new_owner_id`` is missing.
+    :raises HTTPException 404: If the VM is not found.
+    """
+    new_owner_id = body.get("new_owner_id")
+    if not new_owner_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="new_owner_id is required")
+    if not await VmCmdRepo(db).change_owner(vm_id=vm_id, new_owner_id=new_owner_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+    await db.commit()
+
+
 @router.delete("/admin/vms/{vm_id}", status_code=204)
 async def remove_vm_from_db(
     vm_id: int,
