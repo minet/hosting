@@ -116,7 +116,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, onCreateVM }: Props
             ))}
           </div>
           <a
-            href="https://github.com/andinox/hosting"
+            href="https://github.com/minet/hosting"
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-2 text-xs px-3 py-2 border border-neutral-200 dark:border-neutral-700 rounded-sm text-neutral-500 dark:text-neutral-400"

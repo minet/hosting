@@ -80,7 +80,7 @@ export default function Header({ onBurgerClick }: Props) {
           {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
         </button>
         <a
-          href="https://github.com/andinox/hosting"
+          href="https://github.com/minet/hosting"
           target="_blank"
           rel="noreferrer"
           className="hidden md:flex items-center gap-1.5 text-xs px-3 py-1.5 border rounded-sm transition-colors border-neutral-200 dark:border-neutral-600 text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:border-neutral-400"
