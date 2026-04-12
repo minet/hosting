@@ -90,6 +90,8 @@
     "reject": "Rejeter",
     "requestIpv4": "Demande IPv4"
   },
+  "removeFromDB": "Supprimer de la base de données",
+  "removeFromDBConfirm": "Supprimer la VM #{{id}} ({{name}}) de la base de données ? Cette action ne supprime PAS la VM sur Proxmox.",
   "revealIdentity": "Révéler l'identité",
   "maintenance": {
     "enable": "Activer la maintenance",

@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Cpu, MemoryStick, HardDrive, X, Loader } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, X, Loader, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AdminVM } from '../../hooks/useAdminVMs'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
@@ -17,15 +17,17 @@ interface Props {
   onUpdateRequest: (id: number, status: 'approved' | 'rejected') => Promise<void>
   onRemoveIpv4: (vmId: number) => Promise<void>
   onRemoveDns: (vmId: number) => Promise<void>
+  onRemoveFromDB: (vmId: number) => Promise<void>
 }
 
-function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns }: Props) {
+function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns, onRemoveFromDB }: Props) {
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
   const ipv4Req = pendingRequests?.find(r => r.type === 'ipv4')
   const dnsReq = pendingRequests?.find(r => r.type === 'dns')
   const [removingIpv4, setRemovingIpv4] = useState(false)
   const [removingDns, setRemovingDns] = useState(false)
+  const [removingFromDB, setRemovingFromDB] = useState(false)
 
   return (
     <tr onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
@@ -117,6 +119,20 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
             ? <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 dark:bg-red-950 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800">{t('expired')}</span>
             : <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">OK</span>
         ) : <span className="text-neutral-300 dark:text-neutral-600 text-xs">—</span>}
+      </td>
+      <td className="px-3 py-2 text-center overflow-hidden" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={async () => {
+            if (!window.confirm(t('removeFromDBConfirm', { id: vm.vm_id, name: vm.name }))) return
+            setRemovingFromDB(true)
+            try { await onRemoveFromDB(vm.vm_id) } finally { setRemovingFromDB(false) }
+          }}
+          disabled={removingFromDB}
+          title={t('removeFromDB')}
+          className="text-neutral-300 dark:text-neutral-600 hover:text-red-500 transition-colors cursor-pointer disabled:opacity-40"
+        >
+          {removingFromDB ? <Loader size={13} className="animate-spin" /> : <Trash2 size={13} />}
+        </button>
       </td>
     </tr>
   )

@@ -90,6 +90,34 @@ async def notify_new_request(
     await _send_webhook(content=f"<@&{ROLE_REQUEST}>", embeds=[embed])
 
 
+async def notify_request_approved(
+    *,
+    vm_id: int,
+    request_type: str,
+    approved_by: str,
+    dns_label: str | None = None,
+) -> None:
+    """Notify Discord that an admin approved a request."""
+    tag = _env_tag()
+    base_url = _base_url()
+    fields = [
+        {"name": "VM", "value": f"[`#{vm_id}`]({base_url}/vm/{vm_id})", "inline": True},
+        {"name": "Type", "value": request_type.upper(), "inline": True},
+        {"name": "Acceptée par", "value": f"`{approved_by}`", "inline": True},
+    ]
+    if dns_label:
+        fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
+
+    embed = {
+        "title": f"[{tag}] Demande acceptée — {request_type.upper()}",
+        "color": _env_color(0x2ECC71),
+        "fields": fields,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
+    }
+    await _send_webhook(content="", embeds=[embed])
+
+
 async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int) -> None:
     """Notify Discord that a VM has been deleted by the purge (expired membership)."""
     tag = _env_tag()

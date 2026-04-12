@@ -90,6 +90,8 @@
     "reject": "拒绝",
     "requestIpv4": "IPv4 申请"
   },
+  "removeFromDB": "从数据库中删除",
+  "removeFromDBConfirm": "从数据库中删除 VM #{{id}} ({{name}})？此操作不会删除 Proxmox 上的 VM。",
   "revealIdentity": "显示身份",
   "maintenance": {
     "enable": "启用维护模式",
