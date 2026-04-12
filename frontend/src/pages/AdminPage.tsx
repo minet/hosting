@@ -171,6 +171,15 @@ export default function AdminPage() {
     refreshVMs()
   }, [refreshVMs])
 
+  const handleChangeTemplate = useCallback(async (vmId: number, templateId: number) => {
+    await apiFetch(`/api/admin/vms/${vmId}/template`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template_id: templateId }),
+    })
+    refreshVMs()
+  }, [refreshVMs])
+
   async function toggleMaintenance() {
     const res = await apiFetch<{ maintenance: boolean }>('/api/maintenance', { method: 'POST' })
     setMaintenance(res.maintenance)
@@ -301,6 +310,7 @@ export default function AdminPage() {
                 onRemoveDns={handleRemoveDns}
                 onRemoveFromDB={handleRemoveFromDB}
                 onChangeOwner={handleChangeOwner}
+                onChangeTemplate={handleChangeTemplate}
               />
             ))}
           </tbody>

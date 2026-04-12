@@ -570,6 +570,39 @@ async def trigger_purge(
     return await run_purge(db=db, gateway=_gateway, settings=_settings)
 
 
+@router.patch("/admin/vms/{vm_id}/template", status_code=204)
+async def change_vm_template(
+    vm_id: int,
+    body: dict,
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Change the template associated with a VM in the database (admin only).
+
+    Does NOT re-provision the VM on Proxmox — only updates the DB reference.
+
+    :param vm_id: The VM identifier.
+    :param body: Must contain ``template_id`` (int).
+    :raises HTTPException 422: If ``template_id`` is missing or not an int.
+    :raises HTTPException 404: If the VM or template is not found.
+    """
+    raw = body.get("template_id")
+    if raw is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="template_id is required")
+    try:
+        template_id = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="template_id must be an integer")
+
+    from app.db.models.template import Template
+    if await db.get(Template, template_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+
+    if not await VmCmdRepo(db).change_template(vm_id=vm_id, template_id=template_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found")
+    await db.commit()
+
+
 @router.patch("/admin/vms/{vm_id}/owner", status_code=204)
 async def change_vm_owner(
     vm_id: int,

@@ -360,6 +360,21 @@ class VmCmdRepo:
             self.db.add(entry)
             await self.db.flush()
 
+    async def change_template(self, vm_id: int, template_id: int) -> bool:
+        """Update the template reference of a VM.
+
+        :param vm_id: The VM identifier.
+        :param template_id: The new template ID to assign.
+        :returns: ``True`` if the VM was found and updated, ``False`` otherwise.
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+        vm.template_id = template_id
+        self.db.add(vm)
+        await self.db.flush()
+        return True
+
     async def change_owner(self, vm_id: int, new_owner_id: str) -> bool:
         """Transfer ownership of a VM to a new user.
 

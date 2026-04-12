@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Cpu, MemoryStick, HardDrive, X, Loader, Trash2, UserPen } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, X, Loader, Trash2, UserPen, FileStack } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AdminVM } from '../../hooks/useAdminVMs'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
@@ -8,6 +8,7 @@ import RequestBadge from './RequestBadge'
 import RevealOwner from './RevealOwner'
 import ConfirmModal from '../ConfirmModal'
 import ChangeOwnerModal from './ChangeOwnerModal'
+import ChangeTemplateModal from './ChangeTemplateModal'
 
 interface Props {
   vm: AdminVM
@@ -21,9 +22,10 @@ interface Props {
   onRemoveDns: (vmId: number) => Promise<void>
   onRemoveFromDB: (vmId: number) => Promise<void>
   onChangeOwner: (vmId: number, newOwnerId: string) => Promise<void>
+  onChangeTemplate: (vmId: number, templateId: number) => Promise<void>
 }
 
-function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns, onRemoveFromDB, onChangeOwner }: Props) {
+function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns, onRemoveFromDB, onChangeOwner, onChangeTemplate }: Props) {
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
   const ipv4Req = pendingRequests?.find(r => r.type === 'ipv4')
@@ -33,6 +35,7 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
   const [removingFromDB, setRemovingFromDB] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [changeOwnerOpen, setChangeOwnerOpen] = useState(false)
+  const [changeTemplateOpen, setChangeTemplateOpen] = useState(false)
 
   return (
     <tr onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
@@ -43,8 +46,17 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
       <td className="px-3 py-2 font-medium text-neutral-800 dark:text-neutral-200 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <span className="block truncate">{vm.name}</span>
       </td>
-      <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
-        <span className="block truncate">{vm.template_name}</span>
+      <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-1 group/tpl">
+          <span className="truncate">{vm.template_name}</span>
+          <button
+            onClick={() => setChangeTemplateOpen(true)}
+            title="Changer le template"
+            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer opacity-0 group-hover/tpl:opacity-100"
+          >
+            <FileStack size={12} />
+          </button>
+        </div>
       </td>
       <td className="px-3 py-2 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <div className="flex items-center gap-3 text-xs">
@@ -172,6 +184,15 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
           currentOwnerId={vm.owner_id}
           onConfirm={newOwnerId => onChangeOwner(vm.vm_id, newOwnerId)}
           onClose={() => setChangeOwnerOpen(false)}
+        />
+      )}
+      {changeTemplateOpen && (
+        <ChangeTemplateModal
+          vmId={vm.vm_id}
+          vmName={vm.name}
+          currentTemplateId={vm.template_id}
+          onConfirm={templateId => onChangeTemplate(vm.vm_id, templateId)}
+          onClose={() => setChangeTemplateOpen(false)}
         />
       )}
     </tr>
