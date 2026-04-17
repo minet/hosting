@@ -198,11 +198,12 @@ async def run_purge(
                         "Si vous souhaitez conserver votre VM, renouvelez votre cotisation sur https://adh6.minet.net\n\n"
                         "— L'équipe MiNET"
                     )
-                    html_notice = jinja_env.get_template("emails/vm_deleted.html").render(
+                    html_notice = jinja_env.get_template("emails/vm_deletion_notice.html").render(
                         prenom=prenom,
                         nom=nom,
                         vm_name=vm_name,
                         vm_id=vm_id,
+                        days_expired=days_expired,
                     )
                     await send_email_async(to_email=email, subject=subject, plain=plain, html=html_notice, settings=settings)
                     try:
