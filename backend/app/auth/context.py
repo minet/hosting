@@ -12,7 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security.api_key import APIKeyHeader
 
 from app.core.config import Settings, get_settings
 from app.core.security.token import TokenPayload, get_token_payload
@@ -276,6 +277,28 @@ def require_charter_signed(
             detail="charter_not_signed",
         )
     return ctx
+
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+def require_api_key(
+    api_key: str | None = Security(_api_key_header),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """FastAPI dependency that enforces API key authentication.
+
+    The key must match ``INTERNAL_API_KEY`` from settings and be provided
+    in the ``X-API-Key`` header.
+
+    :raises ~fastapi.HTTPException: ``401`` if the key is missing or invalid,
+        or if ``INTERNAL_API_KEY`` is not configured.
+    """
+    configured = settings.internal_api_key
+    if not configured:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="API key not configured")
+    if not api_key or api_key != configured:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing API key")
 
 
 def require_cotisant(
