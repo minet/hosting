@@ -246,6 +246,24 @@ async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, 
     return await asyncio.to_thread(fetch_keycloak_group_members, group_path)
 
 
+async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
+    """Return the combined list of members to check for VM expiration.
+
+    Includes:
+    - all members of ``/hosting/ended``
+    - members of ``/hosting/vms`` who are in neither ``/hosting/charte``
+      nor ``/hosting/ended`` (they have a VM but no active cotisation)
+    """
+    ended, vms, charte = await asyncio.gather(
+        fetch_keycloak_group_members_async("/hosting/ended"),
+        fetch_keycloak_group_members_async("/hosting/vms"),
+        fetch_keycloak_group_members_async("/hosting/charte"),
+    )
+    excluded_ids = {m["id"] for m in ended + charte if m.get("id")}
+    orphans = [m for m in vms if m.get("id") and m["id"] not in excluded_ids]
+    return ended + orphans
+
+
 async def set_date_signed_hosting_async(user_id: str, date_iso: str) -> bool:
     return await asyncio.to_thread(set_date_signed_hosting, user_id, date_iso)
 

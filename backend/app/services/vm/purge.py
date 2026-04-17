@@ -21,7 +21,7 @@ from app.core.config import Settings
 from app.core.templates import jinja_env
 from app.db.models.vm_purge_mail import VMPurgeMail
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
+from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async, fetch_members_to_check_for_expiration
 from app.services.discord import notify_vm_purge_deleted
 from app.services.dns import DnsService
 from app.services.email import send_email_async
@@ -123,7 +123,7 @@ async def run_purge(
 ) -> dict[str, Any]:
     """Run one purge cycle.
 
-    - Fetches members of the hosting_ended group (expired memberships).
+    - Fetches members of the hosting/ended group (expired memberships).
     - For each, checks how long ago their membership expired.
     - Sends a warning email at most once per 30 days.
     - Deletes the VM if 6 months have passed (only when Proxmox is configured).
@@ -135,10 +135,9 @@ async def run_purge(
     cmd_repo = VmCmdRepo(db)
     dns = DnsService(settings=settings)
 
-    # Get expired users from Keycloak group
-    expired_members = await fetch_keycloak_group_members_async("/hosting_ended")
+    expired_members = await fetch_members_to_check_for_expiration()
     if not expired_members:
-        logger.info("purge: no expired members found")
+        logger.info("purge: no members to check for expiration")
         return {"warned": 0, "deleted": 0}
 
     expired_ids = {m["id"] for m in expired_members if m.get("id")}
