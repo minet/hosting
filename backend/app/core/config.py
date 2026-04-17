@@ -95,6 +95,8 @@ class Settings(BaseSettings):
 
     discord_webhook_url: str | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
 
+    internal_api_key: str | None = Field(default=None, alias="INTERNAL_API_KEY")
+
     @staticmethod
     def _is_configured(value: str | None) -> bool:
         """Check whether a configuration value is a non-blank string.

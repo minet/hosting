@@ -34,6 +34,7 @@ from app.api.routes.vms.schemas import (
     VMTemplateResponse,
 )
 from app.auth import AuthCtx, require_admin
+from app.auth.context import require_api_key
 from app.core.config import get_settings
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
@@ -54,6 +55,31 @@ from app.services.vm.purge import run_purge
 from app.services.vm.query import VmQueryService
 
 router = APIRouter(tags=["admin"])
+
+
+@router.get("/internal/users-with-vms", tags=["internal"])
+async def list_users_with_vms(
+    _: None = Depends(require_api_key),
+    db: AsyncSession = Depends(get_db),
+) -> list[str]:
+    """Return the distinct user IDs of every VM owner.
+
+    Protected by API key only (``X-API-Key`` header). Requires ``INTERNAL_API_KEY``
+    to be configured.
+
+    :returns: Sorted list of owner user IDs.
+    :rtype: list[str]
+    """
+    from app.db.models.vm_access import VMAccess as VMAccessModel
+
+    stmt = (
+        select(VMAccessModel.user_id)
+        .where(VMAccessModel.role_owner.is_(True))
+        .distinct()
+        .order_by(VMAccessModel.user_id)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [uid.rsplit(":", 1)[-1] for uid in rows]
 
 
 
