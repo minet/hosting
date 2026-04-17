@@ -21,7 +21,7 @@ from app.core.config import Settings
 from app.core.templates import jinja_env
 from app.db.models.vm_purge_mail import VMPurgeMail
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async, fetch_members_to_check_for_expiration
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
 from app.services.discord import notify_vm_purge_deleted
 from app.services.dns import DnsService
 from app.services.email import send_email_async
@@ -36,21 +36,24 @@ _SIX_MONTHS_S = (6 * 30 - 1) * 24 * 3600
 _WARN_INTERVAL = timedelta(days=30)
 
 
-def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str) -> int | None:
-    """Extract cotise_end_ms from a Keycloak user profile dict.
+def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str, departure_claim_key: str = "departureDate") -> int | None:
+    """Extract the membership expiry timestamp (ms) from a Keycloak user profile.
 
-    Checks in order:
-    1. profile["cotise_end_ms"] — pre-computed by fetch_keycloak_user_profile
-    2. profile[claim_key] — flattened top-level attribute (LDAP federated users)
-    3. profile["attributes"][claim_key] — raw nested attributes
+    Tries ``departure_claim_key`` (departureDate) first as it is more reliable,
+    then falls back to ``claim_key`` (cotise_end) and the pre-computed
+    ``cotise_end_ms`` field.
     """
     if not profile:
         return None
 
+    attrs = profile.get("attributes") or {}
+
     for raw in (
+        profile.get(departure_claim_key),
+        attrs.get(departure_claim_key),
         profile.get("cotise_end_ms"),
         profile.get(claim_key),
-        (profile.get("attributes") or {}).get(claim_key),
+        attrs.get(claim_key),
     ):
         if raw is None:
             continue
@@ -135,9 +138,9 @@ async def run_purge(
     cmd_repo = VmCmdRepo(db)
     dns = DnsService(settings=settings)
 
-    expired_members = await fetch_members_to_check_for_expiration()
+    expired_members = await fetch_keycloak_group_members_async("/hosting/ended")
     if not expired_members:
-        logger.info("purge: no members to check for expiration")
+        logger.info("purge: no expired members found")
         return {"warned": 0, "deleted": 0}
 
     expired_ids = {m["id"] for m in expired_members if m.get("id")}
@@ -163,7 +166,7 @@ async def run_purge(
 
         username = member.get("username")
         profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
-        cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
+        cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         if cotise_end_ms is None:
             logger.warning(
@@ -191,19 +194,46 @@ async def run_purge(
         nom = member.get("last_name") or ""
 
         if elapsed_seconds >= _SIX_MONTHS_S:
-            # 6 months passed — delete the VM (only if Proxmox is reachable)
+            last_sent = await _last_warning_sent_at(db, vm_id)
+
+            # Never received any mail — send a 24h notice and skip deletion
+            if last_sent is None:
+                if email:
+                    subject = f"Hosting MiNET — Votre VM « {vm_name} » sera supprimée dans 24h"
+                    plain = (
+                        f"Bonjour {prenom} {nom},\n\n"
+                        f"Votre cotisation MiNET a expiré il y a {days_expired} jours.\n"
+                        f"Votre machine virtuelle « {vm_name} » (ID {vm_id}) sera supprimée automatiquement dans 24h.\n\n"
+                        "Si vous souhaitez conserver votre VM, renouvelez votre cotisation sur https://adh6.minet.net\n\n"
+                        "— L'équipe MiNET"
+                    )
+                    html_notice = jinja_env.get_template("emails/vm_deleted.html").render(
+                        prenom=prenom,
+                        nom=nom,
+                        vm_name=vm_name,
+                        vm_id=vm_id,
+                    )
+                    await send_email_async(to_email=email, subject=subject, plain=plain, html=html_notice, settings=settings)
+                    try:
+                        await _record_mail(db, vm_id, "warning")
+                        await db.commit()
+                    except SQLAlchemyError:
+                        await db.rollback()
+                        logger.warning("purge: failed to record 24h notice for vm %s", vm_id)
+                    warned += 1
+                    logger.info("purge: sent 24h notice for vm %s (owner=%s, never warned before)", vm_id, owner_id)
+                continue
+
+            # Already warned at least once — proceed with deletion
             if gateway is None or not settings.proxmox_configured:
                 logger.info(
-                    "purge: vm %s eligible for deletion (owner=%s, expired %d days) but Proxmox not configured — skipping deletion",
-                    vm_id,
-                    owner_id,
-                    days_expired,
+                    "purge: vm %s eligible for deletion (owner=%s, expired %d days) but Proxmox not configured — skipping",
+                    vm_id, owner_id, days_expired,
                 )
                 continue
 
             logger.info("purge: deleting vm %s (owner=%s, expired %d days ago)", vm_id, owner_id, days_expired)
 
-            # Send final deletion email
             if email:
                 subject = f"Hosting MiNET — Votre VM « {vm_name} » a été supprimée"
                 plain = (
@@ -213,10 +243,7 @@ async def run_purge(
                     "— L'équipe MiNET"
                 )
                 html_del = jinja_env.get_template("emails/vm_deleted.html").render(
-                    prenom=prenom,
-                    nom=nom,
-                    vm_name=vm_name,
-                    vm_id=vm_id,
+                    prenom=prenom, nom=nom, vm_name=vm_name, vm_id=vm_id,
                 )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
                 try:
@@ -242,11 +269,7 @@ async def run_purge(
                 continue
 
             await dns.delete_records(vm_id=vm_id)
-            await notify_vm_purge_deleted(
-                vm_id=vm_id,
-                vm_name=vm_name,
-                days_expired=days_expired,
-            )
+            await notify_vm_purge_deleted(vm_id=vm_id, vm_name=vm_name, days_expired=days_expired)
             deleted += 1
 
         else:
