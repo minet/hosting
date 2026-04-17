@@ -194,15 +194,15 @@ async def list_cotise_ended_users(
     :returns: List of user dicts with ``id``, ``username``, ``first_name``, ``last_name``, ``email``.
     :rtype: list[dict]
     """
-    return await fetch_keycloak_group_members_async("/hosting_ended")
+    return await fetch_keycloak_group_members_async("/hosting/ended")
 
 
 @router.get("/users/hosting-charte")
 async def list_hosting_charte_users(
     _: AuthCtx = Depends(require_admin),
 ) -> list[dict]:
-    """Return all Keycloak users in the ``/hosting-charte`` group (admin only)."""
-    return await fetch_keycloak_group_members_async("/hosting-charte")
+    """Return all Keycloak users in the ``/hosting/charte`` group (admin only)."""
+    return await fetch_keycloak_group_members_async("/hosting/charte")
 
 
 @router.get("/requests", response_model=AdminRequestListResponse)
@@ -746,8 +746,8 @@ async def list_eligible_users(
     active cotisation (i.e. charter-signed minus hosting_ended).
     """
     charte_members, ended_members = await asyncio.gather(
-        fetch_keycloak_group_members_async("/hosting-charte"),
-        fetch_keycloak_group_members_async("/hosting_ended"),
+        fetch_keycloak_group_members_async("/hosting/charte"),
+        fetch_keycloak_group_members_async("/hosting/ended"),
     )
     ended_ids = {m.get("id") for m in ended_members if m.get("id")}
     return [m for m in charte_members if m.get("id") and m["id"] not in ended_ids]
@@ -903,13 +903,13 @@ async def list_expired_vms(
     """Return VMs belonging to users with an expired membership, enriched with
     purge statistics (mails sent, last warning date, deletion estimate).
     """
-    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
+    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async, fetch_members_to_check_for_expiration
     from app.services.vm.purge import _SIX_MONTHS_S, _cotise_end_from_profile
 
     settings = get_settings()
     now = datetime.now(tz=UTC)
 
-    expired_members = await fetch_keycloak_group_members_async("/hosting_ended")
+    expired_members = await fetch_members_to_check_for_expiration()
     if not expired_members:
         return []
 
