@@ -170,23 +170,14 @@ async def run_purge(
 
         if cotise_end_ms is None:
             logger.warning(
-                "purge: cannot determine cotise_end for user %s, skipping vm %s — claim_key=%r profile_keys=%s",
-                owner_id,
-                vm_id,
-                settings.auth_cotise_end_claim.strip(),
-                list(profile.keys()) if profile else None,
+                "purge: cannot determine cotise_end for user %s, skipping vm %s",
+                owner_id, vm_id,
             )
             continue
 
         cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=UTC)
-        elapsed = now - cotise_end
-        elapsed_seconds = elapsed.total_seconds()
-
-        if elapsed_seconds <= 0:
-            # Not actually expired
-            continue
-
-        days_expired = int(elapsed_seconds / 86400)
+        elapsed_seconds = (now - cotise_end).total_seconds()
+        days_expired = max(0, int(elapsed_seconds / 86400))
         days_remaining = max(0, int((_SIX_MONTHS_S - elapsed_seconds) / 86400))
 
         email = member.get("email")
