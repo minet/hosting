@@ -58,7 +58,7 @@ export default function AdminPage() {
       map.set(u.id, { name, email: u.email })
     }
     return map
-  }, [charte.users, cotiseEnded.users])
+  }, [vmsGroup.users, cotiseEnded.users])
 
   const expiredOwners = useMemo(() => {
     const set = new Set<string>()
