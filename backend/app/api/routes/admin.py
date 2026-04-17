@@ -205,6 +205,14 @@ async def list_hosting_charte_users(
     return await fetch_keycloak_group_members_async("/hosting/charte")
 
 
+@router.get("/users/vms-group")
+async def list_vms_group_users(
+    _: AuthCtx = Depends(require_admin),
+) -> list[dict]:
+    """Return all Keycloak users in the ``/hosting/vms`` group (admin only)."""
+    return await fetch_keycloak_group_members_async("/hosting/vms")
+
+
 @router.get("/requests", response_model=AdminRequestListResponse)
 async def list_pending_requests(
     _: AuthCtx = Depends(require_admin),
@@ -895,6 +903,7 @@ async def adopt_orphaned_vm(
     }
 
 
+
 @router.get("/admin/vms/expired")
 async def list_expired_vms(
     _: AuthCtx = Depends(require_admin),
@@ -903,13 +912,13 @@ async def list_expired_vms(
     """Return VMs belonging to users with an expired membership, enriched with
     purge statistics (mails sent, last warning date, deletion estimate).
     """
-    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async, fetch_members_to_check_for_expiration
+    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
     from app.services.vm.purge import _SIX_MONTHS_S, _cotise_end_from_profile
 
     settings = get_settings()
     now = datetime.now(tz=UTC)
 
-    expired_members = await fetch_members_to_check_for_expiration()
+    expired_members = await fetch_keycloak_group_members_async("/hosting/ended")
     if not expired_members:
         return []
 
@@ -944,7 +953,7 @@ async def list_expired_vms(
 
         username = member.get("username")
         profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
-        cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip())
+        cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         days_expired: int | None = None
         days_until_deletion: int | None = None

@@ -47,12 +47,12 @@ export default function AdminPage() {
   const { vms, loading, refresh: refreshVMs } = useAdminVMs()
   const { pendingByVm, updateRequest } = useAdminRequests(refreshVMs)
   const statuses = useAllStatuses()
-  const charte = useAdminGroupMembers('/api/users/hosting-charte')
+  const vmsGroup = useAdminGroupMembers('/api/users/vms-group')
   const cotiseEnded = useAdminGroupMembers('/api/users/cotise-ended')
 
   const userLookup = useMemo(() => {
     const map = new Map<string, { name: string; email: string | null }>()
-    for (const u of [...charte.users, ...cotiseEnded.users]) {
+    for (const u of [...vmsGroup.users, ...cotiseEnded.users]) {
       if (!u.id || map.has(u.id)) continue
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || u.id
       map.set(u.id, { name, email: u.email })
