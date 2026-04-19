@@ -246,6 +246,19 @@ async def run_purge(
                     logger.warning("purge: failed to record deletion mail for vm %s", vm_id)
 
             try:
+                status_payload = await asyncio.to_thread(gateway.get_vm_status, vm_id=vm_id)
+            except ProxmoxError:
+                logger.exception("purge: failed to get status for vm %s, skipping", vm_id)
+                continue
+
+            if str(status_payload.get("status", "")).lower() != "stopped":
+                try:
+                    await asyncio.to_thread(gateway.stop_vm, vm_id=vm_id)
+                except ProxmoxError:
+                    logger.exception("purge: failed to stop vm %s before deletion, skipping", vm_id)
+                    continue
+
+            try:
                 await asyncio.to_thread(gateway.delete_vm, vm_id=vm_id)
             except ProxmoxError:
                 logger.exception("purge: failed to delete vm %s from Proxmox", vm_id)
