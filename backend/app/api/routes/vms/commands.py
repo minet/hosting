@@ -218,7 +218,7 @@ async def create_request(
         if is_auto_generated_label(body.dns_label):
             raise HTTPException(
                 status_code=http_status.HTTP_409_CONFLICT,
-                detail="Ce sous-domaine est réservé : il peut être généré automatiquement pour une VM.",
+                detail="Ce sous-domaine est réservé.",
             )
     repo = RequestRepo(db)
     if body.type == "ipv4" and await repo.exists_active(vm_id=vm_id, type="ipv4"):
@@ -242,7 +242,7 @@ async def create_request(
     return VMRequestResponse.from_row(row)
 
 
-@router.put("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
+@router.put("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def grant_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=5, max_length=5, pattern=r"^\d{5}$")],
@@ -297,7 +297,7 @@ async def delete_vm(
     return VMActionResponse.model_validate(await cmd.delete(vm_id=vm_id))
 
 
-@router.delete("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
+@router.delete("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
 async def revoke_access(
     vm_id: int,
     user_id: Annotated[str, Path(min_length=5, max_length=5, pattern=r"^\d{5}$")],

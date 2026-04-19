@@ -50,11 +50,10 @@ export default function VMPage() {
   const templateDeprecated = vm !== null && vm.template.is_active === false
   const hasPendingChanges = vm !== null && Array.isArray(vm.pending_changes) && vm.pending_changes.length > 0
   const uptime = vmStatusEntry?.uptime ?? null
-  const realmPrefix = me.user_id ? me.user_id.split(':').slice(0, 2).join(':') : null
 
   const { loadingAction, setLoadingAction, doAction, doDestroy, showDestroyModal, setShowDestroyModal } = useVMActions(vmId)
   const creds = useVMCredentials(vmId, vm)
-  const share = useVMShare(vmId, realmPrefix, setLoadingAction)
+  const share = useVMShare(vmId, setLoadingAction)
   const req = useVMRequests(vmId)
   const res = useVMResources(vmId, vm, resources, (updated) => setVm(v => v ? { ...v, ...updated } : v))
 

@@ -5,7 +5,6 @@ import { useMutationWithToast } from './useMutationWithToast'
 
 export function useVMShare(
   vmId: string | undefined,
-  realmPrefix: string | null,
   setLoadingAction: (action: string | null) => void,
 ) {
   const qc = useQueryClient()
@@ -21,17 +20,15 @@ export function useVMShare(
   })
 
   const revokeMutation = useMutationWithToast<string>({
-    mutationFn: (userId) =>
-      apiFetch(`/api/vms/${vmId}/access/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+    mutationFn: (memberNumber) =>
+      apiFetch(`/api/vms/${vmId}/access/${encodeURIComponent(memberNumber)}`, { method: 'DELETE' }),
     invalidate: [['vm-share', vmId ?? ''], ['vms']],
     fallbackError: "Échec de la révocation d'accès",
   })
 
   const shareMutation = useMutationWithToast({
-    mutationFn: () => {
-      const fullUserId = `${realmPrefix}:${shareInput.trim()}`
-      return apiFetch(`/api/vms/${vmId}/access/${encodeURIComponent(fullUserId)}`, { method: 'PUT' })
-    },
+    mutationFn: () =>
+      apiFetch(`/api/vms/${vmId}/access/${encodeURIComponent(shareInput.trim())}`, { method: 'PUT' }),
     invalidate: [['vm-share', vmId ?? ''], ['vms']],
     onSuccess: () => setShareInput(''),
     fallbackError: 'Échec du partage',
@@ -39,11 +36,12 @@ export function useVMShare(
 
   async function doRevoke(userId: string) {
     if (!vmId) return
-    await revokeMutation.mutateAsync(userId).catch(() => {})
+    const memberNumber = userId.split(':').at(-1) ?? userId
+    await revokeMutation.mutateAsync(memberNumber).catch(() => {})
   }
 
   async function doShare() {
-    if (!vmId || !shareInput.trim() || !realmPrefix) return
+    if (!vmId || !shareInput.trim()) return
     setLoadingAction('share')
     await shareMutation.mutateAsync().catch(() => {})
     setLoadingAction(null)
