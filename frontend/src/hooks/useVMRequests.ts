@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api'
+import { apiFetch, ApiError } from '../api'
 import { type VMRequest } from '../types/vm'
 import { validateDnsLabel } from '../validation'
 import { useMutationWithToast } from './useMutationWithToast'
@@ -17,6 +17,9 @@ export function useVMRequests(vmId: string | undefined) {
     enabled: !!vmId,
   })
 
+  const isDnsConflict = (err: Error) =>
+    reqType === 'dns' && err instanceof ApiError && err.status === 409
+
   const submitMutation = useMutationWithToast({
     mutationFn: () =>
       apiFetch(`/api/vms/${vmId}/requests`, {
@@ -27,6 +30,7 @@ export function useVMRequests(vmId: string | undefined) {
     invalidate: [['vm-requests', vmId ?? ''], ['admin-requests']],
     onSuccess: () => setReqDnsLabel(''),
     fallbackError: "Échec de l'envoi de la demande",
+    suppressErrorToast: isDnsConflict,
   })
 
   async function doSubmitRequest() {
@@ -36,7 +40,13 @@ export function useVMRequests(vmId: string | undefined) {
       if (err) { setReqDnsError(err); return }
     }
     setReqDnsError(null)
-    await submitMutation.mutateAsync().catch(() => {})
+    try {
+      await submitMutation.mutateAsync()
+    } catch (err) {
+      if (err instanceof Error && isDnsConflict(err)) {
+        setReqDnsError(err.message)
+      }
+    }
   }
 
   return {

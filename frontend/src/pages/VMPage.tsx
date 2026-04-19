@@ -146,6 +146,7 @@ export default function VMPage() {
         setReqType={req.setReqType}
         reqDnsLabel={req.reqDnsLabel}
         setReqDnsLabel={req.setReqDnsLabel}
+        reqDnsError={req.reqDnsError}
         reqSaving={req.reqSaving}
         onClose={() => req.setReqModalOpen(false)}
         onSubmit={req.doSubmitRequest}

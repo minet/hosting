@@ -10,12 +10,13 @@ interface Props {
   setReqType: (t: 'ipv4' | 'dns') => void
   reqDnsLabel: string
   setReqDnsLabel: (v: string) => void
+  reqDnsError?: string | null
   reqSaving: boolean
   onClose: () => void
   onSubmit: () => void
 }
 
-export default function RequestModal({ vmNetwork, requests, reqType, setReqType, reqDnsLabel, setReqDnsLabel, reqSaving, onClose, onSubmit }: Props) {
+export default function RequestModal({ vmNetwork, requests, reqType, setReqType, reqDnsLabel, setReqDnsLabel, reqDnsError, reqSaving, onClose, onSubmit }: Props) {
   const { t } = useTranslation('vm')
   const tc = useTranslation().t
   const hasActiveIpv4 = vmNetwork?.ipv4 !== null || requests.some(r => r.type === 'ipv4' && r.status !== 'rejected')
@@ -88,7 +89,7 @@ export default function RequestModal({ vmNetwork, requests, reqType, setReqType,
           {canRequest && reqType === 'dns' && (
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('request.subdomain')}</label>
-              <div className="flex items-center border border-neutral-200 dark:border-neutral-700 rounded-md overflow-hidden focus-within:ring-1 focus-within:ring-blue-300">
+              <div className={`flex items-center border rounded-md overflow-hidden focus-within:ring-1 ${reqDnsError ? 'border-red-300 dark:border-red-700 focus-within:ring-red-300' : 'border-neutral-200 dark:border-neutral-700 focus-within:ring-blue-300'}`}>
                 <input
                   autoFocus
                   value={reqDnsLabel}
@@ -98,6 +99,9 @@ export default function RequestModal({ vmNetwork, requests, reqType, setReqType,
                 />
                 <span className="px-2 py-1.5 text-xs text-neutral-400 dark:text-neutral-500 bg-neutral-50 dark:bg-neutral-800 border-l border-neutral-200 dark:border-neutral-700 whitespace-nowrap">.h.minet.net</span>
               </div>
+              {reqDnsError && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{reqDnsError}</p>
+              )}
             </div>
           )}
 

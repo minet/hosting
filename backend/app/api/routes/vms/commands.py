@@ -17,6 +17,7 @@ from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
+from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
 from app.services.discord import notify_new_request
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
@@ -207,10 +208,18 @@ async def create_request(
     db: AsyncSession = Depends(get_db),
 ) -> VMRequestResponse:
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    if body.type == "dns" and not body.dns_label:
-        raise HTTPException(
-            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests"
-        )
+    if body.type == "dns":
+        if not body.dns_label:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="dns_label is required for DNS requests"
+            )
+        from app.services.wordgen import is_auto_generated_label
+
+        if is_auto_generated_label(body.dns_label):
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail="Ce sous-domaine est réservé : il peut être généré automatiquement pour une VM.",
+            )
     repo = RequestRepo(db)
     if body.type == "ipv4" and await repo.exists_active(vm_id=vm_id, type="ipv4"):
         raise HTTPException(
@@ -236,7 +245,7 @@ async def create_request(
 @router.put("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
 async def grant_access(
     vm_id: int,
-    user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
+    user_id: Annotated[str, Path(min_length=5, max_length=5, pattern=r"^\d{5}$")],
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     share: VmShareService = Depends(get_vm_share_service),
@@ -244,19 +253,24 @@ async def grant_access(
     """
     Grant shared access to a virtual machine for another user.
 
-    The caller must be the owner of the VM.
-
-    :param vm_id: Numeric identifier of the target VM.
-    :param user_id: Identifier of the user to whom access should be granted.
-    :param ctx: Authenticated user context (injected).
-    :param access: VM access service used to enforce ownership (injected).
-    :param share: VM share service used to persist the access grant (injected).
-    :returns: Mutation confirmation including the target user id and the access result.
-    :rtype: VMAccessMutationResponse
-    :raises HTTPException: With status 403 if the caller does not own the VM.
+    The caller must be the owner of the VM. ``user_id`` is the 5-digit MiNET
+    member number (Keycloak username). If the member does not exist, the
+    response is still ``ok`` but no access entry is persisted.
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=user_id))
+
+    profile = await fetch_keycloak_user_profile_async(user_id)
+    resolved_id = profile.get("id") if isinstance(profile, dict) else None
+    if not isinstance(resolved_id, str) or not resolved_id:
+        return VMAccessMutationResponse.model_validate({
+            "vm_id": vm_id,
+            "user_id": user_id,
+            "action": "grant_access",
+            "status": "ok",
+            "result": "created",
+        })
+
+    return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=resolved_id))
 
 
 @router.delete("/{vm_id}", response_model=VMActionResponse, dependencies=[Depends(RateLimiter(max_calls=3, window_seconds=60))])
@@ -286,7 +300,7 @@ async def delete_vm(
 @router.delete("/{vm_id}/access/{user_id}", response_model=VMAccessMutationResponse)
 async def revoke_access(
     vm_id: int,
-    user_id: Annotated[str, Path(min_length=1, max_length=256, pattern=r"^[^\x00-\x1f/\\]+$")],
+    user_id: Annotated[str, Path(min_length=5, max_length=5, pattern=r"^\d{5}$")],
     ctx: AuthCtx = Depends(require_charter_signed),
     access: VmAccessService = Depends(get_vm_access_service),
     share: VmShareService = Depends(get_vm_share_service),
@@ -294,16 +308,21 @@ async def revoke_access(
     """
     Revoke a user's shared access to a virtual machine.
 
-    The caller must be the owner of the VM.
-
-    :param vm_id: Numeric identifier of the target VM.
-    :param user_id: Identifier of the user whose access should be revoked.
-    :param ctx: Authenticated user context (injected).
-    :param access: VM access service used to enforce ownership (injected).
-    :param share: VM share service used to remove the access entry (injected).
-    :returns: Mutation confirmation including the target user id and the revocation result.
-    :rtype: VMAccessMutationResponse
-    :raises HTTPException: With status 403 if the caller does not own the VM.
+    The caller must be the owner of the VM. ``user_id`` is the 5-digit MiNET
+    member number (Keycloak username). If the member does not exist, the
+    response is still ``ok`` but no change is made.
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
-    return VMAccessMutationResponse.model_validate(await share.revoke_access(vm_id=vm_id, user_id=user_id))
+
+    profile = await fetch_keycloak_user_profile_async(user_id)
+    resolved_id = profile.get("id") if isinstance(profile, dict) else None
+    if not isinstance(resolved_id, str) or not resolved_id:
+        return VMAccessMutationResponse.model_validate({
+            "vm_id": vm_id,
+            "user_id": user_id,
+            "action": "revoke_access",
+            "status": "ok",
+            "result": "revoked",
+        })
+
+    return VMAccessMutationResponse.model_validate(await share.revoke_access(vm_id=vm_id, user_id=resolved_id))
