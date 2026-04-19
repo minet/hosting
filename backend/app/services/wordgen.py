@@ -302,3 +302,17 @@ def vm_dns_label(vm_id: int) -> str:
     adj = _ADJECTIVES[idx % len(_ADJECTIVES)]
     noun = _NOUNS[idx // len(_ADJECTIVES)]
     return f"{adj}-{noun}"
+
+
+_AUTO_LABELS: frozenset[str] = frozenset(
+    f"{adj}-{noun}" for adj in _ADJECTIVES for noun in _NOUNS
+)
+
+
+def is_auto_generated_label(label: str) -> bool:
+    """Return True if ``label`` could be produced by :func:`vm_dns_label`.
+
+    Matches any ``adjective-noun`` combination from the generator's word lists,
+    regardless of whether a VM currently holds that label.
+    """
+    return label in _AUTO_LABELS

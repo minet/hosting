@@ -11,6 +11,8 @@ interface Options<TArgs, TResult> {
   fallbackError?: string
   /** Callback after successful mutation */
   onSuccess?: (data: TResult, args: TArgs) => void
+  /** Return true to suppress the error toast (the error still bubbles to mutateAsync) */
+  suppressErrorToast?: (err: Error) => boolean
 }
 
 /**
@@ -35,6 +37,7 @@ export function useMutationWithToast<TArgs = void, TResult = unknown>(
       opts.onSuccess?.(data, args)
     },
     onError: (err) => {
+      if (err instanceof Error && opts.suppressErrorToast?.(err)) return
       const msg = err instanceof Error ? err.message : (opts.fallbackError ?? 'Une erreur est survenue')
       toast(msg)
     },
