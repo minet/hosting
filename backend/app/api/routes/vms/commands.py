@@ -262,13 +262,7 @@ async def grant_access(
     profile = await fetch_keycloak_user_profile_async(user_id)
     resolved_id = profile.get("id") if isinstance(profile, dict) else None
     if not isinstance(resolved_id, str) or not resolved_id:
-        return VMAccessMutationResponse.model_validate({
-            "vm_id": vm_id,
-            "user_id": user_id,
-            "action": "grant_access",
-            "status": "ok",
-            "result": "created",
-        })
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=resolved_id))
 
@@ -317,12 +311,6 @@ async def revoke_access(
     profile = await fetch_keycloak_user_profile_async(user_id)
     resolved_id = profile.get("id") if isinstance(profile, dict) else None
     if not isinstance(resolved_id, str) or not resolved_id:
-        return VMAccessMutationResponse.model_validate({
-            "vm_id": vm_id,
-            "user_id": user_id,
-            "action": "revoke_access",
-            "status": "ok",
-            "result": "revoked",
-        })
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return VMAccessMutationResponse.model_validate(await share.revoke_access(vm_id=vm_id, user_id=resolved_id))
