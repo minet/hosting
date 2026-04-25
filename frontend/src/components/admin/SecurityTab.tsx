@@ -1,4 +1,4 @@
-import { Loader, RefreshCw, Shield, ShieldAlert, Globe, Plug, Package, Zap } from 'lucide-react'
+import { Loader, RefreshCw, Shield, ShieldAlert, Globe, Plug, Package, Zap, Server, KeyRound, Gamepad2, Cloud, Code2, Braces, Filter, Workflow, Database, Layers, type LucideIcon } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { apiFetch } from '../../api'
@@ -49,9 +49,63 @@ function cveColor(score: number): string {
   return 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700'
 }
 
-function parseCpe(cpe: string): string {
-  const parts = cpe.replace(/^cpe:[\/:]?[a-z]:/i, '').split(':')
-  return parts.filter(Boolean).slice(0, 2).join(' ')
+function cvesByTier(cves: CveEntry[]): { critical: number; high: number; max: number } {
+  const critical = cves.filter(c => c.score >= 9).length
+  const high = cves.filter(c => c.score >= 8 && c.score < 9).length
+  const max = cves.length > 0 ? Math.max(...cves.map(c => c.score)) : 0
+  return { critical, high, max }
+}
+
+
+function CveSummary({ cves }: { cves: CveEntry[] }) {
+  const { critical, high } = cvesByTier(cves)
+  if (critical === 0 && high === 0) return null
+  return (
+    <div className="flex items-center gap-1.5">
+      {critical > 0 && (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
+          🔴 {critical}
+        </span>
+      )}
+      {high > 0 && (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-700">
+          🟠 {high}
+        </span>
+      )}
+    </div>
+  )
+}
+
+interface CpeInfo { Icon: LucideIcon; color: string; label: string; version?: string }
+
+const CPE_MAP: Array<{ match: RegExp; Icon: LucideIcon; color: string; label: string }> = [
+  { match: /openssh/,                Icon: KeyRound,  color: 'text-emerald-500', label: 'OpenSSH' },
+  { match: /nginx/,                  Icon: Globe,     color: 'text-green-500',   label: 'nginx' },
+  { match: /http_server/,            Icon: Globe,     color: 'text-orange-500',  label: 'Apache' },
+  { match: /caddy/,                  Icon: Globe,     color: 'text-blue-500',    label: 'Caddy' },
+  { match: /minecraft/,              Icon: Gamepad2,  color: 'text-green-600',   label: 'Minecraft' },
+  { match: /cloudflare/,             Icon: Cloud,     color: 'text-orange-400',  label: 'Cloudflare' },
+  { match: /elastic_load_balancing/, Icon: Cloud,     color: 'text-orange-500',  label: 'AWS ELB' },
+  { match: /node\.?js|nodejs/,       Icon: Code2,     color: 'text-green-500',   label: 'Node.js' },
+  { match: /express/,                Icon: Code2,     color: 'text-neutral-500', label: 'Express' },
+  { match: /golang|:go$/,            Icon: Braces,    color: 'text-cyan-500',    label: 'Go' },
+  { match: /squid/,                  Icon: Filter,    color: 'text-blue-500',    label: 'Squid' },
+  { match: /n8n/,                    Icon: Workflow,  color: 'text-pink-500',    label: 'n8n' },
+  { match: /minio/,                  Icon: Database,  color: 'text-red-500',     label: 'MinIO' },
+  { match: /next\.js/,               Icon: Layers,    color: 'text-neutral-800 dark:text-neutral-200', label: 'Next.js' },
+  { match: /facebook:react|:react/,  Icon: Layers,    color: 'text-blue-400',    label: 'React' },
+  { match: /linux_kernel|debian/,    Icon: Server,    color: 'text-neutral-400', label: 'Linux' },
+]
+
+function parseCpe(cpe: string): CpeInfo {
+  const parts = cpe.split(':').filter(p => p && !['cpe','a','o','h','*','-','2.3','/a','/o','/h','/'].includes(p))
+  const version = parts.length >= 3 ? parts[2] : undefined
+  for (const entry of CPE_MAP) {
+    if (entry.match.test(cpe)) return { Icon: entry.Icon, color: entry.color, label: entry.label, version }
+  }
+  // inconnu : afficher vendor/product brut
+  const label = parts.slice(0, 2).join('/') || cpe
+  return { Icon: Package, color: 'text-neutral-400', label, version }
 }
 
 function CveBadge({ cve }: { cve: CveEntry }) {
@@ -98,30 +152,39 @@ function FindingCells({ finding }: { finding: SecurityFinding }) {
       </td>
 
       {/* CPEs */}
-      <td className="px-2 py-1.5 text-xs max-w-[180px]">
+      <td className="px-2 py-1.5 text-xs max-w-[220px]">
         {finding.cpes && finding.cpes.length > 0 ? (
-          <div className="flex items-center gap-1 flex-wrap">
-            <Package size={10} className="text-amber-400 shrink-0" />
-            {finding.cpes.map(c => (
-              <span key={c} title={c} className="text-neutral-600 dark:text-neutral-400 truncate">{parseCpe(c)}</span>
-            ))}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {finding.cpes.map(c => {
+              const { Icon, color, label, version } = parseCpe(c)
+              return (
+                <span key={c} title={c} className="inline-flex items-center gap-0.5">
+                  <Icon size={11} className={color} />
+                  <span className="text-neutral-600 dark:text-neutral-400">{label}</span>
+                  {version && <span className="text-neutral-400 dark:text-neutral-500 text-[10px]">{version}</span>}
+                </span>
+              )
+            })}
           </div>
         ) : <span className="text-neutral-300 dark:text-neutral-600">—</span>}
       </td>
 
-      {/* CVEs */}
+      {/* Résumé CVE par tier */}
+      <td className="px-2 py-1.5 text-xs whitespace-nowrap">
+        {sortedCves.length > 0
+          ? <CveSummary cves={sortedCves} />
+          : <span className="flex items-center gap-1"><Shield size={10} className="text-emerald-400" /><span className="text-emerald-600 dark:text-emerald-400 text-[10px]">OK</span></span>
+        }
+      </td>
+
+      {/* CVEs détail */}
       <td className="px-2 py-1.5 text-xs">
         {sortedCves.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             <ShieldAlert size={10} className="text-red-400 shrink-0" />
             {sortedCves.map(cve => <CveBadge key={cve.id} cve={cve} />)}
           </div>
-        ) : (
-          <div className="flex items-center gap-1">
-            <Shield size={10} className="text-emerald-400" />
-            <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">OK</span>
-          </div>
-        )}
+        ) : <span className="text-neutral-300 dark:text-neutral-600">—</span>}
       </td>
     </>
   )
@@ -227,6 +290,7 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
                 <span className="flex items-center gap-1"><Globe size={10} /> DNS</span>,
                 <span className="flex items-center gap-1"><Plug size={10} /> Ports</span>,
                 <span className="flex items-center gap-1"><Package size={10} /> CPEs</span>,
+                <span className="flex items-center gap-1"><ShieldAlert size={10} /> Sévérité</span>,
                 <span className="flex items-center gap-1"><ShieldAlert size={10} /> CVEs</span>,
                 'Scan'
               ].map((col, i) => (
@@ -238,12 +302,13 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
           </thead>
           <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
             {loading && (
-              <tr><td colSpan={9} className="px-4 py-10 text-center"><Loader size={14} className="animate-spin inline text-neutral-400" /></td></tr>
+              <tr><td colSpan={10} className="px-4 py-10 text-center"><Loader size={14} className="animate-spin inline text-neutral-400" /></td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucun scan disponible</td></tr>
+              <tr><td colSpan={10} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucun scan disponible</td></tr>
             )}
             {!loading && data.map(result => <ScanRows key={result.vm_id} result={result} userLookup={userLookup} />)}
+
           </tbody>
         </table>
         </div>
