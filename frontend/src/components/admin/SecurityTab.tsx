@@ -288,16 +288,6 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
           )}
         </div>
         <div className="flex items-center gap-2">
-          {scanState === 'scanning' && (
-            <span className="flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400 animate-pulse">
-              <Loader size={12} className="animate-spin" /> Scan en cours…
-            </span>
-          )}
-          {scanState === 'done' && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-500 dark:text-emerald-400">
-              <CheckCircle size={12} /> Scan terminé
-            </span>
-          )}
           <button
             onClick={triggerScan}
             disabled={scanState === 'scanning'}
