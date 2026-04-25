@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 _INTERNETDB_URL = "https://internetdb.shodan.io/{ip}"
 _CIRCL_CVE_URL = "https://cve.circl.lu/api/cve/{cve_id}"
-_CVE_SEMAPHORE = asyncio.Semaphore(3)
 _scan_event: asyncio.Event | None = None
+_cve_semaphore: asyncio.Semaphore | None = None
 
 
 def get_scan_event() -> asyncio.Event:
@@ -30,6 +30,13 @@ def get_scan_event() -> asyncio.Event:
     if _scan_event is None:
         _scan_event = asyncio.Event()
     return _scan_event
+
+
+def _get_cve_semaphore() -> asyncio.Semaphore:
+    global _cve_semaphore
+    if _cve_semaphore is None:
+        _cve_semaphore = asyncio.Semaphore(3)
+    return _cve_semaphore
 
 
 def request_scan() -> None:
@@ -50,7 +57,7 @@ async def _fetch_internetdb(client: httpx.AsyncClient, ip: str) -> dict[str, Any
 
 
 async def _fetch_cve(client: httpx.AsyncClient, cve_id: str) -> dict[str, Any] | None:
-    async with _CVE_SEMAPHORE:
+    async with _get_cve_semaphore():
         try:
             r = await client.get(_CIRCL_CVE_URL.format(cve_id=cve_id), timeout=10.0)
             if r.status_code != 200:

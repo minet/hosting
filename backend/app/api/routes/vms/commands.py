@@ -17,11 +17,11 @@ from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
+from app.db.repositories.vm import VmAccessRepo, VmQueryRepo
 from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async
 from app.services.discord import notify_new_request
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
-from app.db.repositories.vm import VmQueryRepo
 from app.services.vm.deps import get_vm_access_service, get_vm_command_service, get_vm_share_service
 from app.services.vm.share import VmShareService
 
@@ -309,7 +309,6 @@ async def revoke_access(
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
 
-    from app.db.repositories.vm import VmAccessRepo
     resolved_id = await VmAccessRepo(share.db).resolve_shared_user_id(vm_id=vm_id, member_number=user_id)
     if not resolved_id:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Shared access entry not found")

@@ -61,7 +61,7 @@ class VmAccessRepo:
             .where(
                 VMAccess.vm_id == vm_id,
                 VMAccess.role_owner.is_(False),
-                VMAccess.user_id.like(f"%:{member_number}"),
+                VMAccess.user_id.like(f"f:%:{member_number}"),
             )
             .limit(1)
         )
