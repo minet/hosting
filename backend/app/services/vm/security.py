@@ -69,22 +69,54 @@ async def _fetch_cve(client: httpx.AsyncClient, cve_id: str) -> dict[str, Any] |
             return None
 
 
+def _parse_cvss_score(cve_data: dict[str, Any]) -> float:
+    """Extract the highest CVSS base score from CVE 5.1 or legacy CIRCL format."""
+    # Legacy format (old CIRCL API)
+    if "cvss" in cve_data and cve_data["cvss"] is not None:
+        try:
+            return float(cve_data["cvss"])
+        except (ValueError, TypeError):
+            pass
+
+    # CVE 5.1 format — look in containers.cna.metrics and containers.adp[].metrics
+    best = 0.0
+    containers = cve_data.get("containers", {})
+    sources = [containers.get("cna", {})] + containers.get("adp", [])
+    for src in sources:
+        for metric in src.get("metrics", []):
+            for key in ("cvssV4_0", "cvssV3_1", "cvssV3_0", "cvssV2_0"):
+                cvss = metric.get(key, {})
+                score = cvss.get("baseScore")
+                if score is not None:
+                    try:
+                        best = max(best, float(score))
+                    except (ValueError, TypeError):
+                        pass
+    return best
+
+
+def _parse_published(cve_data: dict[str, Any]) -> str:
+    """Extract publication date from CVE 5.1 or legacy CIRCL format."""
+    # CVE 5.1
+    meta = cve_data.get("cveMetadata", {})
+    if meta.get("datePublished"):
+        return str(meta["datePublished"])[:10]
+    # Legacy
+    return str(cve_data.get("Published") or "")[:10]
+
+
 def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[str, Any] | None:
     """Return a CVE entry dict if score >= 8.0. Marks same-week CVEs with `this_week: True`."""
-    score_raw = cve_data.get("cvss") or 0.0
-    published = cve_data.get("Published") or ""
-
-    try:
-        score = float(score_raw)
-    except (ValueError, TypeError):
-        return None
+    cve_id = (cve_data.get("cveMetadata", {}).get("cveId") or cve_data.get("id", ""))
+    score = _parse_cvss_score(cve_data)
+    published = _parse_published(cve_data)
 
     if score < 8.0:
         return None
 
     this_week = False
     try:
-        pub_dt = datetime.fromisoformat(published[:10]).replace(tzinfo=timezone.utc)
+        pub_dt = datetime.fromisoformat(published).replace(tzinfo=timezone.utc)
         if scanned_at.tzinfo is None:
             scanned_at = scanned_at.replace(tzinfo=timezone.utc)
         this_week = scanned_at.isocalendar()[:2] == pub_dt.isocalendar()[:2]
@@ -92,9 +124,9 @@ def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[s
         pass
 
     return {
-        "id": cve_data.get("id", ""),
+        "id": cve_id,
         "score": score,
-        "published": published[:10],
+        "published": published,
         "this_week": this_week,
     }
 
@@ -136,7 +168,7 @@ async def run_security_scan(db: AsyncSession) -> None:
     async with httpx.AsyncClient() as client:
         for vm in vms:
             vm_id: int = vm["vm_id"]
-            ips = [ip for ip in [vm.get("ipv4"), vm.get("ipv6")] if ip]
+            ips = [ip for ip in [vm.get("ipv4")] if ip]
             if not ips:
                 continue
             try:
