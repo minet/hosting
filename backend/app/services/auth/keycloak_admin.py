@@ -29,7 +29,6 @@ _admin_instance = None
 _admin_created_at: float = 0.0
 _ADMIN_TTL: float = 240.0  # seconds — below Keycloak's default 300s token lifespan
 
-
 def _make_admin():
     """Return a cached KeycloakAdmin instance, recreating it when the TTL expires.
 
@@ -212,6 +211,7 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
         admin = _make_admin()
         users = admin.get_users(query={"username": username, "exact": True})
         if not isinstance(users, list) or not users:
+            logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
             return None
         user = users[0]
         if not isinstance(user, dict):
@@ -228,9 +228,11 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
                     cotise_end_ms = int(raw[0] if isinstance(raw, list) else raw)
                 except (ValueError, TypeError):
                     pass
+        keycloak_id = user.get("id")
         return {
             **{k: v for k, v in user.items() if k != "attributes"},
             **flat_attrs,
+            "id": keycloak_id,  # never let LDAP attributes overwrite the Keycloak federation ID
             "cotise_end_ms": cotise_end_ms,
         }
     except (KeycloakError, OSError) as exc:

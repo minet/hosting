@@ -54,6 +54,20 @@ class VmAccessRepo:
             return "already_owner"
         return "already_shared"
 
+    async def resolve_shared_user_id(self, vm_id: int, member_number: str) -> str | None:
+        """Find the full Keycloak user_id for a shared (non-owner) access entry by member number suffix."""
+        stmt = (
+            select(VMAccess.user_id)
+            .where(
+                VMAccess.vm_id == vm_id,
+                VMAccess.role_owner.is_(False),
+                VMAccess.user_id.like(f"f:%:{member_number}"),
+            )
+            .limit(1)
+        )
+        result = (await self.db.execute(stmt)).scalar_one_or_none()
+        return result
+
     async def revoke_access(self, vm_id: int, user_id: str) -> str:
         """Revoke a user's access to a VM.
 

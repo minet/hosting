@@ -17,9 +17,10 @@ import ProxmoxTab from '../components/admin/ProxmoxTab'
 import OrphanedVMsTab from '../components/admin/OrphanedVMsTab'
 import ExpiredVMsTab from '../components/admin/ExpiredVMsTab'
 import IPHistoryTab from '../components/admin/IPHistoryTab'
+import SecurityTab from '../components/admin/SecurityTab'
 
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
-type Tab = 'vms' | 'templates' | 'proxmox' | 'orphaned' | 'expired' | 'ip-history'
+type Tab = 'vms' | 'templates' | 'proxmox' | 'orphaned' | 'expired' | 'ip-history' | 'security'
 
 function getStatusOrder(vmId: number, statuses: StatusMap): number {
   const s = statuses.get(vmId)?.status
@@ -221,7 +222,7 @@ export default function AdminPage() {
   // ─── Tab bar ──────────────────────────────────────────────────────────────
   const tabBar = (
     <div className="flex items-center gap-2 overflow-x-auto flex-1 min-w-0">
-      {(['vms', 'templates', 'proxmox', 'orphaned', 'expired', 'ip-history'] as Tab[]).map(tb => (
+      {(['vms', 'templates', 'proxmox', 'orphaned', 'expired', 'ip-history', 'security'] as Tab[]).map(tb => (
         <button key={tb} onClick={() => setTab(tb)}
           className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${tab === tb ? 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}>
           {t(`tabs.${tb}`)}
@@ -273,6 +274,15 @@ export default function AdminPage() {
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
         <ExpiredVMsTab />
         {maintenanceModal}
+      </div>
+    )
+  }
+
+  if (tab === 'security') {
+    return (
+      <div className="flex flex-col gap-3 h-full">
+        <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
+        <SecurityTab />
       </div>
     )
   }

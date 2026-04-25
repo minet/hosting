@@ -3,9 +3,11 @@
 from app.db.repositories.vm.access_repo import VmAccessRepo
 from app.db.repositories.vm.cmd_repo import VmCmdRepo
 from app.db.repositories.vm.query_repo import VmQueryRepo
+from app.db.repositories.vm.security_repo import VmSecurityRepo
 
 __all__ = [
     "VmAccessRepo",
     "VmCmdRepo",
     "VmQueryRepo",
+    "VmSecurityRepo",
 ]
