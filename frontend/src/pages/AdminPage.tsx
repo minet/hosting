@@ -282,7 +282,7 @@ export default function AdminPage() {
     return (
       <div className="flex flex-col gap-3 h-full">
         <div className="shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2">{tabBar}</div>
-        <SecurityTab />
+        <SecurityTab userLookup={userLookup} />
       </div>
     )
   }
