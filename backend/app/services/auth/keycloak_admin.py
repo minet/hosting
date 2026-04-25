@@ -38,7 +38,7 @@ def _get_federation_id() -> str | None:
         return _federation_id
     try:
         admin = _make_admin()
-        components = admin.get_components(query={"type": "org.keycloak.storage.UserStorageProvider"})
+        components = admin.get_components()
         if isinstance(components, list):
             provider = next((c for c in components if isinstance(c, dict) and c.get("name") == "fdp-sql"), None)
             if provider:
