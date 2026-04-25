@@ -29,9 +29,8 @@ class VmSecurityRepo:
                 VM.vm_id,
                 VM.name,
                 func.host(VM.ipv4).label("ipv4"),
-                func.host(VM.ipv6).label("ipv6"),
             )
-            .where((VM.ipv4.is_not(None)) | (VM.ipv6.is_not(None)))
+            .where(VM.ipv4.is_not(None))
             .order_by(VM.vm_id)
         )
         rows = (await self.db.execute(stmt)).mappings().all()
