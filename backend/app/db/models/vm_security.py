@@ -67,6 +67,7 @@ class VmSecurityFinding(Base):
     ip: Mapped[str] = mapped_column(Text, nullable=False)
     ports: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     hostnames: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    cpes: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     cves: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
 
     scan: Mapped["VmSecurityScan"] = relationship("VmSecurityScan", back_populates="findings")

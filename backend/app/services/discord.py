@@ -135,6 +135,35 @@ async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int
     await _send_webhook(content="", embeds=[embed])
 
 
+async def notify_security_cve_alert(
+    *,
+    vm_id: int,
+    vm_name: str,
+    ip: str,
+    cves: list[dict],
+) -> None:
+    """Notify Discord that critical CVEs from the current week were found on a VM."""
+    tag = _env_tag()
+    base_url = _base_url()
+    cve_lines = "\n".join(
+        f"• **{c['id']}** — score `{c['score']}` (publié le {c['published']})"
+        for c in sorted(cves, key=lambda x: x["score"], reverse=True)
+    )
+    embed = {
+        "title": f"[{tag}] ⚠️ CVE(s) critiques détectées — VM #{vm_id}",
+        "description": f"Des CVEs critiques publiées **cette semaine** ont été détectées sur [`{vm_name}`]({base_url}/vm/{vm_id}) (`{ip}`) :\n\n{cve_lines}",
+        "color": _env_color(0xE74C3C),
+        "fields": [
+            {"name": "VM", "value": f"[`#{vm_id} {vm_name}`]({base_url}/vm/{vm_id})", "inline": True},
+            {"name": "IP", "value": f"`{ip}`", "inline": True},
+            {"name": "CVEs", "value": str(len(cves)), "inline": True},
+        ],
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
+    }
+    await _send_webhook(content=f"<@&{ROLE_ERROR}>", embeds=[embed])
+
+
 async def notify_ipv4_exhausted() -> None:
     """Notify Discord that the IPv4 pool is exhausted."""
     tag = _env_tag()

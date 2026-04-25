@@ -27,6 +27,7 @@ class VmSecurityRepo:
         stmt = (
             select(
                 VM.vm_id,
+                VM.name,
                 func.host(VM.ipv4).label("ipv4"),
                 func.host(VM.ipv6).label("ipv6"),
             )
@@ -50,6 +51,7 @@ class VmSecurityRepo:
                 ip=f["ip"],
                 ports=f.get("ports", []),
                 hostnames=f.get("hostnames", []),
+                cpes=f.get("cpes", []),
                 cves=f.get("cves", []),
             ))
 
@@ -93,6 +95,7 @@ class VmSecurityRepo:
                 "ip": f.ip,
                 "ports": f.ports,
                 "hostnames": f.hostnames,
+                "cpes": f.cpes,
                 "cves": f.cves,
             })
 

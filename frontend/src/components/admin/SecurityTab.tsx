@@ -1,6 +1,6 @@
-import { Loader, RefreshCw, Shield, ShieldAlert, Globe, Plug, Package, Zap, Server, KeyRound, Gamepad2, Cloud, Code2, Braces, Filter, Workflow, Database, Layers, type LucideIcon } from 'lucide-react'
+import { Loader, RefreshCw, Shield, ShieldAlert, Globe, Plug, Package, Zap, Server, KeyRound, Gamepad2, Cloud, Code2, Braces, Filter, Workflow, Database, Layers, CheckCircle, type LucideIcon } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { apiFetch } from '../../api'
 
 type UserLookup = Map<string, { name: string; email: string | null }>
@@ -228,17 +228,37 @@ function ScanRows({ result, userLookup }: { result: SecurityScanResult; userLook
 
 export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) {
   const { data, loading, error, refresh } = useSecurityScans()
-  const [triggering, setTriggering] = useState(false)
+  const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done'>('idle')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevScannedRef = useRef<string | null>(null)
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
   async function triggerScan() {
-    setTriggering(true)
+    setScanState('scanning')
+    prevScannedRef.current = data[0]?.scanned_at ?? null
     try {
       await apiFetch('/api/admin/security/scan', { method: 'POST' })
-      setTimeout(refresh, 2000)
-    } finally {
-      setTriggering(false)
+    } catch {
+      setScanState('idle')
+      return
     }
+    // Poll every 8s until scanned_at changes
+    pollRef.current = setInterval(async () => {
+      await refresh()
+    }, 8000)
   }
+
+  // Detect scan completion when scanned_at changes
+  useEffect(() => {
+    if (scanState !== 'scanning') return
+    const latest = data[0]?.scanned_at ?? null
+    if (latest && latest !== prevScannedRef.current) {
+      if (pollRef.current) clearInterval(pollRef.current)
+      setScanState('done')
+      setTimeout(() => setScanState('idle'), 3000)
+    }
+  }, [data, scanState])
 
   if (error) {
     return (
@@ -268,10 +288,31 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={triggerScan} disabled={triggering}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 disabled:opacity-50 text-white dark:text-neutral-900 text-xs font-semibold transition-colors cursor-pointer">
-            {triggering ? <Loader size={12} className="animate-spin" /> : <Zap size={12} />}
-            Scanner maintenant
+          {scanState === 'scanning' && (
+            <span className="flex items-center gap-1.5 text-xs text-blue-500 dark:text-blue-400 animate-pulse">
+              <Loader size={12} className="animate-spin" /> Scan en cours…
+            </span>
+          )}
+          {scanState === 'done' && (
+            <span className="flex items-center gap-1.5 text-xs text-emerald-500 dark:text-emerald-400">
+              <CheckCircle size={12} /> Scan terminé
+            </span>
+          )}
+          <button
+            onClick={triggerScan}
+            disabled={scanState === 'scanning'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer
+              ${scanState === 'scanning'
+                ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed'
+                : scanState === 'done'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900'
+              }`}
+          >
+            {scanState === 'scanning' ? <Loader size={12} className="animate-spin" />
+              : scanState === 'done' ? <CheckCircle size={12} />
+              : <Zap size={12} />}
+            {scanState === 'scanning' ? 'Scan en cours…' : scanState === 'done' ? 'Terminé !' : 'Scanner maintenant'}
           </button>
           <button onClick={refresh}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium transition-colors cursor-pointer">
@@ -280,7 +321,7 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
         </div>
       </div>
 
-      <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden shadow-sm flex flex-col min-h-0 flex-1">
+      <div className={`border rounded-lg overflow-hidden shadow-sm flex flex-col min-h-0 flex-1 transition-colors ${scanState === 'scanning' ? 'border-blue-400 dark:border-blue-500' : scanState === 'done' ? 'border-emerald-400 dark:border-emerald-500' : 'border-neutral-200 dark:border-neutral-700'}`}>
         <div className="overflow-x-auto overflow-y-auto flex-1">
         <table className="w-full text-sm border-collapse min-w-[1100px]">
           <thead className="bg-neutral-50 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700 sticky top-0 z-10">
