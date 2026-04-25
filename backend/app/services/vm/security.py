@@ -106,6 +106,7 @@ async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> 
     cve_ids: list[str] = data.get("vulns") or []
     ports: list[int] = data.get("ports") or []
     hostnames: list[str] = data.get("hostnames") or []
+    cpes: list[str] = data.get("cpes") or []
 
     cve_results = await asyncio.gather(*[_fetch_cve(client, cid) for cid in cve_ids])
 
@@ -117,7 +118,7 @@ async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> 
         if entry:
             critical_cves.append(entry)
 
-    return {"ip": ip, "ports": ports, "hostnames": hostnames, "cves": critical_cves}
+    return {"ip": ip, "ports": ports, "hostnames": hostnames, "cpes": cpes, "cves": critical_cves}
 
 
 async def run_security_scan(db: AsyncSession) -> None:
