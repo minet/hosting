@@ -1049,4 +1049,3 @@ async def trigger_security_scan(
     from app.services.vm.security import request_scan
     request_scan()
     return {"status": "accepted"}
-    ]
