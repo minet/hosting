@@ -45,8 +45,10 @@ function formatDate(iso: string | null): string {
 }
 
 function cveColor(score: number): string {
-  if (score >= 9) return 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border-red-300 dark:border-red-700'
-  return 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700'
+  if (score >= 9)  return 'bg-red-500 text-white border-red-600'
+  if (score >= 7)  return 'bg-orange-500 text-white border-orange-600'
+  if (score >= 4)  return 'bg-yellow-400 text-neutral-900 border-yellow-500'
+  return 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600'
 }
 
 function cvesByTier(cves: CveEntry[]): { critical: number; high: number; max: number } {
@@ -169,22 +171,15 @@ function FindingCells({ finding }: { finding: SecurityFinding }) {
         ) : <span className="text-neutral-300 dark:text-neutral-600">—</span>}
       </td>
 
-      {/* Résumé CVE par tier */}
-      <td className="px-2 py-1.5 text-xs whitespace-nowrap">
-        {sortedCves.length > 0
-          ? <CveSummary cves={sortedCves} />
-          : <span className="flex items-center gap-1"><Shield size={10} className="text-emerald-400" /><span className="text-emerald-600 dark:text-emerald-400 text-[10px]">OK</span></span>
-        }
-      </td>
-
-      {/* CVEs détail */}
+      {/* CVEs */}
       <td className="px-2 py-1.5 text-xs">
         {sortedCves.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
-            <ShieldAlert size={10} className="text-red-400 shrink-0" />
             {sortedCves.map(cve => <CveBadge key={cve.id} cve={cve} />)}
           </div>
-        ) : <span className="text-neutral-300 dark:text-neutral-600">—</span>}
+        ) : (
+          <span className="flex items-center gap-1"><Shield size={10} className="text-emerald-400" /><span className="text-emerald-600 dark:text-emerald-400 text-[10px]">OK</span></span>
+        )}
       </td>
     </>
   )
@@ -321,7 +316,6 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
                 <span className="flex items-center gap-1"><Globe size={10} /> DNS</span>,
                 <span className="flex items-center gap-1"><Plug size={10} /> Ports</span>,
                 <span className="flex items-center gap-1"><Package size={10} /> CPEs</span>,
-                <span className="flex items-center gap-1"><ShieldAlert size={10} /> Sévérité</span>,
                 <span className="flex items-center gap-1"><ShieldAlert size={10} /> CVEs</span>,
                 'Scan'
               ].map((col, i) => (
@@ -333,10 +327,10 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
           </thead>
           <tbody className="bg-white dark:bg-neutral-900 divide-y divide-neutral-100 dark:divide-neutral-800">
             {loading && (
-              <tr><td colSpan={10} className="px-4 py-10 text-center"><Loader size={14} className="animate-spin inline text-neutral-400" /></td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center"><Loader size={14} className="animate-spin inline text-neutral-400" /></td></tr>
             )}
             {!loading && data.length === 0 && (
-              <tr><td colSpan={10} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucun scan disponible</td></tr>
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-neutral-400 text-xs">Aucun scan disponible</td></tr>
             )}
             {!loading && data.map(result => <ScanRows key={result.vm_id} result={result} userLookup={userLookup} />)}
 
