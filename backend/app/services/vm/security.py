@@ -16,6 +16,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.vm.security_repo import VmSecurityRepo
+from app.services.discord import notify_security_cve_alert
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ async def _fetch_cve(client: httpx.AsyncClient, cve_id: str) -> dict[str, Any] |
 
 
 def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[str, Any] | None:
-    """Return a CVE entry dict if score >= 8.0 and published in the same ISO week as the scan."""
+    """Return a CVE entry dict if score >= 8.0. Marks same-week CVEs with `this_week: True`."""
     score_raw = cve_data.get("cvss") or 0.0
     published = cve_data.get("Published") or ""
 
@@ -81,19 +82,20 @@ def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[s
     if score < 8.0:
         return None
 
+    this_week = False
     try:
         pub_dt = datetime.fromisoformat(published[:10]).replace(tzinfo=timezone.utc)
         if scanned_at.tzinfo is None:
             scanned_at = scanned_at.replace(tzinfo=timezone.utc)
-        if scanned_at.isocalendar()[:2] != pub_dt.isocalendar()[:2]:
-            return None
+        this_week = scanned_at.isocalendar()[:2] == pub_dt.isocalendar()[:2]
     except Exception:
-        return None
+        pass
 
     return {
         "id": cve_data.get("id", ""),
         "score": score,
         "published": published[:10],
+        "this_week": this_week,
     }
 
 
@@ -139,8 +141,19 @@ async def run_security_scan(db: AsyncSession) -> None:
                 continue
             try:
                 findings = await asyncio.gather(*[_scan_ip(client, ip, scanned_at) for ip in ips])
-                await repo.save_scan(vm_id, list(findings), scanned_at)
+                findings_list = list(findings)
+                await repo.save_scan(vm_id, findings_list, scanned_at)
                 await db.commit()
+                # Discord alert for same-week critical CVEs
+                for finding in findings_list:
+                    weekly = [c for c in finding.get("cves", []) if c.get("this_week")]
+                    if weekly:
+                        await notify_security_cve_alert(
+                            vm_id=vm_id,
+                            vm_name=vm.get("name", str(vm_id)),
+                            ip=finding["ip"],
+                            cves=weekly,
+                        )
             except Exception:
                 logger.exception("security scan failed for vm_id=%d", vm_id)
                 await db.rollback()
