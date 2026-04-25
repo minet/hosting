@@ -212,7 +212,12 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
         admin = _make_admin()
         users = admin.get_users(query={"username": username, "exact": True})
         if not isinstance(users, list) or not users:
-            users = [u for u in admin.get_users(query={"search": username}) if isinstance(u, dict) and u.get("username") == username]
+            all_results = admin.get_users(query={"search": username})
+            if isinstance(all_results, list):
+                users = [u for u in all_results if isinstance(u, dict) and (
+                    u.get("username") == username
+                    or str(u.get("id", "")).endswith(f":{username}")
+                )]
         if not users:
             logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
             return None
