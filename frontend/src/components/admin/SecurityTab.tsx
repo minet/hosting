@@ -51,33 +51,6 @@ function cveColor(score: number): string {
   return 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600'
 }
 
-function cvesByTier(cves: CveEntry[]): { critical: number; high: number; max: number } {
-  const critical = cves.filter(c => c.score >= 9).length
-  const high = cves.filter(c => c.score >= 8 && c.score < 9).length
-  const max = cves.length > 0 ? Math.max(...cves.map(c => c.score)) : 0
-  return { critical, high, max }
-}
-
-
-function CveSummary({ cves }: { cves: CveEntry[] }) {
-  const { critical, high } = cvesByTier(cves)
-  if (critical === 0 && high === 0) return null
-  return (
-    <div className="flex items-center gap-1.5">
-      {critical > 0 && (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-700">
-          🔴 {critical}
-        </span>
-      )}
-      {high > 0 && (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-700">
-          🟠 {high}
-        </span>
-      )}
-    </div>
-  )
-}
-
 interface CpeInfo { Icon: LucideIcon; color: string; label: string; version?: string }
 
 const CPE_MAP: Array<{ match: RegExp; Icon: LucideIcon; color: string; label: string }> = [
