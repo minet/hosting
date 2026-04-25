@@ -111,6 +111,9 @@ def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[s
     score = _parse_cvss_score(cve_data)
     published = _parse_published(cve_data)
 
+    if score == 0.0:
+        return None
+
     this_week = False
     try:
         pub_dt = datetime.fromisoformat(published).replace(tzinfo=timezone.utc)
