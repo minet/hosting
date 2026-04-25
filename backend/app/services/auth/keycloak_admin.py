@@ -28,26 +28,6 @@ logger = logging.getLogger(__name__)
 _admin_instance = None
 _admin_created_at: float = 0.0
 _ADMIN_TTL: float = 240.0  # seconds — below Keycloak's default 300s token lifespan
-_federation_id: str | None = None
-
-
-def _get_federation_id() -> str | None:
-    """Return the fdp-sql federation provider ID, fetched once and cached."""
-    global _federation_id
-    if _federation_id is not None:
-        return _federation_id
-    try:
-        admin = _make_admin()
-        components = admin.get_components()
-        if isinstance(components, list):
-            provider = next((c for c in components if isinstance(c, dict) and c.get("name") == "fdp-sql"), None)
-            if provider:
-                _federation_id = provider.get("id")
-                logger.info("fdp-sql federation_id resolved: %s", _federation_id)
-    except Exception as exc:
-        logger.warning("_get_federation_id failed: %s", exc)
-    return _federation_id
-
 
 def _make_admin():
     """Return a cached KeycloakAdmin instance, recreating it when the TTL expires.
@@ -229,22 +209,11 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
         return None
     try:
         admin = _make_admin()
-        user = None
-        federation_id = _get_federation_id()
-        if federation_id:
-            try:
-                user = admin.get_user(f"f:{federation_id}:{username}")
-            except Exception:
-                user = None
-        if not isinstance(user, dict):
-            users = admin.get_users(query={"username": username, "exact": True})
-            if not isinstance(users, list) or not users:
-                logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
-                return None
-            user = users[0]
-        if not isinstance(user, dict):
+        users = admin.get_users(query={"username": username, "exact": True})
+        if not isinstance(users, list) or not users:
             logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
             return None
+        user = users[0]
         if not isinstance(user, dict):
             return None
         attributes: dict[str, Any] = user.get("attributes") or {}
@@ -295,24 +264,6 @@ async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
     excluded_ids = {m["id"] for m in ended + charte if m.get("id")}
     orphans = [m for m in vms if m.get("id") and m["id"] not in excluded_ids]
     return ended + orphans
-
-
-def check_user_in_group(user_id: str, group_path: str) -> bool:
-    """Return True if the user (Keycloak UUID) belongs to the given group path."""
-    settings = get_settings()
-    if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
-        return False
-    try:
-        admin = _make_admin()
-        groups = admin.get_user_groups(user_id)
-        return any(isinstance(g, dict) and g.get("path") == group_path for g in groups)
-    except (KeycloakError, OSError) as exc:
-        logger.warning("check_user_in_group failed user_id=%s group=%s: %s", user_id, group_path, exc)
-        return False
-
-
-async def check_user_in_group_async(user_id: str, group_path: str) -> bool:
-    return await asyncio.to_thread(check_user_in_group, user_id, group_path)
 
 
 async def set_date_signed_hosting_async(user_id: str, date_iso: str) -> bool:
