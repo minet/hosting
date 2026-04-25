@@ -28,6 +28,25 @@ logger = logging.getLogger(__name__)
 _admin_instance = None
 _admin_created_at: float = 0.0
 _ADMIN_TTL: float = 240.0  # seconds — below Keycloak's default 300s token lifespan
+_federation_id: str | None = None
+
+
+def _get_federation_id() -> str | None:
+    """Return the fdp-sql federation provider ID, fetched once and cached."""
+    global _federation_id
+    if _federation_id is not None:
+        return _federation_id
+    try:
+        admin = _make_admin()
+        components = admin.get_components(query={"type": "org.keycloak.storage.UserStorageProvider"})
+        if isinstance(components, list):
+            provider = next((c for c in components if isinstance(c, dict) and c.get("name") == "fdp-sql"), None)
+            if provider:
+                _federation_id = provider.get("id")
+                logger.info("fdp-sql federation_id resolved: %s", _federation_id)
+    except Exception as exc:
+        logger.warning("_get_federation_id failed: %s", exc)
+    return _federation_id
 
 
 def _make_admin():
@@ -210,18 +229,22 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
         return None
     try:
         admin = _make_admin()
-        users = admin.get_users(query={"username": username, "exact": True})
-        if not isinstance(users, list) or not users:
-            all_results = admin.get_users(query={"search": username})
-            if isinstance(all_results, list):
-                users = [u for u in all_results if isinstance(u, dict) and (
-                    u.get("username") == username
-                    or str(u.get("id", "")).endswith(f":{username}")
-                )]
-        if not users:
+        user = None
+        federation_id = _get_federation_id()
+        if federation_id:
+            try:
+                user = admin.get_user(f"f:{federation_id}:{username}")
+            except Exception:
+                user = None
+        if not isinstance(user, dict):
+            users = admin.get_users(query={"username": username, "exact": True})
+            if not isinstance(users, list) or not users:
+                logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
+                return None
+            user = users[0]
+        if not isinstance(user, dict):
             logger.warning("fetch_keycloak_user_profile: no user found for username=%s", username)
             return None
-        user = users[0]
         if not isinstance(user, dict):
             return None
         attributes: dict[str, Any] = user.get("attributes") or {}
