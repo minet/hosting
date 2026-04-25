@@ -20,5 +20,9 @@ from app.db.models.vm import VM
 from app.db.models.vm_access import VMAccess
 from app.db.models.vm_ip_history import VMIPHistory
 from app.db.models.vm_purge_mail import VMPurgeMail
+from app.db.models.vm_security import VmSecurityFinding, VmSecurityScan
 
-__all__ = ["VM", "Base", "QuotaLock", "Request", "Resource", "Template", "VMAccess", "VMIPHistory", "VMPurgeMail"]
+__all__ = [
+    "VM", "Base", "QuotaLock", "Request", "Resource", "Template",
+    "VMAccess", "VMIPHistory", "VMPurgeMail", "VmSecurityScan", "VmSecurityFinding",
+]

@@ -17,7 +17,7 @@ from app.auth import AuthCtx, require_charter_signed, require_cotisant
 from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
+from app.services.auth.keycloak_admin import check_user_in_group_async, fetch_keycloak_user_profile_async
 from app.services.discord import notify_new_request
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
@@ -263,6 +263,9 @@ async def grant_access(
     resolved_id = profile.get("id") if isinstance(profile, dict) else None
     if not isinstance(resolved_id, str) or not resolved_id:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not await check_user_in_group_async(resolved_id, "/hosting/charte"):
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="User has not signed the hosting charter")
 
     return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=resolved_id))
 

@@ -1029,3 +1029,24 @@ async def list_ip_history(
         }
         for r in rows
     ]
+
+
+@router.get("/admin/security")
+async def list_security_scans(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return the latest security scan result for each VM."""
+    from app.db.repositories.vm.security_repo import VmSecurityRepo
+    return await VmSecurityRepo(db).list_latest_scans()
+
+
+@router.post("/admin/security/scan", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_security_scan(
+    _: AuthCtx = Depends(require_admin),
+) -> dict[str, str]:
+    """Trigger an immediate security scan of all VMs."""
+    from app.services.vm.security import request_scan
+    request_scan()
+    return {"status": "accepted"}
+    ]

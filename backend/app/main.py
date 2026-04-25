@@ -20,6 +20,7 @@ from app.db.core.engine import get_session_factory
 from app.services.dns import DnsService
 from app.services.proxmox.gateway import ensure_proxmox_gateway, get_proxmox_gateway
 from app.services.vm.purge import run_purge
+from app.services.vm.security import get_scan_event, run_security_scan
 from app.services.vm.status_cache import get_status_cache
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,25 @@ def _cors_origins() -> list[str]:
     """
     raw = get_settings().frontend_allowed_origins
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+async def _security_loop() -> None:
+    """Background loop that scans VM IPs daily (or on-demand via request_scan())."""
+    await asyncio.sleep(60)
+    event = get_scan_event()
+    while True:
+        try:
+            async with get_session_factory()() as session:
+                await run_security_scan(db=session)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("security_loop: unhandled error (will retry in 24h)")
+        try:
+            await asyncio.wait_for(event.wait(), timeout=24 * 3600)
+        except asyncio.TimeoutError:
+            pass
+        event.clear()
 
 
 async def _purge_loop() -> None:
@@ -58,6 +78,7 @@ async def lifespan(_: FastAPI):
     """Manage startup and shutdown of shared resources around the application lifetime."""
     await open_db_engine()
     purge_task = asyncio.create_task(_purge_loop())
+    security_task = asyncio.create_task(_security_loop())
 
     settings = get_settings()
     if settings.proxmox_configured:
@@ -72,6 +93,7 @@ async def lifespan(_: FastAPI):
     finally:
         await get_status_cache().stop()
         purge_task.cancel()
+        security_task.cancel()
         await close_db_engine()
 
 

@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     keycloak_server_url: str = Field(default="http://keycloak:8080", alias="KEYCLOAK_SERVER_URL")
     keycloak_browser_url: str | None = Field(default=None, alias="KEYCLOAK_BROWSER_URL")
-    keycloak_realm: str = Field(default="hosting-dev", alias="KEYCLOAK_REALM")
+    keycloak_realm: str = Field(default="MiNET", alias="KEYCLOAK_REALM")
     keycloak_client_id: str = Field(default="hosting", alias="KEYCLOAK_CLIENT_ID")
     keycloak_client_secret: str | None = Field(default=None, alias="KEYCLOAK_CLIENT_SECRET")
     keycloak_redirect_uri: str | None = Field(default=None, alias="KEYCLOAK_REDIRECT_URI")
