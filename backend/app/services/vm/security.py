@@ -106,13 +106,10 @@ def _parse_published(cve_data: dict[str, Any]) -> str:
 
 
 def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[str, Any] | None:
-    """Return a CVE entry dict if score >= 8.0. Marks same-week CVEs with `this_week: True`."""
+    """Return a CVE entry dict for any CVE. Marks same-week + score >= 8 CVEs with `this_week: True` for Discord alerts."""
     cve_id = (cve_data.get("cveMetadata", {}).get("cveId") or cve_data.get("id", ""))
     score = _parse_cvss_score(cve_data)
     published = _parse_published(cve_data)
-
-    if score < 8.0:
-        return None
 
     this_week = False
     try:
