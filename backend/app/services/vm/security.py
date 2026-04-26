@@ -2,6 +2,11 @@
 
 Scans each VM's IPs using nmap (active port + version detection) and looks up
 CVEs via the NVD API (NIST). No dependency on Shodan.
+
+Optimisations:
+- Parallel VM scanning (semaphore of 8 concurrent nmap processes)
+- --top-ports 1000 instead of full 1-65535 scan
+- NVD response cache shared across the scan (avoids duplicate API calls)
 """
 
 from __future__ import annotations
@@ -22,6 +27,10 @@ from app.services.discord import notify_security_cve_alert
 logger = logging.getLogger(__name__)
 
 _NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+# Max concurrent nmap processes — beyond 10 the network/CPU gain plateaus
+_NMAP_CONCURRENCY = 8
+
 _scan_event: asyncio.Event | None = None
 _nvd_semaphore: asyncio.Semaphore | None = None
 
@@ -29,8 +38,7 @@ _scan_status: dict[str, Any] = {
     "running": False,
     "total": 0,
     "scanned": 0,
-    "current_vm": None,
-    "current_ip": None,
+    "active": [],
 }
 
 
@@ -54,23 +62,25 @@ def request_scan() -> None:
 
 
 def get_scan_status() -> dict[str, Any]:
-    return dict(_scan_status)
+    s = dict(_scan_status)
+    s["active"] = list(s["active"])
+    return s
 
 
 # ─── nmap ────────────────────────────────────────────────────────────────────
 
 async def _nmap_scan(ip: str) -> dict[str, Any]:
-    """Run nmap TCP connect + version detection + SSL cert extraction."""
+    """Run nmap TCP connect + version detection + SSL cert on top 1000 ports."""
     try:
         proc = await asyncio.create_subprocess_exec(
-            "nmap", "-sT", "-sV", "-p", "1-65535", "--open", "-T4", "-n",
-            "--max-retries", "1", "--host-timeout", "90s",
+            "nmap", "-sT", "-sV", "--top-ports", "1000", "--open", "-T4", "-n",
+            "--max-retries", "1", "--host-timeout", "60s",
             "--script", "ssl-cert",
             "-oX", "-", ip,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=150)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
         return _parse_nmap_xml(stdout.decode(), ip)
     except FileNotFoundError:
         logger.warning("nmap not found")
@@ -95,7 +105,6 @@ def _parse_nmap_xml(xml_output: str, ip: str) -> dict[str, Any]:
     if host is None:
         return {"ports": [], "cpes": [], "hostnames": []}
 
-    # Reverse DNS via socket PTR
     hostnames: set[str] = set()
     try:
         name, _, _ = socket.gethostbyaddr(ip)
@@ -123,14 +132,12 @@ def _parse_nmap_xml(xml_output: str, ip: str) -> dict[str, Any]:
             for cpe_el in service_el.findall("cpe"):
                 cpe_str = (cpe_el.text or "").strip()
                 if cpe_str:
-                    # Keep highest confidence if CPE appears on multiple ports
                     existing = cpe_set.get(cpe_str, "unverified")
                     if svc_confidence == "confirmed" or existing == "unverified":
                         cpe_set[cpe_str] = svc_confidence
         else:
             svc_confidence = "confirmed"
 
-        # SSL cert script — extract CN and SANs for hostnames
         for script_el in port_el.findall("script[@id='ssl-cert']"):
             cn_el = script_el.find("table[@key='subject']/elem[@key='commonName']")
             if cn_el is not None and cn_el.text:
@@ -174,8 +181,18 @@ async def _fetch_nvd_cves(client: httpx.AsyncClient, cpe: str) -> list[dict[str,
             return []
 
 
+async def _fetch_nvd_cves_cached(
+    client: httpx.AsyncClient,
+    cpe: str,
+    cache: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """NVD lookup with a scan-scoped in-memory cache."""
+    if cpe not in cache:
+        cache[cpe] = await _fetch_nvd_cves(client, cpe)
+    return cache[cpe]
+
+
 def _parse_nvd_cvss(cve_node: dict[str, Any]) -> float:
-    """Extract the highest CVSS base score from an NVD CVE node."""
     metrics = cve_node.get("metrics", {})
     best = 0.0
     for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
@@ -212,17 +229,23 @@ def _extract_nvd_entry(vuln: dict[str, Any], scanned_at: datetime) -> dict[str, 
 
 # ─── Full IP scan ─────────────────────────────────────────────────────────────
 
-async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> dict[str, Any]:
-    """Scan a single IP with nmap and look up CVEs via NVD."""
+async def _scan_ip(
+    client: httpx.AsyncClient,
+    ip: str,
+    scanned_at: datetime,
+    nvd_cache: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Scan a single IP with nmap and look up CVEs via NVD (cached)."""
     nmap = await _nmap_scan(ip)
 
     ports: list[dict[str, Any]] = nmap["ports"]
     cpes: list[dict[str, str]] = nmap["cpes"]
     hostnames: list[str] = nmap["hostnames"]
 
-    # Deduplicate CPEs before querying NVD
     unique_cpes = list({c["cpe"] for c in cpes})
-    vuln_lists = await asyncio.gather(*[_fetch_nvd_cves(client, cpe) for cpe in unique_cpes])
+    vuln_lists = await asyncio.gather(
+        *[_fetch_nvd_cves_cached(client, cpe, nvd_cache) for cpe in unique_cpes]
+    )
 
     seen_ids: set[str] = set()
     critical_cves: list[dict[str, Any]] = []
@@ -233,19 +256,13 @@ async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> 
                 seen_ids.add(entry["id"])
                 critical_cves.append(entry)
 
-    return {
-        "ip": ip,
-        "ports": ports,
-        "hostnames": hostnames,
-        "cpes": cpes,
-        "cves": critical_cves,
-    }
+    return {"ip": ip, "ports": ports, "hostnames": hostnames, "cpes": cpes, "cves": critical_cves}
 
 
 # ─── Scan loop ───────────────────────────────────────────────────────────────
 
 async def run_security_scan(db: AsyncSession) -> None:
-    """Scan all VMs with assigned IPs and persist the results."""
+    """Scan all VMs in parallel (up to _NMAP_CONCURRENCY at once)."""
     global _scan_status
     repo = VmSecurityRepo(db)
     vms = await repo.list_vms_with_ips()
@@ -254,34 +271,41 @@ async def run_security_scan(db: AsyncSession) -> None:
 
     vms_with_ip = [vm for vm in vms if vm.get("ipv4")]
     scanned_at = datetime.now(tz=timezone.utc)
-    _scan_status = {"running": True, "total": len(vms_with_ip), "scanned": 0, "current_vm": None, "current_ip": None}
-    logger.info("security scan started for %d VMs at %s", len(vms_with_ip), scanned_at.isoformat())
+    _scan_status = {"running": True, "total": len(vms_with_ip), "scanned": 0, "active": []}
+    logger.info("security scan started for %d VMs (concurrency=%d)", len(vms_with_ip), _NMAP_CONCURRENCY)
+
+    nmap_sem = asyncio.Semaphore(_NMAP_CONCURRENCY)
+    db_lock = asyncio.Lock()
+    nvd_cache: dict[str, list[dict[str, Any]]] = {}
+
+    async def scan_vm(vm: dict[str, Any], client: httpx.AsyncClient) -> None:
+        vm_id: int = vm["vm_id"]
+        vm_name: str = vm.get("name", str(vm_id))
+        ip: str = vm["ipv4"]
+        slot = {"vm": vm_name, "ip": ip}
+        _scan_status["active"].append(slot)
+        try:
+            async with nmap_sem:
+                finding = await _scan_ip(client, ip, scanned_at, nvd_cache)
+            async with db_lock:
+                await repo.save_scan(vm_id, [finding], scanned_at)
+                await db.commit()
+            weekly = [c for c in finding.get("cves", []) if c.get("this_week")]
+            if weekly:
+                await notify_security_cve_alert(
+                    vm_id=vm_id, vm_name=vm_name, ip=ip, cves=weekly,
+                )
+        except Exception:
+            logger.exception("security scan failed for vm_id=%d", vm_id)
+            async with db_lock:
+                await db.rollback()
+        finally:
+            _scan_status["active"] = [s for s in _scan_status["active"] if s is not slot]
+            _scan_status["scanned"] += 1
 
     try:
         async with httpx.AsyncClient() as client:
-            for vm in vms_with_ip:
-                vm_id: int = vm["vm_id"]
-                vm_name: str = vm.get("name", str(vm_id))
-                ip: str = vm["ipv4"]
-                _scan_status["current_vm"] = vm_name
-                _scan_status["current_ip"] = ip
-                try:
-                    finding = await _scan_ip(client, ip, scanned_at)
-                    await repo.save_scan(vm_id, [finding], scanned_at)
-                    await db.commit()
-                    weekly = [c for c in finding.get("cves", []) if c.get("this_week")]
-                    if weekly:
-                        await notify_security_cve_alert(
-                            vm_id=vm_id,
-                            vm_name=vm_name,
-                            ip=ip,
-                            cves=weekly,
-                        )
-                except Exception:
-                    logger.exception("security scan failed for vm_id=%d", vm_id)
-                    await db.rollback()
-                finally:
-                    _scan_status["scanned"] += 1
+            await asyncio.gather(*[scan_vm(vm, client) for vm in vms_with_ip])
     finally:
-        _scan_status = {"running": False, "total": len(vms_with_ip), "scanned": len(vms_with_ip), "current_vm": None, "current_ip": None}
+        _scan_status = {"running": False, "total": len(vms_with_ip), "scanned": len(vms_with_ip), "active": []}
         logger.info("security scan completed for %d VMs", len(vms_with_ip))

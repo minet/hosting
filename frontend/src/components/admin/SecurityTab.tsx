@@ -66,8 +66,7 @@ interface ScanStatus {
   running: boolean
   total: number
   scanned: number
-  current_vm: string | null
-  current_ip: string | null
+  active: { vm: string; ip: string }[]
 }
 
 function useSecurityScans() {
@@ -269,11 +268,19 @@ function ScanRows({ result, userLookup }: { result: SecurityScanResult; userLook
 export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) {
   const { data, loading, error, refresh } = useSecurityScans()
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done'>('idle')
-  const prevScannedRef = useRef<string | null>(null)
   const scanStatus = useScanStatus(scanState === 'scanning')
 
+  // On mount: sync with backend scan state in case of page reload mid-scan
+  useEffect(() => {
+    apiFetch<ScanStatus>('/api/admin/security/status')
+      .then(s => { if (s.running) setScanState('scanning') })
+      .catch(() => {})
+  }, [])
+
+  const isScanning = scanState === 'scanning' || (scanStatus?.running ?? false)
+
   async function triggerScan() {
-    prevScannedRef.current = data[0]?.scanned_at ?? null
+    if (isScanning) return
     try {
       await apiFetch('/api/admin/security/scan', { method: 'POST' })
       setScanState('scanning')
@@ -282,7 +289,7 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
     }
   }
 
-  // Detect completion: status says not running + scanned_at changed
+  // Detect completion: backend says done
   useEffect(() => {
     if (scanState !== 'scanning') return
     if (scanStatus && !scanStatus.running && scanStatus.scanned > 0) {
@@ -322,19 +329,19 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
         <div className="flex items-center gap-2">
           <button
             onClick={triggerScan}
-            disabled={scanState === 'scanning'}
+            disabled={isScanning}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer
-              ${scanState === 'scanning'
+              ${isScanning
                 ? 'bg-blue-500 text-white animate-pulse cursor-not-allowed'
                 : scanState === 'done'
                 ? 'bg-emerald-500 text-white'
                 : 'bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900'
               }`}
           >
-            {scanState === 'scanning' ? <Loader size={12} className="animate-spin" />
+            {isScanning ? <Loader size={12} className="animate-spin" />
               : scanState === 'done' ? <CheckCircle size={12} />
               : <Zap size={12} />}
-            {scanState === 'scanning' ? 'Scan en cours…' : scanState === 'done' ? 'Terminé !' : 'Scanner maintenant'}
+            {isScanning ? 'Scan en cours…' : scanState === 'done' ? 'Terminé !' : 'Scanner maintenant'}
           </button>
           <button onClick={refresh}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-medium transition-colors cursor-pointer">
@@ -344,31 +351,40 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
       </div>
 
       {/* Scan progress panel */}
-      {scanState === 'scanning' && scanStatus && (
+      {isScanning && scanStatus && (
         <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 flex flex-col gap-2 shrink-0">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center gap-1.5 font-medium text-blue-700 dark:text-blue-300">
               <Loader size={11} className="animate-spin" />
               Scan en cours
+              {scanStatus.active.length > 0 && (
+                <span className="text-blue-500 dark:text-blue-400 font-normal">— {scanStatus.active.length} en parallèle</span>
+              )}
             </span>
             <span className="font-mono text-blue-600 dark:text-blue-400">
               {scanStatus.scanned} / {scanStatus.total} VMs
             </span>
           </div>
-          {/* Progress bar */}
           <div className="h-1.5 rounded-full bg-blue-100 dark:bg-blue-900 overflow-hidden">
             <div
               className="h-full bg-blue-500 rounded-full transition-all duration-500"
               style={{ width: scanStatus.total > 0 ? `${(scanStatus.scanned / scanStatus.total) * 100}%` : '0%' }}
             />
           </div>
-          {scanStatus.current_vm && (
-            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
-              <span className="font-medium truncate">{scanStatus.current_vm}</span>
-              {scanStatus.current_ip && (
-                <span className="font-mono text-blue-400 dark:text-blue-500 shrink-0">— {scanStatus.current_ip}</span>
+          {scanStatus.active.length > 0 && (
+            <div className="flex flex-col gap-0.5">
+              {scanStatus.active.slice(0, 4).map(({ vm, ip }) => (
+                <div key={ip} className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                  <span className="font-medium truncate">{vm}</span>
+                  <span className="font-mono text-blue-400 dark:text-blue-500 shrink-0">{ip}</span>
+                </div>
+              ))}
+              {scanStatus.active.length > 4 && (
+                <span className="text-[10px] text-blue-400 dark:text-blue-600 pl-3">
+                  +{scanStatus.active.length - 4} autres…
+                </span>
               )}
-              <span className="ml-auto text-blue-400 dark:text-blue-600 shrink-0">nmap + NVD…</span>
             </div>
           )}
         </div>
