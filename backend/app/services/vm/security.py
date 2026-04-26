@@ -1,15 +1,15 @@
 """VM security scan service.
 
-Scans each VM's IPs using Shodan InternetDB (no API key required) and enriches
-CVE entries via the CIRCL CVE API. Only CVEs with a CVSS score >= 8.0 that were
-published in the same ISO calendar week as the scan date are stored.
+Scans each VM's IPs using nmap (active port + version detection) and looks up
+CVEs via the NVD API (NIST). No dependency on Shodan.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import re
+import socket
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,10 +21,17 @@ from app.services.discord import notify_security_cve_alert
 
 logger = logging.getLogger(__name__)
 
-_INTERNETDB_URL = "https://internetdb.shodan.io/{ip}"
-_CIRCL_CVE_URL = "https://cve.circl.lu/api/cve/{cve_id}"
+_NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 _scan_event: asyncio.Event | None = None
-_cve_semaphore: asyncio.Semaphore | None = None
+_nvd_semaphore: asyncio.Semaphore | None = None
+
+_scan_status: dict[str, Any] = {
+    "running": False,
+    "total": 0,
+    "scanned": 0,
+    "current_vm": None,
+    "current_ip": None,
+}
 
 
 def get_scan_event() -> asyncio.Event:
@@ -34,11 +41,11 @@ def get_scan_event() -> asyncio.Event:
     return _scan_event
 
 
-def _get_cve_semaphore() -> asyncio.Semaphore:
-    global _cve_semaphore
-    if _cve_semaphore is None:
-        _cve_semaphore = asyncio.Semaphore(3)
-    return _cve_semaphore
+def _get_nvd_semaphore() -> asyncio.Semaphore:
+    global _nvd_semaphore
+    if _nvd_semaphore is None:
+        _nvd_semaphore = asyncio.Semaphore(3)
+    return _nvd_semaphore
 
 
 def request_scan() -> None:
@@ -46,191 +53,235 @@ def request_scan() -> None:
     get_scan_event().set()
 
 
-async def _fetch_internetdb(client: httpx.AsyncClient, ip: str) -> dict[str, Any]:
+def get_scan_status() -> dict[str, Any]:
+    return dict(_scan_status)
+
+
+# ─── nmap ────────────────────────────────────────────────────────────────────
+
+async def _nmap_scan(ip: str) -> dict[str, Any]:
+    """Run nmap TCP connect + version detection + SSL cert extraction."""
     try:
-        r = await client.get(_INTERNETDB_URL.format(ip=ip), timeout=10.0)
-        if r.status_code == 404:
-            return {}
-        r.raise_for_status()
-        return r.json()
+        proc = await asyncio.create_subprocess_exec(
+            "nmap", "-sT", "-sV", "-p", "1-65535", "--open", "-T4", "-n",
+            "--max-retries", "1", "--host-timeout", "90s",
+            "--script", "ssl-cert",
+            "-oX", "-", ip,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=150)
+        return _parse_nmap_xml(stdout.decode(), ip)
+    except FileNotFoundError:
+        logger.warning("nmap not found")
+        return {"ports": [], "cpes": [], "hostnames": []}
     except Exception as exc:
-        logger.warning("internetdb fetch failed ip=%s: %s", ip, exc)
-        return {}
+        logger.warning("nmap scan failed ip=%s: %s", ip, exc)
+        return {"ports": [], "cpes": [], "hostnames": []}
 
 
-async def _fetch_cve(client: httpx.AsyncClient, cve_id: str) -> dict[str, Any] | None:
-    async with _get_cve_semaphore():
+def _parse_nmap_xml(xml_output: str, ip: str) -> dict[str, Any]:
+    """Parse nmap XML output into ports, CPEs and hostnames."""
+    try:
+        root = ET.fromstring(xml_output)
+    except ET.ParseError as exc:
+        logger.warning("nmap XML parse error ip=%s: %s", ip, exc)
+        return {"ports": [], "cpes": [], "hostnames": []}
+
+    ports: list[dict[str, Any]] = []
+    cpe_set: dict[str, str] = {}  # cpe_string → confidence
+
+    host = root.find("host")
+    if host is None:
+        return {"ports": [], "cpes": [], "hostnames": []}
+
+    # Reverse DNS via socket PTR
+    hostnames: set[str] = set()
+    try:
+        name, _, _ = socket.gethostbyaddr(ip)
+        if name and name != ip:
+            hostnames.add(name)
+    except Exception:
+        pass
+
+    for port_el in host.findall("ports/port"):
+        state_el = port_el.find("state")
+        if state_el is None or state_el.get("state") != "open":
+            continue
+
+        portid = int(port_el.get("portid", 0))
+        service_el = port_el.find("service")
+
+        service_banner = ""
+        if service_el is not None:
+            product = service_el.get("product", "")
+            version = service_el.get("version", "")
+            service_banner = f"{product} {version}".strip()
+            conf_raw = int(service_el.get("conf", "0"))
+            svc_confidence = "confirmed" if conf_raw >= 8 else "unverified"
+
+            for cpe_el in service_el.findall("cpe"):
+                cpe_str = (cpe_el.text or "").strip()
+                if cpe_str:
+                    # Keep highest confidence if CPE appears on multiple ports
+                    existing = cpe_set.get(cpe_str, "unverified")
+                    if svc_confidence == "confirmed" or existing == "unverified":
+                        cpe_set[cpe_str] = svc_confidence
+        else:
+            svc_confidence = "confirmed"
+
+        # SSL cert script — extract CN and SANs for hostnames
+        for script_el in port_el.findall("script[@id='ssl-cert']"):
+            cn_el = script_el.find("table[@key='subject']/elem[@key='commonName']")
+            if cn_el is not None and cn_el.text:
+                hostnames.add(cn_el.text.strip())
+            for ext_el in script_el.findall("table[@key='extensions']/table"):
+                name_el = ext_el.find("elem[@key='name']")
+                val_el  = ext_el.find("elem[@key='value']")
+                if (name_el is not None and "Subject Alternative Name" in (name_el.text or "")
+                        and val_el is not None and val_el.text):
+                    for san in val_el.text.split(","):
+                        san = san.strip()
+                        if san.startswith("DNS:"):
+                            hostnames.add(san[4:].strip())
+
+        entry: dict[str, Any] = {"port": portid, "confidence": svc_confidence}
+        if service_banner:
+            entry["service"] = service_banner
+        ports.append(entry)
+
+    cpes = [{"cpe": c, "confidence": conf} for c, conf in cpe_set.items()]
+    return {"ports": ports, "cpes": cpes, "hostnames": sorted(hostnames)}
+
+
+# ─── NVD CVE lookup ──────────────────────────────────────────────────────────
+
+async def _fetch_nvd_cves(client: httpx.AsyncClient, cpe: str) -> list[dict[str, Any]]:
+    """Fetch CVEs from NVD for a given CPE string (no API key required)."""
+    async with _get_nvd_semaphore():
         try:
-            r = await client.get(_CIRCL_CVE_URL.format(cve_id=cve_id), timeout=10.0)
+            params = {"cpeName": cpe, "noRejected": "", "resultsPerPage": 20}
+            r = await client.get(_NVD_URL, params=params, timeout=15.0)
+            if r.status_code == 403:
+                logger.warning("nvd rate limit hit, sleeping 30s")
+                await asyncio.sleep(30)
+                return []
             if r.status_code != 200:
-                return None
-            return r.json()
+                return []
+            return r.json().get("vulnerabilities", [])
         except Exception as exc:
-            logger.warning("circl cve fetch failed cve=%s: %s", cve_id, exc)
-            return None
+            logger.warning("nvd fetch failed cpe=%s: %s", cpe, exc)
+            return []
 
 
-def _parse_cvss_score(cve_data: dict[str, Any]) -> float:
-    """Extract the highest CVSS base score from CVE 5.1 or legacy CIRCL format."""
-    # Legacy format (old CIRCL API)
-    if "cvss" in cve_data and cve_data["cvss"] is not None:
-        try:
-            return float(cve_data["cvss"])
-        except (ValueError, TypeError):
-            pass
-
-    # CVE 5.1 format — look in containers.cna.metrics and containers.adp[].metrics
+def _parse_nvd_cvss(cve_node: dict[str, Any]) -> float:
+    """Extract the highest CVSS base score from an NVD CVE node."""
+    metrics = cve_node.get("metrics", {})
     best = 0.0
-    containers = cve_data.get("containers", {})
-    sources = [containers.get("cna", {})] + containers.get("adp", [])
-    for src in sources:
-        for metric in src.get("metrics", []):
-            for key in ("cvssV4_0", "cvssV3_1", "cvssV3_0", "cvssV2_0"):
-                cvss = metric.get(key, {})
-                score = cvss.get("baseScore")
-                if score is not None:
-                    try:
-                        best = max(best, float(score))
-                    except (ValueError, TypeError):
-                        pass
+    for key in ("cvssMetricV40", "cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+        for entry in metrics.get(key, []):
+            score = entry.get("cvssData", {}).get("baseScore")
+            if score is not None:
+                try:
+                    best = max(best, float(score))
+                except (ValueError, TypeError):
+                    pass
     return best
 
 
-def _parse_published(cve_data: dict[str, Any]) -> str:
-    """Extract publication date from CVE 5.1 or legacy CIRCL format."""
-    # CVE 5.1
-    meta = cve_data.get("cveMetadata", {})
-    if meta.get("datePublished"):
-        return str(meta["datePublished"])[:10]
-    # Legacy
-    return str(cve_data.get("Published") or "")[:10]
+def _extract_nvd_entry(vuln: dict[str, Any], scanned_at: datetime) -> dict[str, Any] | None:
+    cve_node = vuln.get("cve", {})
+    cve_id = cve_node.get("id", "")
+    score = _parse_nvd_cvss(cve_node)
+    published_raw = cve_node.get("published", "")[:10]
 
-
-def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[str, Any] | None:
-    """Return a CVE entry dict for any CVE. Marks same-week + score >= 8 CVEs with `this_week: True` for Discord alerts."""
-    cve_id = (cve_data.get("cveMetadata", {}).get("cveId") or cve_data.get("id", ""))
-    score = _parse_cvss_score(cve_data)
-    published = _parse_published(cve_data)
-
-    if score == 0.0:
+    if score < 8.0:
         return None
 
     this_week = False
     try:
-        pub_dt = datetime.fromisoformat(published).replace(tzinfo=timezone.utc)
+        pub_dt = datetime.fromisoformat(published_raw).replace(tzinfo=timezone.utc)
         if scanned_at.tzinfo is None:
             scanned_at = scanned_at.replace(tzinfo=timezone.utc)
         this_week = scanned_at.isocalendar()[:2] == pub_dt.isocalendar()[:2]
     except Exception:
         pass
 
+    return {"id": cve_id, "score": score, "published": published_raw, "this_week": this_week}
+
+
+# ─── Full IP scan ─────────────────────────────────────────────────────────────
+
+async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> dict[str, Any]:
+    """Scan a single IP with nmap and look up CVEs via NVD."""
+    nmap = await _nmap_scan(ip)
+
+    ports: list[dict[str, Any]] = nmap["ports"]
+    cpes: list[dict[str, str]] = nmap["cpes"]
+    hostnames: list[str] = nmap["hostnames"]
+
+    # Deduplicate CPEs before querying NVD
+    unique_cpes = list({c["cpe"] for c in cpes})
+    vuln_lists = await asyncio.gather(*[_fetch_nvd_cves(client, cpe) for cpe in unique_cpes])
+
+    seen_ids: set[str] = set()
+    critical_cves: list[dict[str, Any]] = []
+    for vulns in vuln_lists:
+        for vuln in vulns:
+            entry = _extract_nvd_entry(vuln, scanned_at)
+            if entry and entry["id"] not in seen_ids:
+                seen_ids.add(entry["id"])
+                critical_cves.append(entry)
+
     return {
-        "id": cve_id,
-        "score": score,
-        "published": published,
-        "this_week": this_week,
+        "ip": ip,
+        "ports": ports,
+        "hostnames": hostnames,
+        "cpes": cpes,
+        "cves": critical_cves,
     }
 
 
-def _parse_nmap_open_ports(output: str) -> set[int]:
-    open_ports: set[int] = set()
-    for line in output.splitlines():
-        m = re.match(r"^(\d+)/tcp\s+open\s+", line)
-        if m:
-            open_ports.add(int(m.group(1)))
-    return open_ports
-
-
-async def _nmap_verify_ports(ip: str, shodan_ports: list[int]) -> list[dict[str, Any]]:
-    """Verify Shodan ports with an active nmap TCP connect scan."""
-    if not shodan_ports:
-        return []
-
-    ports_arg = ",".join(str(p) for p in shodan_ports)
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "nmap", "-sT", "-p", ports_arg, "--open", "-T4", "-n",
-            "--max-retries", "1", "--host-timeout", "30s", ip,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-        nmap_open = _parse_nmap_open_ports(stdout.decode())
-    except FileNotFoundError:
-        logger.warning("nmap not found, ports marked unverified")
-        return [{"port": p, "confidence": "unverified"} for p in sorted(shodan_ports)]
-    except Exception as exc:
-        logger.warning("nmap scan failed ip=%s: %s", ip, exc)
-        return [{"port": p, "confidence": "unverified"} for p in sorted(shodan_ports)]
-
-    shodan_set = set(shodan_ports)
-    result: list[dict[str, Any]] = []
-    result += [{"port": p, "confidence": "confirmed"} for p in sorted(shodan_set & nmap_open)]
-    result += [{"port": p, "confidence": "unverified"} for p in sorted(shodan_set - nmap_open)]
-    result += [{"port": p, "confidence": "new_finding"} for p in sorted(nmap_open - shodan_set)]
-    return result
-
-
-async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> dict[str, Any]:
-    """Scan a single IP and return its finding dict."""
-    data = await _fetch_internetdb(client, ip)
-    if not data:
-        return {"ip": ip, "ports": [], "hostnames": [], "cves": []}
-
-    cve_ids: list[str] = data.get("vulns") or []
-    shodan_ports: list[int] = data.get("ports") or []
-    hostnames: list[str] = data.get("hostnames") or []
-    cpes: list[str] = data.get("cpes") or []
-
-    cve_results, ports = await asyncio.gather(
-        asyncio.gather(*[_fetch_cve(client, cid) for cid in cve_ids]),
-        _nmap_verify_ports(ip, shodan_ports),
-    )
-
-    critical_cves = []
-    for cve_data in cve_results:
-        if not cve_data:
-            continue
-        entry = _extract_cve_entry(cve_data, scanned_at)
-        if entry:
-            critical_cves.append(entry)
-
-    return {"ip": ip, "ports": ports, "hostnames": hostnames, "cpes": cpes, "cves": critical_cves}
-
+# ─── Scan loop ───────────────────────────────────────────────────────────────
 
 async def run_security_scan(db: AsyncSession) -> None:
     """Scan all VMs with assigned IPs and persist the results."""
+    global _scan_status
     repo = VmSecurityRepo(db)
     vms = await repo.list_vms_with_ips()
     if not vms:
         return
 
+    vms_with_ip = [vm for vm in vms if vm.get("ipv4")]
     scanned_at = datetime.now(tz=timezone.utc)
-    logger.info("security scan started for %d VMs at %s", len(vms), scanned_at.isoformat())
+    _scan_status = {"running": True, "total": len(vms_with_ip), "scanned": 0, "current_vm": None, "current_ip": None}
+    logger.info("security scan started for %d VMs at %s", len(vms_with_ip), scanned_at.isoformat())
 
-    async with httpx.AsyncClient() as client:
-        for vm in vms:
-            vm_id: int = vm["vm_id"]
-            ips = [ip for ip in [vm.get("ipv4")] if ip]
-            if not ips:
-                continue
-            try:
-                findings = await asyncio.gather(*[_scan_ip(client, ip, scanned_at) for ip in ips])
-                findings_list = list(findings)
-                await repo.save_scan(vm_id, findings_list, scanned_at)
-                await db.commit()
-                # Discord alert for same-week critical CVEs
-                for finding in findings_list:
+    try:
+        async with httpx.AsyncClient() as client:
+            for vm in vms_with_ip:
+                vm_id: int = vm["vm_id"]
+                vm_name: str = vm.get("name", str(vm_id))
+                ip: str = vm["ipv4"]
+                _scan_status["current_vm"] = vm_name
+                _scan_status["current_ip"] = ip
+                try:
+                    finding = await _scan_ip(client, ip, scanned_at)
+                    await repo.save_scan(vm_id, [finding], scanned_at)
+                    await db.commit()
                     weekly = [c for c in finding.get("cves", []) if c.get("this_week")]
                     if weekly:
                         await notify_security_cve_alert(
                             vm_id=vm_id,
-                            vm_name=vm.get("name", str(vm_id)),
-                            ip=finding["ip"],
+                            vm_name=vm_name,
+                            ip=ip,
                             cves=weekly,
                         )
-            except Exception:
-                logger.exception("security scan failed for vm_id=%d", vm_id)
-                await db.rollback()
-
-    logger.info("security scan completed for %d VMs", len(vms))
+                except Exception:
+                    logger.exception("security scan failed for vm_id=%d", vm_id)
+                    await db.rollback()
+                finally:
+                    _scan_status["scanned"] += 1
+    finally:
+        _scan_status = {"running": False, "total": len(vms_with_ip), "scanned": len(vms_with_ip), "current_vm": None, "current_ip": None}
+        logger.info("security scan completed for %d VMs", len(vms_with_ip))
