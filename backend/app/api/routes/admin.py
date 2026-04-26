@@ -1049,3 +1049,12 @@ async def trigger_security_scan(
     from app.services.vm.security import request_scan
     request_scan()
     return {"status": "accepted"}
+
+
+@router.get("/admin/security/status")
+async def get_security_scan_status(
+    _: AuthCtx = Depends(require_admin),
+) -> dict:
+    """Return the current security scan progress."""
+    from app.services.vm.security import get_scan_status
+    return get_scan_status()

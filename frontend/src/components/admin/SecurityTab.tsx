@@ -11,19 +11,45 @@ interface CveEntry {
   published: string
 }
 
-type PortConfidence = 'confirmed' | 'unverified' | 'new_finding'
+type Confidence = 'confirmed' | 'unverified' | 'new_finding'
 
 interface PortEntry {
   port: number
-  confidence: PortConfidence
+  confidence: Confidence
+  service?: string
+}
+
+interface CpeEntry {
+  cpe: string
+  confidence: Confidence
 }
 
 interface SecurityFinding {
   ip: string
-  ports: PortEntry[]
+  ports: (PortEntry | number)[]
   hostnames: string[]
-  cpes: string[]
+  cpes: (CpeEntry | string)[]
   cves: CveEntry[]
+}
+
+function normalizePort(p: PortEntry | number): PortEntry {
+  return typeof p === 'number' ? { port: p, confidence: 'unverified' } : p
+}
+
+function normalizeCpe(c: CpeEntry | string): CpeEntry {
+  return typeof c === 'string' ? { cpe: c, confidence: 'unverified' } : c
+}
+
+function confidenceClass(confidence: Confidence): string {
+  if (confidence === 'confirmed') return 'text-green-500'
+  if (confidence === 'new_finding') return 'text-red-400'
+  return 'text-yellow-500'
+}
+
+function confidenceTitle(confidence: Confidence, kind: 'port' | 'cpe'): string {
+  if (confidence === 'confirmed') return kind === 'port' ? 'Confirmé par nmap' : 'Confirmé par nmap (-sV)'
+  if (confidence === 'new_finding') return 'Nouveau — non détecté par Shodan'
+  return 'Non vérifié par nmap'
 }
 
 interface SecurityScanResult {
@@ -36,6 +62,14 @@ interface SecurityScanResult {
   findings: SecurityFinding[]
 }
 
+interface ScanStatus {
+  running: boolean
+  total: number
+  scanned: number
+  current_vm: string | null
+  current_ip: string | null
+}
+
 function useSecurityScans() {
   const qc = useQueryClient()
   const { data, isLoading: loading, error } = useQuery({
@@ -44,6 +78,30 @@ function useSecurityScans() {
   })
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-security'] })
   return { data: data ?? [], loading, error: error ? (error as Error).message : null, refresh }
+}
+
+function useScanStatus(active: boolean) {
+  const [status, setStatus] = useState<ScanStatus | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!active) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      setStatus(null)
+      return
+    }
+    const poll = async () => {
+      try {
+        const s = await apiFetch<ScanStatus>('/api/admin/security/status')
+        setStatus(s)
+      } catch { /* ignore */ }
+    }
+    poll()
+    intervalRef.current = setInterval(poll, 2000)
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+  }, [active])
+
+  return status
 }
 
 function formatDate(iso: string | null): string {
@@ -126,15 +184,11 @@ function FindingCells({ finding }: { finding: SecurityFinding }) {
         {finding.ports.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             <Plug size={10} className="text-violet-400 shrink-0" />
-            {finding.ports.map(({ port, confidence }) => (
+            {finding.ports.map(normalizePort).map(({ port, confidence, service }) => (
               <span
                 key={port}
-                title={confidence === 'confirmed' ? 'Confirmé par nmap' : confidence === 'new_finding' ? 'Nouveau — non détecté par Shodan' : 'Non vérifié par nmap'}
-                className={`font-mono ${
-                  confidence === 'confirmed' ? 'text-green-500' :
-                  confidence === 'new_finding' ? 'text-red-400' :
-                  'text-yellow-500'
-                }`}
+                title={`${confidenceTitle(confidence, 'port')}${service ? ` — ${service}` : ''}`}
+                className={`font-mono ${confidenceClass(confidence)}`}
               >
                 {port}
               </span>
@@ -147,11 +201,12 @@ function FindingCells({ finding }: { finding: SecurityFinding }) {
       <td className="px-2 py-1.5 text-xs max-w-[220px]">
         {finding.cpes && finding.cpes.length > 0 ? (
           <div className="flex items-center gap-1.5 flex-wrap">
-            {finding.cpes.map(c => {
-              const { Icon, color, label, version } = parseCpe(c)
+            {finding.cpes.map(normalizeCpe).map(({ cpe, confidence }) => {
+              const { Icon, color, label, version } = parseCpe(cpe)
+              const iconColor = confidence === 'confirmed' ? color : confidence === 'new_finding' ? 'text-red-400' : 'text-yellow-500'
               return (
-                <span key={c} title={c} className="inline-flex items-center gap-0.5">
-                  <Icon size={11} className={color} />
+                <span key={cpe} title={`${cpe} — ${confidenceTitle(confidence, 'cpe')}`} className="inline-flex items-center gap-0.5">
+                  <Icon size={11} className={iconColor} />
                   <span className="text-neutral-600 dark:text-neutral-400">{label}</span>
                   {version && <span className="text-neutral-400 dark:text-neutral-500 text-[10px]">{version}</span>}
                 </span>
@@ -214,36 +269,28 @@ function ScanRows({ result, userLookup }: { result: SecurityScanResult; userLook
 export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) {
   const { data, loading, error, refresh } = useSecurityScans()
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done'>('idle')
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const prevScannedRef = useRef<string | null>(null)
-
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+  const scanStatus = useScanStatus(scanState === 'scanning')
 
   async function triggerScan() {
-    setScanState('scanning')
     prevScannedRef.current = data[0]?.scanned_at ?? null
     try {
       await apiFetch('/api/admin/security/scan', { method: 'POST' })
+      setScanState('scanning')
     } catch {
-      setScanState('idle')
       return
     }
-    // Poll every 8s until scanned_at changes
-    pollRef.current = setInterval(async () => {
-      await refresh()
-    }, 8000)
   }
 
-  // Detect scan completion when scanned_at changes
+  // Detect completion: status says not running + scanned_at changed
   useEffect(() => {
     if (scanState !== 'scanning') return
-    const latest = data[0]?.scanned_at ?? null
-    if (latest && latest !== prevScannedRef.current) {
-      if (pollRef.current) clearInterval(pollRef.current)
+    if (scanStatus && !scanStatus.running && scanStatus.scanned > 0) {
+      refresh()
       setScanState('done')
       setTimeout(() => setScanState('idle'), 3000)
     }
-  }, [data, scanState])
+  }, [scanStatus, scanState])
 
   if (error) {
     return (
@@ -295,6 +342,37 @@ export default function SecurityTab({ userLookup }: { userLookup: UserLookup }) 
           </button>
         </div>
       </div>
+
+      {/* Scan progress panel */}
+      {scanState === 'scanning' && scanStatus && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 px-4 py-3 flex flex-col gap-2 shrink-0">
+          <div className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-1.5 font-medium text-blue-700 dark:text-blue-300">
+              <Loader size={11} className="animate-spin" />
+              Scan en cours
+            </span>
+            <span className="font-mono text-blue-600 dark:text-blue-400">
+              {scanStatus.scanned} / {scanStatus.total} VMs
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1.5 rounded-full bg-blue-100 dark:bg-blue-900 overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-500"
+              style={{ width: scanStatus.total > 0 ? `${(scanStatus.scanned / scanStatus.total) * 100}%` : '0%' }}
+            />
+          </div>
+          {scanStatus.current_vm && (
+            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+              <span className="font-medium truncate">{scanStatus.current_vm}</span>
+              {scanStatus.current_ip && (
+                <span className="font-mono text-blue-400 dark:text-blue-500 shrink-0">— {scanStatus.current_ip}</span>
+              )}
+              <span className="ml-auto text-blue-400 dark:text-blue-600 shrink-0">nmap + NVD…</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className={`border rounded-lg overflow-hidden shadow-sm flex flex-col min-h-0 flex-1 transition-colors ${scanState === 'scanning' ? 'border-blue-400 dark:border-blue-500' : scanState === 'done' ? 'border-emerald-400 dark:border-emerald-500' : 'border-neutral-200 dark:border-neutral-700'}`}>
         <div className="overflow-x-auto overflow-y-auto flex-1">
