@@ -58,6 +58,8 @@ export default function App() {
 
   if (auth.status !== 'authenticated') return null
 
+  if (auth.me.wifi_only === true) return <AccessDenied reason="wifi_only" />
+
   const denied = accessDeniedReason(auth.me)
   if (denied) return <AccessDenied reason={denied} />
 

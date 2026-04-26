@@ -38,7 +38,7 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
   const [changeTemplateOpen, setChangeTemplateOpen] = useState(false)
 
   return (
-    <tr onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
+    <tr id={`vm-${vm.vm_id}`} onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
       <td className="px-3 py-2 font-mono text-xs text-neutral-400 dark:text-neutral-500 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">{vm.vm_id}</td>
       <td className="px-3 py-2 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <StatusCell vmId={vm.vm_id} />

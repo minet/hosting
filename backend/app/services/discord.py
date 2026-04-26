@@ -73,8 +73,9 @@ async def notify_new_request(
 ) -> None:
     """Notify Discord that a new request has been created."""
     tag = _env_tag()
+    base_url = _base_url()
     fields = [
-        {"name": "VM", "value": f"`{vm_id}`", "inline": True},
+        {"name": "VM", "value": f"[`#{vm_id}`]({base_url}/admin#vm-{vm_id})", "inline": True},
         {"name": "Type", "value": request_type.upper(), "inline": True},
     ]
     if dns_label:
@@ -82,6 +83,7 @@ async def notify_new_request(
 
     embed = {
         "title": f"[{tag}] Nouvelle demande — {request_type.upper()}",
+        "url": f"{base_url}/admin#vm-{vm_id}",
         "color": _env_color(0x3498DB),
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),

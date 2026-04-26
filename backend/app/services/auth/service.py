@@ -53,6 +53,8 @@ class AuthMeResponse(TypedDict):
     date_signed_hosting: str | None
     ldap_login: str | None
     maintenance: bool
+    permanent: bool
+    wifi_only: bool
 
 
 def login_redirect(request: FastAPIRequest, frontend_redirect: str | None) -> RedirectResponse:
@@ -171,6 +173,10 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     def _get(key: str) -> str | None:
         return _claim_value(payload, key) or _claim_value(attrs, key)
 
+    def _bool_attr(key: str) -> bool:
+        val = _get(key)
+        return str(val).lower() in {"true", "1", "yes"} if val is not None else False
+
     username = payload.get("preferred_username")
     nom = _get("nom")
     prenom = _get("prenom")
@@ -178,6 +184,8 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     cotise_end = _cotise_end_ms(payload, settings)
     date_signed_hosting = _get("dateSignedHosting")
     ldap_login = _get("ldapLogin")
+    permanent = _bool_attr("permanent")
+    wifi_only = _bool_attr("wifiOnly")
 
     if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
         profile = await fetch_keycloak_user_profile_async(username) if username else None
@@ -187,6 +195,12 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
             departure_date = departure_date or profile.get("departureDate") or profile.get("departure_date")
             cotise_end = cotise_end if cotise_end is not None else profile.get("cotise_end_ms")
             date_signed_hosting = date_signed_hosting or profile.get("dateSignedHosting")
+            if not permanent:
+                raw = profile.get("permanent")
+                permanent = str(raw).lower() in {"true", "1", "yes"} if raw is not None else False
+            if not wifi_only:
+                raw = profile.get("wifiOnly")
+                wifi_only = str(raw).lower() in {"true", "1", "yes"} if raw is not None else False
 
     from app.core.maintenance import is_maintenance
 
@@ -204,6 +218,8 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "date_signed_hosting": date_signed_hosting,
         "ldap_login": ldap_login,
         "maintenance": is_maintenance(),
+        "permanent": permanent,
+        "wifi_only": wifi_only,
     }
 
 

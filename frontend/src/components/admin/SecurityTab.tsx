@@ -11,9 +11,16 @@ interface CveEntry {
   published: string
 }
 
+type PortConfidence = 'confirmed' | 'unverified' | 'new_finding'
+
+interface PortEntry {
+  port: number
+  confidence: PortConfidence
+}
+
 interface SecurityFinding {
   ip: string
-  ports: number[]
+  ports: PortEntry[]
   hostnames: string[]
   cpes: string[]
   cves: CveEntry[]
@@ -119,8 +126,18 @@ function FindingCells({ finding }: { finding: SecurityFinding }) {
         {finding.ports.length > 0 ? (
           <div className="flex items-center gap-1 flex-wrap">
             <Plug size={10} className="text-violet-400 shrink-0" />
-            {finding.ports.map(p => (
-              <span key={p} className="font-mono text-neutral-600 dark:text-neutral-400">{p}</span>
+            {finding.ports.map(({ port, confidence }) => (
+              <span
+                key={port}
+                title={confidence === 'confirmed' ? 'Confirmé par nmap' : confidence === 'new_finding' ? 'Nouveau — non détecté par Shodan' : 'Non vérifié par nmap'}
+                className={`font-mono ${
+                  confidence === 'confirmed' ? 'text-green-500' :
+                  confidence === 'new_finding' ? 'text-red-400' :
+                  'text-yellow-500'
+                }`}
+              >
+                {port}
+              </span>
             ))}
           </div>
         ) : <span className="text-neutral-300 dark:text-neutral-600">—</span>}

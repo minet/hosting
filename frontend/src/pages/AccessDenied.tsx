@@ -2,12 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { logoutUrl } from '../api'
 
 interface Props {
-  reason?: 'preprod' | 'restricted'
+  reason?: 'preprod' | 'restricted' | 'wifi_only'
 }
 
 export default function AccessDenied({ reason = 'preprod' }: Props) {
   const { t } = useTranslation('auth')
-  const message = reason === 'restricted' ? t('restricted') : t('preprod')
+  const message = reason === 'restricted' ? t('restricted') : reason === 'wifi_only' ? t('wifi_only') : t('preprod')
 
   return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 font-sans bg-white dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">

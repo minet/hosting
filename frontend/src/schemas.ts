@@ -23,6 +23,8 @@ export const MeSchema = z.object({
   date_signed_hosting: z.string().nullable(),
   ldap_login: z.string().nullable().optional(),
   maintenance: z.boolean().optional(),
+  permanent: z.boolean().optional(),
+  wifi_only: z.boolean().optional(),
 })
 
 export type Me = z.infer<typeof MeSchema>
