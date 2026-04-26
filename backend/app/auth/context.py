@@ -187,6 +187,14 @@ def passes_preprod_gates(ctx: AuthCtx, settings: Settings) -> bool:
     return bool(ctx.groups.intersection(required))
 
 
+def _is_wifi_only(payload: TokenPayload, settings: Settings) -> bool:
+    """Return True only when the wifiOnly attribute is explicitly set to true."""
+    attrs = payload.get(settings.auth_attributes_namespace, {})
+    attrs = attrs if isinstance(attrs, dict) else {}
+    raw = _claim_value(payload, "wifiOnly") or _claim_value(attrs, "wifiOnly")
+    return str(raw).lower() in {"true", "1", "yes"} if raw is not None else False
+
+
 def require_user(
     ctx: AuthCtx = Depends(get_auth_ctx),
     settings: Settings = Depends(get_settings),
@@ -202,8 +210,11 @@ def require_user(
     :returns: The validated authentication context.
     :rtype: AuthCtx
     :raises ~fastapi.HTTPException: ``403`` if the user does not belong to
-        any of the required groups (pre-prod only).
+        any of the required groups (pre-prod only), or if the user has a
+        wifi-only subscription.
     """
+    if _is_wifi_only(ctx.payload, settings):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="wifi_only")
     if not passes_preprod_gates(ctx, settings):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return ctx

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -131,6 +132,45 @@ def _extract_cve_entry(cve_data: dict[str, Any], scanned_at: datetime) -> dict[s
     }
 
 
+def _parse_nmap_open_ports(output: str) -> set[int]:
+    open_ports: set[int] = set()
+    for line in output.splitlines():
+        m = re.match(r"^(\d+)/tcp\s+open\s+", line)
+        if m:
+            open_ports.add(int(m.group(1)))
+    return open_ports
+
+
+async def _nmap_verify_ports(ip: str, shodan_ports: list[int]) -> list[dict[str, Any]]:
+    """Verify Shodan ports with an active nmap TCP connect scan."""
+    if not shodan_ports:
+        return []
+
+    ports_arg = ",".join(str(p) for p in shodan_ports)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "nmap", "-sT", "-p", ports_arg, "--open", "-T4", "-n",
+            "--max-retries", "1", "--host-timeout", "30s", ip,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
+        nmap_open = _parse_nmap_open_ports(stdout.decode())
+    except FileNotFoundError:
+        logger.warning("nmap not found, ports marked unverified")
+        return [{"port": p, "confidence": "unverified"} for p in sorted(shodan_ports)]
+    except Exception as exc:
+        logger.warning("nmap scan failed ip=%s: %s", ip, exc)
+        return [{"port": p, "confidence": "unverified"} for p in sorted(shodan_ports)]
+
+    shodan_set = set(shodan_ports)
+    result: list[dict[str, Any]] = []
+    result += [{"port": p, "confidence": "confirmed"} for p in sorted(shodan_set & nmap_open)]
+    result += [{"port": p, "confidence": "unverified"} for p in sorted(shodan_set - nmap_open)]
+    result += [{"port": p, "confidence": "new_finding"} for p in sorted(nmap_open - shodan_set)]
+    return result
+
+
 async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> dict[str, Any]:
     """Scan a single IP and return its finding dict."""
     data = await _fetch_internetdb(client, ip)
@@ -138,11 +178,14 @@ async def _scan_ip(client: httpx.AsyncClient, ip: str, scanned_at: datetime) -> 
         return {"ip": ip, "ports": [], "hostnames": [], "cves": []}
 
     cve_ids: list[str] = data.get("vulns") or []
-    ports: list[int] = data.get("ports") or []
+    shodan_ports: list[int] = data.get("ports") or []
     hostnames: list[str] = data.get("hostnames") or []
     cpes: list[str] = data.get("cpes") or []
 
-    cve_results = await asyncio.gather(*[_fetch_cve(client, cid) for cid in cve_ids])
+    cve_results, ports = await asyncio.gather(
+        asyncio.gather(*[_fetch_cve(client, cid) for cid in cve_ids]),
+        _nmap_verify_ports(ip, shodan_ports),
+    )
 
     critical_cves = []
     for cve_data in cve_results:
