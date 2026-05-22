@@ -116,7 +116,9 @@
     },
     "cannotModify": "They cannot modify resources, access settings or delete the VM.",
     "memberNumber": "Member number",
-    "shareButton": "Share"
+    "memberNumberHint": "max. {{max}}",
+    "shareButton": "Share",
+    "maxSharedUsersReached": "Maximum number of shared users reached."
   },
   "request": {
     "title": "Make a request",

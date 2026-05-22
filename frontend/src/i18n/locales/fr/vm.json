@@ -116,7 +116,9 @@
     },
     "cannotModify": "Il ne peut pas modifier les ressources, les accès ni supprimer la VM.",
     "memberNumber": "Numéro d'adhérent",
-    "shareButton": "Partager"
+    "memberNumberHint": "max. {{max}}",
+    "shareButton": "Partager",
+    "maxSharedUsersReached": "Nombre maximum d'utilisateurs partagés atteint."
   },
   "request": {
     "title": "Faire une demande",

@@ -9,9 +9,11 @@ interface Props {
   onClose: () => void
   onShare: () => void
   onRevoke: (userId: string) => void
+  shareError: string | null
+  maxSharedUsers: number
 }
 
-export default function ShareModal({ shareUsers, shareInput, setShareInput, loadingAction, onClose, onShare, onRevoke }: Props) {
+export default function ShareModal({ shareUsers, shareInput, setShareInput, loadingAction, onClose, onShare, onRevoke, shareError, maxSharedUsers }: Props) {
   const { t } = useTranslation('vm')
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
@@ -58,7 +60,12 @@ export default function ShareModal({ shareUsers, shareInput, setShareInput, load
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('share.memberNumber')}</label>
+          <label className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+            {t('share.memberNumber')}{' '}
+            <span className="normal-case font-normal text-neutral-400 dark:text-neutral-500">
+              ({t('share.memberNumberHint', { max: maxSharedUsers })})
+            </span>
+          </label>
           <div className="flex gap-2">
             <input
               autoFocus
@@ -76,6 +83,11 @@ export default function ShareModal({ shareUsers, shareInput, setShareInput, load
               {t('share.shareButton')}
             </button>
           </div>
+          {shareError && (
+            <p className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/40 px-3 py-2 rounded-md mt-1">
+              {shareError}
+            </p>
+          )}
         </div>
       </div>
     </div>
