@@ -30,9 +30,3 @@ Travaillez sur votre branche et effectuez vos modifications. Une fois terminé, 
 ## 4. Ouvrir une Merge Request
 
 Quand tout est en ordre, ouvrez une **Merge Request vers la branche `main`**.
-- Vérifiez que les labels et l'assignation sont corrects.
-- Votre MR sera ensuite relue et intégrée.
-
----
-
-> En cas de doute, n'hésitez pas à commenter directement sur l'issue concernée.
