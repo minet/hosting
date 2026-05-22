@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     resource_max_cpu_cores: int = Field(default=6, alias="RESOURCE_MAX_CPU_CORES")
     resource_max_ram_gb: int = Field(default=9, alias="RESOURCE_MAX_RAM_GB")
     resource_max_disk_gb: int = Field(default=30, alias="RESOURCE_MAX_DISK_GB")
+    vm_max_shared_users: int = Field(default=5, alias="VM_MAX_SHARED_USERS")
     vm_auto_assign_ipv4: bool = Field(default=False, alias="VM_AUTO_ASSIGN_IPV4")
     vm_ipv4_subnets: str | None = Field(default=None, alias="VM_IPV4_SUBNETS")
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
@@ -121,7 +122,11 @@ class Settings(BaseSettings):
     @property
     def proxmox_token_configured(self) -> bool:
         """Return ``True`` when Proxmox token auth settings are present."""
-        return self._is_configured(self.proxmox_base_url) and self._is_configured(self.proxmox_token_id) and self._is_configured(self.proxmox_token_secret)
+        return (
+            self._is_configured(self.proxmox_base_url)
+            and self._is_configured(self.proxmox_token_id)
+            and self._is_configured(self.proxmox_token_secret)
+        )
 
     @property
     def proxmox_configured(self) -> bool:

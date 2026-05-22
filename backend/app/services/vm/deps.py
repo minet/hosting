@@ -82,16 +82,18 @@ def get_vm_access_service(repo: VmAccessRepo = Depends(get_vm_access_repo)) -> V
 def get_vm_share_service(
     db: AsyncSession = Depends(get_db),
     repo: VmAccessRepo = Depends(get_vm_access_repo),
+    settings: Settings = Depends(get_settings),
 ) -> VmShareService:
     """
     FastAPI dependency that provides a :class:`~app.services.vm.share.VmShareService`.
 
     :param db: Injected async database session.
     :param repo: Injected VM access repository.
+    :param settings: Injected application settings.
     :returns: A configured :class:`~app.services.vm.share.VmShareService`.
     :rtype: VmShareService
     """
-    return VmShareService(db=db, repo=repo)
+    return VmShareService(db=db, repo=repo, settings=settings)
 
 
 def get_vm_command_service(

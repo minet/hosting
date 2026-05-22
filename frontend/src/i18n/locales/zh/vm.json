@@ -116,7 +116,9 @@
     },
     "cannotModify": "他们无法修改资源、访问设置或删除虚拟机。",
     "memberNumber": "会员号",
-    "shareButton": "共享"
+    "memberNumberHint": "最多{{max}}人",
+    "shareButton": "共享",
+    "maxSharedUsersReached": "已达到最大共享用户数。"
   },
   "request": {
     "title": "提交申请",

@@ -195,6 +195,7 @@ class VMAccessListResponse(BaseModel):
     vm_id: int
     users: list[VMAccessUserResponse]
     count: int
+    max_shared_users: int
 
 
 class VMActionResponse(BaseModel):
@@ -325,9 +326,7 @@ class VMCreateBody(BaseModel):
         if len(v) > max_length:
             raise ValueError(f"name must be at most {max_length} characters")
         if not _VM_NAME_RE.match(v):
-            raise ValueError(
-                "name must start with alphanumeric and contain only alphanumeric characters and hyphens"
-            )
+            raise ValueError("name must start with alphanumeric and contain only alphanumeric characters and hyphens")
         return v
 
 
