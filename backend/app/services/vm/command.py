@@ -12,16 +12,16 @@ import asyncio
 import logging
 from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import HTTPException, status as http_status
+from fastapi import HTTPException
+from fastapi import status as http_status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import AuthCtx
 from app.core.config import Settings
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.dns import DnsService
 from app.services.discord import notify_ipv4_exhausted
+from app.services.dns import DnsService
 from app.services.proxmox.allocation import allocate_next_vm_ipv4
 from app.services.proxmox.errors import ProxmoxConfigError, ProxmoxError, ProxmoxUnavailableError
 from app.services.proxmox.gateway import ProxmoxGateway
@@ -402,7 +402,7 @@ class VmCommandService:
             logger.exception("Proxmox IPv4 config failed for vm_id=%s ipv4=%s (DB already committed)", vm_id, ipv4)
             raise HTTPException(
                 status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed: {exc}",
+                detail=f"IPv4 {ipv4} assigned in DB but Proxmox config update failed.",
             ) from exc
 
         await self._cmd_repo.update_ip_history_ipv4(vm_id, ipv4)
