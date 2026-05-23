@@ -75,7 +75,7 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
         </div>
         <div className="min-w-0 flex items-baseline gap-1.5 flex-wrap">
           <p className="text-[9px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 shrink-0">IP</p>
-          {isOwner && (
+          {isOwner && !vm.network.ipv4 && (
             <button onClick={onOpenIpRequest} className="flex items-center gap-0.5 px-1 py-px rounded bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-700 text-blue-600 dark:text-blue-400 text-[9px] font-semibold transition-colors cursor-pointer shrink-0">
               <Pencil size={is2xl ? 16 : 8} />
               {t('info.request')}
