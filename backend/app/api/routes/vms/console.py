@@ -31,6 +31,7 @@ from fastapi.websockets import WebSocketState
 from app.auth import AuthCtx, require_user
 from app.auth.context import build_auth_ctx, passes_preprod_gates
 from app.core.config import get_settings
+from app.core.rate_limit import RateLimiter
 from app.core.security.token import get_token_service
 from app.core.sessions import get_access_token
 from app.db.core.engine import get_session_factory
@@ -39,7 +40,6 @@ from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
 from app.services.vm.access import AccessLevel, VmAccessService
 from app.services.vm.deps import get_vm_access_service
-from app.core.rate_limit import RateLimiter
 from app.services.vm.errors import raise_proxmox_as_http
 
 logger = logging.getLogger(__name__)
@@ -296,7 +296,7 @@ async def terminal_ws(vm_id: int, websocket: WebSocket) -> None:
         session = await _get_or_create_session(vm_id)
     except ProxmoxError as exc:
         logger.warning("terminal_ws vm=%s termproxy failed: %s", vm_id, exc)
-        await websocket.close(code=4503, reason=str(exc))
+        await websocket.close(code=4503, reason="Proxmox terminal session closed.")
         return
     except (websockets.exceptions.WebSocketException, OSError) as exc:
         logger.warning("terminal_ws vm=%s proxmox connection failed: %r", vm_id, exc)

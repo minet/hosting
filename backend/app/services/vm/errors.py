@@ -34,7 +34,7 @@ def raise_proxmox_as_http(exc: ProxmoxError, *, unavailable: str) -> NoReturn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VM not found") from exc
     if isinstance(exc, ProxmoxPermissionError):
         logger.warning("Proxmox permission denied: %s", exc)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied") from exc
     if isinstance(exc, ProxmoxInvalidDiskSize):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid disk size") from exc
     logger.exception("Proxmox service unavailable: %s", unavailable)
