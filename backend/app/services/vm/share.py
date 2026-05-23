@@ -11,13 +11,14 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.db.repositories.vm import VmAccessRepo
 
 
 class VmShareService:
     """Service for managing shared access to virtual machines."""
 
-    def __init__(self, *, db: AsyncSession, repo: VmAccessRepo):
+    def __init__(self, *, db: AsyncSession, repo: VmAccessRepo, settings: Settings):
         """
         Initialise the VM share service.
 
@@ -26,6 +27,7 @@ class VmShareService:
         """
         self.db = db
         self.repo = repo
+        self.settings = settings
 
     async def grant_access(self, *, vm_id: int, user_id: str) -> dict:
         """
@@ -38,6 +40,15 @@ class VmShareService:
         :rtype: dict
         :raises HTTPException: 503 on database errors.
         """
+
+        # Only check the shared user limit if the user does not already have access
+        if (
+            not await self.repo.has_vm_access(vm_id=vm_id, user_id=user_id, owner_only=False)
+            and await self.repo.get_shared_user_count(vm_id=vm_id) >= self.settings.vm_max_shared_users
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Maximum number of shared users reached"
+            )
         try:
             result = await self.repo.grant_access(vm_id=vm_id, user_id=user_id)
             await self.db.commit()

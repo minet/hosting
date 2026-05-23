@@ -131,6 +131,8 @@ export default function VMPage() {
         shareUsers={share.shareUsers}
         shareInput={share.shareInput}
         setShareInput={share.setShareInput}
+        shareError={share.shareError}
+        maxSharedUsers={share.maxSharedUsers}
         loadingAction={loadingAction}
         onClose={() => share.setShareOpen(false)}
         onShare={share.doShare}

@@ -138,7 +138,12 @@ class VmQueryService:
         """
         rows = await self._db_call(self.repo.list_vm_access(vm_id))
         users = [{"user_id": row["user_id"], "role": "owner" if bool(row["role_owner"]) else "shared"} for row in rows]
-        return {"vm_id": vm_id, "users": users, "count": len(users)}
+        return {
+            "vm_id": vm_id,
+            "users": users,
+            "count": len(users),
+            "max_shared_users": self.settings.vm_max_shared_users,
+        }
 
     async def list_templates(self) -> dict[str, Any]:
         """

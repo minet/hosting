@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.vm_access import VMAccess
@@ -20,6 +20,15 @@ class VmAccessRepo:
         :param db: Active SQLAlchemy async session.
         """
         self.db = db
+
+    async def get_shared_user_count(self, vm_id: int) -> int:
+        """Get the number of users with shared access to a given VM.
+
+        :param vm_id: The VM identifier.
+        """
+        stmt = select(func.count()).select_from(VMAccess).where(VMAccess.vm_id == vm_id, VMAccess.role_owner.is_(False))
+
+        return (await self.db.execute(stmt)).scalar() or 0
 
     async def has_vm_access(self, vm_id: int, user_id: str, owner_only: bool) -> bool:
         """Check whether a user has access to a given VM.
