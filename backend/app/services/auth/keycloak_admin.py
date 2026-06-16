@@ -100,6 +100,36 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         return None
 
 
+def fetch_keycloak_user_by_stored_id(user_id: str) -> dict[str, Any] | None:
+    """Fetch a user's profile using the ID format stored in the database.
+
+    The stored ID is either a plain Keycloak UUID or a federated ID of the
+    form ``f:{idpAlias}:{memberNumber}``.  The member number is stored as the
+    ``id`` user attribute in Keycloak and is used to look up the user.
+    """
+    settings = get_settings()
+    if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
+        return None
+    try:
+        admin = _make_admin()
+        member_number = user_id.split(":")[-1]
+        users = admin.get_users(query={"q": f"id:{member_number}"})
+        if not isinstance(users, list) or not users:
+            return None
+        user = users[0]
+        if not isinstance(user, dict):
+            return None
+        return {
+            "username": user.get("username"),
+            "first_name": user.get("firstName"),
+            "last_name": user.get("lastName"),
+            "email": user.get("email"),
+        }
+    except (KeycloakError, OSError) as exc:
+        logger.warning("fetch_keycloak_user_by_stored_id failed for user_id=%s: %s", user_id, exc)
+        return None
+
+
 def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
     """Fetch all members of a Keycloak group identified by its path."""
     settings = get_settings()
@@ -272,3 +302,7 @@ async def set_date_signed_hosting_async(user_id: str, date_iso: str) -> bool:
 
 async def fetch_keycloak_user_profile_async(username: str) -> dict[str, Any] | None:
     return await asyncio.to_thread(fetch_keycloak_user_profile, username)
+
+
+async def fetch_keycloak_user_by_stored_id_async(user_id: str) -> dict[str, Any] | None:
+    return await asyncio.to_thread(fetch_keycloak_user_by_stored_id, user_id)
