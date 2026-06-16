@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 
 interface Props {
-  shareUsers: { user_id: string; role: string }[]
+  shareUsers: { user_id: string; role: string; display_name: string | null }[]
   shareInput: string
   setShareInput: (v: string) => void
   loadingAction: string | null
@@ -35,10 +35,11 @@ export default function ShareModal({ shareUsers, shareInput, setShareInput, load
             <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{t('share.sharedAccess')}</p>
             <div className="flex flex-col gap-1">
               {shareUsers.map(u => {
-                const adh = u.user_id.split(':').at(-1)
+                const memberId = `#${u.user_id.split(':').at(-1)}`
+                const label = u.display_name ? `${u.display_name} (${memberId})` : memberId
                 return (
                   <div key={u.user_id} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-700">
-                    <span className="text-xs font-mono text-neutral-600 dark:text-neutral-400 flex-1">#{adh}</span>
+                    <span className="text-xs text-neutral-600 dark:text-neutral-400 flex-1">{label}</span>
                     <button onClick={() => onRevoke(u.user_id)} className="text-neutral-300 dark:text-neutral-600 hover:text-red-400 transition-colors cursor-pointer">
                       <X size={13} />
                     </button>
