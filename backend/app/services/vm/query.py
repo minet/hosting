@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
+from app.services.auth.keycloak_admin import fetch_keycloak_user_by_id_async
 from app.services.wordgen import vm_dns_label
 
 # ── Global CNAME cache with TTL ──────────────────────────────────────
@@ -137,7 +138,20 @@ class VmQueryService:
         :raises HTTPException: 503 on database errors.
         """
         rows = await self._db_call(self.repo.list_vm_access(vm_id))
-        users = [{"user_id": row["user_id"], "role": "owner" if bool(row["role_owner"]) else "shared"} for row in rows]
+        users_raw = [
+            {"user_id": row["user_id"], "role": "owner" if bool(row["role_owner"]) else "shared"}
+            for row in rows
+        ]
+
+        keycloak_ids = [u["user_id"].split(":")[-1] for u in users_raw]
+        profiles = await asyncio.gather(
+            *(fetch_keycloak_user_by_id_async(keycloak_id) for keycloak_id in keycloak_ids),
+            return_exceptions=True,
+        )
+        users = []
+        for u, profile in zip(users_raw, profiles):
+            display_name = profile.get("username") if isinstance(profile, dict) else None
+            users.append({**u, "display_name": display_name})
         return {
             "vm_id": vm_id,
             "users": users,
