@@ -143,12 +143,9 @@ class VmQueryService:
             for row in rows
         ]
 
-        profiles = await asyncio.gather(
-            *(fetch_keycloak_user_by_stored_id_async(u["user_id"]) for u in users_raw),
-            return_exceptions=True,
-        )
         users = []
-        for u, profile in zip(users_raw, profiles):
+        for u in users_raw:
+            profile = await fetch_keycloak_user_by_stored_id_async(u["user_id"])
             display_name = profile.get("username") if isinstance(profile, dict) else None
             users.append({**u, "display_name": display_name})
         return {
