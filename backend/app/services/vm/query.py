@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_user_by_stored_id_async
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async
 from app.services.wordgen import vm_dns_label
 
 # ── Global CNAME cache with TTL ──────────────────────────────────────
@@ -143,10 +143,15 @@ class VmQueryService:
             for row in rows
         ]
 
+        charter_members = await fetch_keycloak_group_members_async("/hosting/charte")
+        member_by_id: dict[str, dict] = {
+            str(m.get("id", "")): m for m in charter_members if isinstance(m, dict) and m.get("id")
+        }
+
         users = []
         for u in users_raw:
-            profile = await fetch_keycloak_user_by_stored_id_async(u["user_id"])
-            display_name = profile.get("username") if isinstance(profile, dict) else None
+            member = member_by_id.get(u["user_id"])
+            display_name = member.get("username") if member else None
             users.append({**u, "display_name": display_name})
         return {
             "vm_id": vm_id,
