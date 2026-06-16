@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_user_by_id_async
+from app.services.auth.keycloak_admin import fetch_keycloak_user_by_stored_id_async
 from app.services.wordgen import vm_dns_label
 
 # ── Global CNAME cache with TTL ──────────────────────────────────────
@@ -143,9 +143,8 @@ class VmQueryService:
             for row in rows
         ]
 
-        keycloak_ids = [u["user_id"].split(":")[-1] for u in users_raw]
         profiles = await asyncio.gather(
-            *(fetch_keycloak_user_by_id_async(keycloak_id) for keycloak_id in keycloak_ids),
+            *(fetch_keycloak_user_by_stored_id_async(u["user_id"]) for u in users_raw),
             return_exceptions=True,
         )
         users = []
