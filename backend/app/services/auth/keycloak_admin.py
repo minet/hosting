@@ -100,6 +100,28 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         return None
 
 
+def fetch_keycloak_username(user_id: str) -> str | None:
+    """Resolve a stored ``user_id`` to a username via an indexed lookup.
+
+    Brokered ids (``f:{idpAlias}:{idpUserId}``) are resolved by federated
+    identity; plain Keycloak UUIDs by direct id.
+    """
+    settings = get_settings()
+    if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
+        return None
+    try:
+        admin = _make_admin()
+        if user_id.startswith("f:"):
+            _, idp, idp_user_id = user_id.split(":", 2)
+            users = admin.get_users(query={"idpAlias": idp, "idpUserId": idp_user_id})
+            user = users[0] if isinstance(users, list) and users else None
+        else:
+            user = admin.get_user(user_id)
+        return user.get("username") if isinstance(user, dict) else None
+    except (KeycloakError, OSError, ValueError) as exc:
+        logger.warning("fetch_keycloak_username failed for user_id=%s: %s", user_id, exc)
+        return None
+
 
 def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
     """Fetch all members of a Keycloak group identified by its path."""
@@ -247,6 +269,10 @@ async def fetch_keycloak_user_by_id_async(user_id: str) -> dict[str, Any] | None
 
 async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, Any]]:
     return await asyncio.to_thread(fetch_keycloak_group_members, group_path)
+
+
+async def fetch_keycloak_username_async(user_id: str) -> str | None:
+    return await asyncio.to_thread(fetch_keycloak_username, user_id)
 
 
 async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
