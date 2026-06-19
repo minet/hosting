@@ -19,6 +19,7 @@ export const MeSchema = z.object({
   departure_date: z.string().nullable(),
   groups: z.array(z.string()),
   is_admin: z.boolean(),
+  is_dev: z.boolean().optional(),
   cotise_end_ms: z.number().nullable(),
   date_signed_hosting: z.string().nullable(),
   ldap_login: z.string().nullable().optional(),

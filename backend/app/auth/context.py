@@ -27,12 +27,15 @@ class AuthCtx:
     :param groups: Set of normalised group names the user belongs to.
     :param is_admin: ``True`` when the user is a member of at least one
         admin group defined in the application settings.
+    :param is_dev: ``True`` when the user is a member of at least one
+        dev group (reduced admin able to validate DNS requests only).
     :param payload: Raw decoded token payload from the identity provider.
     """
 
     user_id: str
     groups: set[str]
     is_admin: bool
+    is_dev: bool
     payload: TokenPayload
 
 
@@ -138,10 +141,12 @@ def build_auth_ctx(payload: TokenPayload, settings: Settings) -> AuthCtx:
     """
     groups = _groups(payload, settings)
     admin_groups = csv_values(settings.auth_admin_groups)
+    dev_groups = csv_values(settings.auth_dev_groups)
     return AuthCtx(
         user_id=_extract_user_id(payload, settings),
         groups=groups,
         is_admin=bool(admin_groups and groups.intersection(admin_groups)),
+        is_dev=bool(dev_groups and groups.intersection(dev_groups)),
         payload=payload,
     )
 
@@ -229,6 +234,24 @@ def require_admin(ctx: AuthCtx = Depends(get_auth_ctx)) -> AuthCtx:
     :raises ~fastapi.HTTPException: ``403`` if the user is not an admin.
     """
     if ctx.is_admin:
+        return ctx
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+def require_dns_admin(ctx: AuthCtx = Depends(get_auth_ctx)) -> AuthCtx:
+    """FastAPI dependency for DNS-validation access.
+
+    Grants access to full admins (``is_admin``) and to reduced "dev"
+    validators (``is_dev``) who may only act on DNS requests. Endpoints
+    guarded by this dependency must additionally restrict dev-only callers
+    to DNS-typed operations (see :func:`AuthCtx.is_admin`).
+
+    :param ctx: Authentication context injected by FastAPI.
+    :returns: The validated authentication context.
+    :rtype: AuthCtx
+    :raises ~fastapi.HTTPException: ``403`` if the user is neither admin nor dev.
+    """
+    if ctx.is_admin or ctx.is_dev:
         return ctx
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

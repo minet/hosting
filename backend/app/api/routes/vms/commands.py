@@ -237,6 +237,7 @@ async def create_request(
         vm_id=vm_id,
         user_id=ctx.user_id,
         request_type=body.type,
+        request_id=row["id"],
         dns_label=body.dns_label,
     )
     return VMRequestResponse.from_row(row)
