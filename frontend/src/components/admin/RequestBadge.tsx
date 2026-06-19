@@ -3,7 +3,7 @@ import { X, Check, AlertTriangle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
 
-function RequestDialog({ request, onClose, onUpdate }: {
+export function RequestDialog({ request, onClose, onUpdate }: {
   request: AdminRequest
   onClose: () => void
   onUpdate: (id: number, status: 'approved' | 'rejected') => Promise<void>
