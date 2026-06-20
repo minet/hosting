@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
 from app.db.repositories.vm import VmQueryRepo
+from app.services.auth.keycloak_admin import fetch_keycloak_username_async
 from app.services.wordgen import vm_dns_label
 
 # ── Global CNAME cache with TTL ──────────────────────────────────────
@@ -24,6 +25,10 @@ _cname_cache: dict[str, str] | None = None
 _cname_fetched_at: float = 0.0
 _CNAME_TTL: float = 60.0  # seconds
 _cname_lock = asyncio.Lock()
+
+# ── Username cache (user_id -> (expiry, username)) ───────────────────
+_username_cache: dict[str, tuple[float, str]] = {}
+_USERNAME_TTL: float = 300.0  # seconds
 
 
 class VmQueryService:
@@ -53,6 +58,17 @@ class VmQueryService:
             _cname_cache = await self.repo.list_cname_targets()
             _cname_fetched_at = now
             return _cname_cache
+
+    async def _resolve_username(self, user_id: str) -> str | None:
+        """Resolve a user_id to a username, cached with a TTL."""
+        now = time.monotonic()
+        cached = _username_cache.get(user_id)
+        if cached and cached[0] > now:
+            return cached[1]
+        name = await fetch_keycloak_username_async(user_id)
+        if name is not None:
+            _username_cache[user_id] = (now + _USERNAME_TTL, name)
+        return name
 
     async def list_vms(self, *, user_id: str) -> dict[str, Any]:
         """
@@ -137,7 +153,19 @@ class VmQueryService:
         :raises HTTPException: 503 on database errors.
         """
         rows = await self._db_call(self.repo.list_vm_access(vm_id))
-        users = [{"user_id": row["user_id"], "role": "owner" if bool(row["role_owner"]) else "shared"} for row in rows]
+
+        users = []
+        for row in rows:
+            is_owner = bool(row["role_owner"])
+            # The frontend drops the owner, so only shared users need a name.
+            display_name = None if is_owner else await self._resolve_username(row["user_id"])
+            users.append(
+                {
+                    "user_id": row["user_id"],
+                    "role": "owner" if is_owner else "shared",
+                    "display_name": display_name,
+                }
+            )
         return {
             "vm_id": vm_id,
             "users": users,

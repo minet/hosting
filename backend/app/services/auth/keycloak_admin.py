@@ -100,6 +100,12 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         return None
 
 
+def fetch_keycloak_username(user_id: str) -> str | None:
+    """Resolve a stored ``user_id`` (Keycloak/storage-SPI id) to a username."""
+    profile = fetch_keycloak_user_by_id(user_id)
+    return profile.get("username") if profile else None
+
+
 def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
     """Fetch all members of a Keycloak group identified by its path."""
     settings = get_settings()
@@ -248,6 +254,10 @@ async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, 
     return await asyncio.to_thread(fetch_keycloak_group_members, group_path)
 
 
+async def fetch_keycloak_username_async(user_id: str) -> str | None:
+    return await asyncio.to_thread(fetch_keycloak_username, user_id)
+
+
 async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
     """Return the combined list of members to check for VM expiration.
 
@@ -272,3 +282,4 @@ async def set_date_signed_hosting_async(user_id: str, date_iso: str) -> bool:
 
 async def fetch_keycloak_user_profile_async(username: str) -> dict[str, Any] | None:
     return await asyncio.to_thread(fetch_keycloak_user_profile, username)
+

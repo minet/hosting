@@ -17,7 +17,7 @@ export function useVMShare(
   const shareQuery = useQuery({
     queryKey: ['vm-share', vmId],
     queryFn: () =>
-      apiFetch<{ users: { user_id: string; role: string }[]; max_shared_users: number }>(`/api/vms/${vmId}/access`),
+      apiFetch<{ users: { user_id: string; role: string; display_name: string | null }[]; max_shared_users: number }>(`/api/vms/${vmId}/access`),
     enabled: !!vmId && shareOpen,
   })
 
