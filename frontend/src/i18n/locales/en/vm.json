@@ -97,7 +97,8 @@
   "console": {
     "notAvailable": "Console not available",
     "adminRestriction": "As an administrator, you cannot access the console of other users' VMs.",
-    "vmStopped": "The VM is off"
+    "vmStopped": "The VM is off",
+    "shuttingDown": "Shutting down..."
   },
   "history": {
     "title": "History",
