@@ -1,10 +1,11 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, ArrowLeft, Play, TerminalSquare } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch, ApiError } from '../api'
 
 const VMTerminal = lazy(() => import('../components/VMTerminal'))
+import type { VMTerminalHandle } from '../components/VMTerminal'
 const MetricChart = lazy(() => import('../components/MetricChart'))
 import { useVMStatus } from '../contexts/VMStatusContext'
 import { useResources } from '../hooks/useResources'
@@ -43,6 +44,7 @@ export default function VMPage() {
   const [overlayHeight, setOverlayHeight] = useState(0)
   const [onboot, setOnboot] = useState<boolean | null>(null)
   const [deprecatedBannerDismissed, setDeprecatedBannerDismissed] = useState(false)
+  const terminalRef = useRef<VMTerminalHandle>(null)
 
   const running = vmStatusEntry?.status === 'running'
   const isOwner = !vm || vm.current_user_role === 'owner' || vm.current_user_role === 'admin'
@@ -78,7 +80,7 @@ export default function VMPage() {
     if (!vmId || !vmStatusEntry?.status) return
     apiFetch<VMDetail>(`/api/vms/${vmId}`)
       .then(vmData => setVm(vmData))
-      .catch(() => {})
+      .catch(() => { })
     apiFetch<{ items: VMTask[] }>(`/api/vms/${vmId}/tasks`)
       .then(r => setTasks(r.items))
       .catch(() => { /* tasks are non-critical, keep previous state */ })
@@ -98,198 +100,203 @@ export default function VMPage() {
 
   return (
     <>
-    {templateDeprecated && !deprecatedBannerDismissed && (
-      <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-b-xl shadow-sm">
-        <AlertTriangle size={13} className="shrink-0 text-amber-500" />
-        <span className="flex-1">{t('deprecated.banner')}</span>
-        <button
-          onClick={() => setDeprecatedBannerDismissed(true)}
-          className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[11px] font-semibold transition-colors cursor-pointer"
-        >
-          OK
-        </button>
-      </div>
-    )}
-    {hasPendingChanges && (
-      <div className={`fixed ${templateDeprecated && !deprecatedBannerDismissed ? 'top-24' : 'top-14'} left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-xs font-medium rounded-b-xl shadow-sm`}>
-        <AlertTriangle size={13} className="shrink-0 text-blue-500" />
-        <span className="flex-1">
-          {t('pendingChanges.banner', { changes: vm!.pending_changes!.map(c => t(`pendingChanges.${c}`)).join(', ') })}
-        </span>
-      </div>
-    )}
-    {showDestroyModal && (
-      <DestroyModal
-        vmName={vm?.name}
-        loadingAction={loadingAction}
-        onClose={() => setShowDestroyModal(false)}
-        onConfirm={doDestroy}
-      />
-    )}
-    {share.shareOpen && (
-      <ShareModal
-        shareUsers={share.shareUsers}
-        shareInput={share.shareInput}
-        setShareInput={share.setShareInput}
-        shareError={share.shareError}
-        maxSharedUsers={share.maxSharedUsers}
-        loadingAction={loadingAction}
-        onClose={() => share.setShareOpen(false)}
-        onShare={share.doShare}
-        onRevoke={share.doRevoke}
-      />
-    )}
-    {req.reqModalOpen && (
-      <RequestModal
-        vmNetwork={vm?.network ?? null}
-        requests={req.requests}
-        reqType={req.reqType}
-        setReqType={req.setReqType}
-        reqDnsLabel={req.reqDnsLabel}
-        setReqDnsLabel={req.setReqDnsLabel}
-        reqDnsError={req.reqDnsError}
-        reqSaving={req.reqSaving}
-        onClose={() => req.setReqModalOpen(false)}
-        onSubmit={req.doSubmitRequest}
-      />
-    )}
-    {res.resModalOpen && vm && (
-      <ResourcesModal
-        newCpu={res.newCpu}
-        setNewCpu={res.setNewCpu}
-        newRam={res.newRam}
-        setNewRam={res.setNewRam}
-        newDisk={res.newDisk}
-        setNewDisk={res.setNewDisk}
-        resSaving={res.resSaving}
-        maxCpu={res.maxCpu}
-        maxRam={res.maxRam}
-        maxDisk={res.maxDisk}
-        minCpu={res.minCpu}
-        minRam={res.minRam}
-        minDisk={res.minDisk}
-        onClose={() => res.setResModalOpen(false)}
-        onSave={res.doSaveResources}
-      />
-    )}
-
-    {me.is_admin && (
-      <button
-        onClick={() => navigate('/admin')}
-        className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors mb-1 cursor-pointer"
-      >
-        <ArrowLeft size={13} />
-        {t('actions.backToAdmin')}
-      </button>
-    )}
-
-    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-3 xl:h-full [&>*]:min-w-0">
-
-      {vm ? (
-        <VMInfoCard
-          vm={vm}
-          status={vmStatusEntry?.status ?? null}
-          loadingAction={loadingAction}
-          running={running}
-          isOwner={isOwner}
-          uptime={uptime}
-          onOpenDnsRequest={() => { req.setReqType('dns'); req.loadRequests(); req.setReqModalOpen(true) }}
-          onOpenIpRequest={() => { req.setReqType('ipv4'); req.loadRequests(); req.setReqModalOpen(true) }}
-        />
-      ) : (
-        <CardSkeleton className="md:col-span-2 xl:col-span-2 min-h-[10rem]" />
-      )}
-
-      <VMActionsCard
-        running={running}
-        isOwner={isOwner}
-        loadingAction={loadingAction}
-        onboot={onboot}
-        onToggleOnboot={toggleOnboot}
-        onAction={doAction}
-        onOpenDestroyModal={() => setShowDestroyModal(true)}
-        onOpenShareModal={() => { share.setShareOpen(true); share.loadShareUsers() }}
-      />
-
-      {/* Bouton terminal mobile */}
-      {vmId && running && canAccessConsole && !templateDeprecated && (
-        <button
-          onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
-          className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 border border-neutral-700 dark:border-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors cursor-pointer h-12"
-        >
-          <TerminalSquare size={15} className="shrink-0" />
-          {t('actions.launchTerminal')}
-        </button>
-      )}
-
-      {/* Terminal — tablette & desktop uniquement */}
-      {vmId && isDesktop && (
-        <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
-          {running && canAccessConsole && !templateDeprecated && <Suspense fallback={null}><VMTerminal vmId={vmId} /></Suspense>}
-          {templateDeprecated && (
-            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <AlertTriangle size={24} className="text-amber-500" />
-              <p className="text-sm text-white/70 font-medium">{t('deprecated.title')}</p>
-              <p className="text-xs text-neutral-500 text-center px-6">{t('deprecated.terminalDisabled')}</p>
-            </div>
-          )}
-          {!templateDeprecated && running && !canAccessConsole && (
-            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <TerminalSquare size={24} className="text-neutral-500" />
-              <p className="text-sm text-white/70 font-medium">{t('console.notAvailable')}</p>
-              <p className="text-xs text-neutral-500 text-center px-6">{t('console.adminRestriction')}</p>
-            </div>
-          )}
-          {!templateDeprecated && !running && (
-            <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
-              <p className="text-sm text-white/70 font-medium">{t('console.vmStopped')}</p>
-              <button
-                onClick={() => doAction('start')}
-                disabled={!!loadingAction}
-                className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
-              >
-                <Play size={14} />
-                {t('actions.startVM')}
-              </button>
-            </div>
-          )}
+      {templateDeprecated && !deprecatedBannerDismissed && (
+        <div className="fixed top-14 left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs font-medium rounded-b-xl shadow-sm">
+          <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+          <span className="flex-1">{t('deprecated.banner')}</span>
+          <button
+            onClick={() => setDeprecatedBannerDismissed(true)}
+            className="shrink-0 px-3 py-1 rounded-md bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-700 dark:hover:bg-neutral-300 text-white dark:text-neutral-900 text-[11px] font-semibold transition-colors cursor-pointer"
+          >
+            OK
+          </button>
         </div>
       )}
+      {hasPendingChanges && (
+        <div className={`fixed ${templateDeprecated && !deprecatedBannerDismissed ? 'top-24' : 'top-14'} left-0 md:left-16 right-2 z-30 flex items-center gap-3 px-6 py-2.5 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-xs font-medium rounded-b-xl shadow-sm`}>
+          <AlertTriangle size={13} className="shrink-0 text-blue-500" />
+          <span className="flex-1">
+            {t('pendingChanges.banner', { changes: vm!.pending_changes!.map(c => t(`pendingChanges.${c}`)).join(', ') })}
+          </span>
+        </div>
+      )}
+      {showDestroyModal && (
+        <DestroyModal
+          vmName={vm?.name}
+          loadingAction={loadingAction}
+          onClose={() => setShowDestroyModal(false)}
+          onConfirm={doDestroy}
+        />
+      )}
+      {share.shareOpen && (
+        <ShareModal
+          shareUsers={share.shareUsers}
+          shareInput={share.shareInput}
+          setShareInput={share.setShareInput}
+          shareError={share.shareError}
+          maxSharedUsers={share.maxSharedUsers}
+          loadingAction={loadingAction}
+          onClose={() => share.setShareOpen(false)}
+          onShare={share.doShare}
+          onRevoke={share.doRevoke}
+        />
+      )}
+      {req.reqModalOpen && (
+        <RequestModal
+          vmNetwork={vm?.network ?? null}
+          requests={req.requests}
+          reqType={req.reqType}
+          setReqType={req.setReqType}
+          reqDnsLabel={req.reqDnsLabel}
+          setReqDnsLabel={req.setReqDnsLabel}
+          reqDnsError={req.reqDnsError}
+          reqSaving={req.reqSaving}
+          onClose={() => req.setReqModalOpen(false)}
+          onSubmit={req.doSubmitRequest}
+        />
+      )}
+      {res.resModalOpen && vm && (
+        <ResourcesModal
+          newCpu={res.newCpu}
+          setNewCpu={res.setNewCpu}
+          newRam={res.newRam}
+          setNewRam={res.setNewRam}
+          newDisk={res.newDisk}
+          setNewDisk={res.setNewDisk}
+          resSaving={res.resSaving}
+          maxCpu={res.maxCpu}
+          maxRam={res.maxRam}
+          maxDisk={res.maxDisk}
+          minCpu={res.minCpu}
+          minRam={res.minRam}
+          minDisk={res.minDisk}
+          onClose={() => res.setResModalOpen(false)}
+          onSave={res.doSaveResources}
+        />
+      )}
 
-      <div className="md:col-span-3 xl:col-span-3 flex gap-2 overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
-        <VMResourcesCard
+      {me.is_admin && (
+        <button
+          onClick={() => navigate('/admin')}
+          className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors mb-1 cursor-pointer"
+        >
+          <ArrowLeft size={13} />
+          {t('actions.backToAdmin')}
+        </button>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 xl:grid-rows-4 gap-3 xl:h-full [&>*]:min-w-0">
+
+        {vm ? (
+          <VMInfoCard
+            vm={vm}
+            status={vmStatusEntry?.status ?? null}
+            loadingAction={loadingAction}
+            running={running}
+            isOwner={isOwner}
+            uptime={uptime}
+            onOpenDnsRequest={() => { req.setReqType('dns'); req.loadRequests(); req.setReqModalOpen(true) }}
+            onOpenIpRequest={() => { req.setReqType('ipv4'); req.loadRequests(); req.setReqModalOpen(true) }}
+          />
+        ) : (
+          <CardSkeleton className="md:col-span-2 xl:col-span-2 min-h-[10rem]" />
+        )}
+
+        <VMActionsCard
+          running={running}
+          isOwner={isOwner}
+          loadingAction={loadingAction}
+          onboot={onboot}
+          onToggleOnboot={toggleOnboot}
+          onAction={(action) => {
+            if (action === 'stop' || action === 'restart') {
+              terminalRef.current?.disconnect(t('console.shuttingDown', 'Shutting down...'))
+            }
+            doAction(action)
+          }}
+          onOpenDestroyModal={() => setShowDestroyModal(true)}
+          onOpenShareModal={() => { share.setShareOpen(true); share.loadShareUsers() }}
+        />
+
+        {/* Bouton terminal mobile */}
+        {vmId && running && canAccessConsole && !templateDeprecated && (
+          <button
+            onClick={() => { setOverlayHeight(window.innerHeight); setMobileTermOpen(true) }}
+            className="md:hidden flex items-center justify-center gap-2 rounded-sm bg-neutral-900 dark:bg-neutral-100 hover:bg-neutral-800 dark:hover:bg-neutral-200 border border-neutral-700 dark:border-neutral-300 text-white dark:text-neutral-900 text-sm font-semibold transition-colors cursor-pointer h-12"
+          >
+            <TerminalSquare size={15} className="shrink-0" />
+            {t('actions.launchTerminal')}
+          </button>
+        )}
+
+        {/* Terminal — tablette & desktop uniquement */}
+        {vmId && isDesktop && (
+          <div className="hidden md:block md:col-span-3 md:row-span-5 xl:col-start-1 xl:col-span-3 xl:row-start-2 xl:row-span-3 border border-neutral-100 dark:border-neutral-800 shadow-md dark:shadow-none rounded-sm overflow-hidden h-80 md:h-[500px] xl:h-auto relative">
+            {running && canAccessConsole && !templateDeprecated && <Suspense fallback={null}><VMTerminal ref={terminalRef} vmId={vmId} /></Suspense>}
+            {templateDeprecated && (
+              <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+                <AlertTriangle size={24} className="text-amber-500" />
+                <p className="text-sm text-white/70 font-medium">{t('deprecated.title')}</p>
+                <p className="text-xs text-neutral-500 text-center px-6">{t('deprecated.terminalDisabled')}</p>
+              </div>
+            )}
+            {!templateDeprecated && running && !canAccessConsole && (
+              <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+                <TerminalSquare size={24} className="text-neutral-500" />
+                <p className="text-sm text-white/70 font-medium">{t('console.notAvailable')}</p>
+                <p className="text-xs text-neutral-500 text-center px-6">{t('console.adminRestriction')}</p>
+              </div>
+            )}
+            {!templateDeprecated && !running && (
+              <div className="absolute inset-0 bg-neutral-950 flex flex-col items-center justify-center gap-3 rounded-sm">
+                <p className="text-sm text-white/70 font-medium">{t('console.vmStopped')}</p>
+                <button
+                  onClick={() => doAction('start')}
+                  disabled={!!loadingAction}
+                  className="flex items-center gap-2 px-4 py-2 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 text-sm font-semibold transition-colors disabled:opacity-40 cursor-pointer"
+                >
+                  <Play size={14} />
+                  {t('actions.startVM')}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="md:col-span-3 xl:col-span-3 flex gap-2 overflow-hidden [&>*]:flex-1 [&>*]:min-w-0">
+          <VMResourcesCard
+            vm={vm}
+            running={running}
+            isOwner={isOwner}
+            templateDeprecated={templateDeprecated}
+            onOpenResModal={() => res.setResModalOpen(true)}
+          />
+          <VMHistoryCard tasks={tasks} />
+        </div>
+
+        <VMAccessCard
           vm={vm}
           running={running}
           isOwner={isOwner}
-          templateDeprecated={templateDeprecated}
-          onOpenResModal={() => res.setResModalOpen(true)}
+          creds={creds}
         />
-        <VMHistoryCard tasks={tasks} />
+
+        <Suspense fallback={null}>
+          <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
+        </Suspense>
+
       </div>
 
-      <VMAccessCard
-        vm={vm}
-        running={running}
-        isOwner={isOwner}
-        creds={creds}
-      />
-
-      <Suspense fallback={null}>
-        <MetricChart vmId={vmId ?? ''} className="md:col-span-3 md:row-span-2 xl:col-span-3 xl:row-span-2 h-64 md:h-[calc(2*12rem+0.5rem)] xl:h-auto" />
-      </Suspense>
-
-    </div>
-
-    {mobileTermOpen && vmId && (
-      <Suspense fallback={null}>
-        <VMTerminalOverlay
-          vmId={vmId}
-          vmName={vm?.name}
-          overlayHeight={overlayHeight}
-          onClose={() => setMobileTermOpen(false)}
-        />
-      </Suspense>
-    )}
+      {mobileTermOpen && vmId && (
+        <Suspense fallback={null}>
+          <VMTerminalOverlay
+            vmId={vmId}
+            vmName={vm?.name}
+            overlayHeight={overlayHeight}
+            onClose={() => setMobileTermOpen(false)}
+          />
+        </Suspense>
+      )}
     </>
   )
 }
