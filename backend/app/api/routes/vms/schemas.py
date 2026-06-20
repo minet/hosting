@@ -187,6 +187,7 @@ class VMAccessUserResponse(BaseModel):
 
     user_id: str
     role: VMRole
+    display_name: str | None = None
 
 
 class VMAccessListResponse(BaseModel):
