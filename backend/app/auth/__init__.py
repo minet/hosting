@@ -14,6 +14,7 @@ from app.auth.context import (
     require_admin,
     require_charter_signed,
     require_cotisant,
+    require_dns_admin,
     require_user,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "require_admin",
     "require_charter_signed",
     "require_cotisant",
+    "require_dns_admin",
     "require_user",
 ]

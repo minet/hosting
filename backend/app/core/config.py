@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     auth_departure_date_claim: str = Field(default="departureDate", alias="AUTH_DEPARTURE_DATE_CLAIM")
     auth_user_groups: str = Field(default="", alias="AUTH_USER_GROUPS")
     auth_admin_groups: str = Field(default="admin", alias="AUTH_ADMIN_GROUPS")
+    auth_dev_groups: str = Field(default="", alias="AUTH_DEV_GROUPS")
     auth_restricted_roles: str = Field(default="", alias="AUTH_RESTRICTED_ROLES")
 
     frontend_allowed_origins: str = Field(

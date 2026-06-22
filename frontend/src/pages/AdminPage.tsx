@@ -5,7 +5,8 @@ import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { useUser } from '../contexts/UserContext'
 import { useAdminVMs, type AdminVM } from '../hooks/useAdminVMs'
-import { useAdminRequests } from '../hooks/useAdminRequests'
+import { useAdminRequests, type AdminRequest } from '../hooks/useAdminRequests'
+import { RequestDialog } from '../components/admin/RequestBadge'
 import { useAdminGroupMembers } from '../hooks/useAdminGroupMembers'
 import { useAllStatuses } from '../contexts/VMStatusContext'
 import { useDebounce } from '../hooks/useDebounce'
@@ -47,6 +48,8 @@ export default function AdminPage() {
   const [togglingMaintenance, setTogglingMaintenance] = useState(false)
   const { vms, loading, refresh: refreshVMs } = useAdminVMs()
   const { pendingByVm, updateRequest } = useAdminRequests(refreshVMs)
+  // Request deep-linked from a Discord alert (#req-<id> or legacy #vm-<id>).
+  const [hashRequest, setHashRequest] = useState<AdminRequest | null>(null)
   const statuses = useAllStatuses()
   const vmsGroup = useAdminGroupMembers('/api/users/vms-group')
   const cotiseEnded = useAdminGroupMembers('/api/users/cotise-ended')
@@ -98,6 +101,34 @@ export default function AdminPage() {
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
+  }, [])
+
+  // Open the validation modal when arriving from a Discord deep-link. Re-runs
+  // when requests load (data is async) and on hash changes.
+  useEffect(() => {
+    function resolveFromHash() {
+      const hash = window.location.hash
+      const pending = [...pendingByVm.values()].flat()
+      const reqMatch = hash.match(/^#req-(\d+)$/)
+      const vmMatch = hash.match(/^#vm-(\d+)$/)
+      if (reqMatch) {
+        const found = pending.find(r => r.id === Number(reqMatch[1]))
+        if (found) setHashRequest(found)
+      } else if (vmMatch) {
+        const list = pendingByVm.get(Number(vmMatch[1])) ?? []
+        const found = list.find(r => r.type === 'dns') ?? list[0]
+        if (found) setHashRequest(found)
+      }
+    }
+    resolveFromHash()
+    window.addEventListener('hashchange', resolveFromHash)
+    return () => window.removeEventListener('hashchange', resolveFromHash)
+  }, [pendingByVm])
+
+  const closeHashRequest = useCallback(() => {
+    setHashRequest(null)
+    // Drop the hash without pushing a history entry so refresh won't re-open it.
+    history.replaceState(null, '', window.location.pathname + window.location.search)
   }, [])
 
   function setFilter(key: keyof Filters, value: string) {
@@ -369,6 +400,9 @@ export default function AdminPage() {
         Rows: {sorted.length}&nbsp;&nbsp;Total Rows: {vms.length}
       </div>
       {maintenanceModal}
+      {hashRequest && (
+        <RequestDialog request={hashRequest} onClose={closeHashRequest} onUpdate={updateRequest} />
+      )}
     </div>
   )
 }

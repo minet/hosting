@@ -18,6 +18,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const VMPage = lazy(() => import('./pages/VMPage'))
 const AdminPage = lazy(() => import('./pages/AdminPage'))
+const DnsAdminPage = lazy(() => import('./pages/DnsAdminPage'))
 const MaintenancePage = lazy(() => import('./pages/MaintenancePage'))
 
 // Roles that trigger the access denied page (unless the user is also an admin).
@@ -30,8 +31,8 @@ const RESTRICTED_ROLES: string[] = (import.meta.env.VITE_RESTRICTED_ROLES ?? '')
 
 const IS_PREPROD = import.meta.env.VITE_APP_ENV === 'preprod'
 
-function accessDeniedReason(me: { is_admin: boolean; groups: string[]; ldap_login?: string | null }): 'preprod' | 'restricted' | null {
-  if (me.is_admin) return null
+function accessDeniedReason(me: { is_admin: boolean; is_dev?: boolean; groups: string[]; ldap_login?: string | null }): 'preprod' | 'restricted' | null {
+  if (me.is_admin || me.is_dev) return null
   if (IS_PREPROD && !me.ldap_login) return 'preprod'
   if (RESTRICTED_ROLES.length > 0 && me.groups.some((g) => RESTRICTED_ROLES.includes(g))) return 'restricted'
   return null
@@ -63,15 +64,19 @@ export default function App() {
   const denied = accessDeniedReason(auth.me)
   if (denied) return <AccessDenied reason={denied} />
 
-  if (!auth.me.is_admin && auth.me.maintenance) {
+  // Staff = full admins and reduced "dev" DNS validators. Both reach the admin
+  // console; the dev-only experience is a degraded view rendered inside AdminPage.
+  const isStaff = auth.me.is_admin || auth.me.is_dev === true
+
+  if (!isStaff && auth.me.maintenance) {
     return <Suspense fallback={null}><MaintenancePage /></Suspense>
   }
 
-  if (!auth.me.is_admin && !auth.me.date_signed_hosting) {
+  if (!isStaff && !auth.me.date_signed_hosting) {
     return <CharterPage onSigned={auth.refresh} />
   }
 
-  if (auth.me.is_admin) {
+  if (isStaff) {
     return (
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
@@ -82,8 +87,8 @@ export default function App() {
                   <RouteBoundary>
                     <Suspense fallback={<PageFallback />}>
                       <Routes>
-                        <Route path="/admin" element={<AdminPage />} />
-                        <Route path="/vm/:vmId" element={<VMPage />} />
+                        <Route path="/admin" element={auth.me.is_admin ? <AdminPage /> : <DnsAdminPage />} />
+                        {auth.me.is_admin && <Route path="/vm/:vmId" element={<VMPage />} />}
                         <Route path="*" element={<Navigate to="/admin" replace />} />
                       </Routes>
                     </Suspense>
