@@ -69,13 +69,18 @@ async def notify_new_request(
     vm_id: int,
     user_id: str,
     request_type: str,
+    request_id: int | None = None,
     dns_label: str | None = None,
 ) -> None:
     """Notify Discord that a new request has been created."""
     tag = _env_tag()
     base_url = _base_url()
+    # Deep-link to the request itself so the admin page can auto-open the
+    # validation modal; fall back to the VM anchor when the id is unknown.
+    anchor = f"req-{request_id}" if request_id is not None else f"vm-{vm_id}"
+    deep_link = f"{base_url}/admin#{anchor}"
     fields = [
-        {"name": "VM", "value": f"[`#{vm_id}`]({base_url}/admin#vm-{vm_id})", "inline": True},
+        {"name": "VM", "value": f"[`#{vm_id}`]({deep_link})", "inline": True},
         {"name": "Type", "value": request_type.upper(), "inline": True},
     ]
     if dns_label:
@@ -83,7 +88,7 @@ async def notify_new_request(
 
     embed = {
         "title": f"[{tag}] Nouvelle demande — {request_type.upper()}",
-        "url": f"{base_url}/admin#vm-{vm_id}",
+        "url": deep_link,
         "color": _env_color(0x3498DB),
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -113,6 +118,35 @@ async def notify_request_approved(
     embed = {
         "title": f"[{tag}] Demande acceptée — {request_type.upper()}",
         "color": _env_color(0x2ECC71),
+        "fields": fields,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
+    }
+    await _send_webhook(content="", embeds=[embed])
+
+
+async def notify_request_denied(
+    *,
+    vm_id: int,
+    request_type: str,
+    denied_by: str,
+    dns_label: str | None = None,
+) -> None:
+    """Notify Discord that an admin denied (rejected) a request."""
+    tag = _env_tag()
+    base_url = _base_url()
+    fields = [
+        {"name": "VM", "value": f"[`#{vm_id}`]({base_url}/admin#vm-{vm_id})", "inline": True},
+        {"name": "Type", "value": request_type.upper(), "inline": True},
+        {"name": "Refusée par", "value": f"`{denied_by}`", "inline": True},
+    ]
+    if dns_label:
+        fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
+
+    embed = {
+        "title": f"[{tag}] Demande refusée — {request_type.upper()}",
+        "color": _env_color(0xE74C3C),
+        "thumbnail": {"url": f"{_base_url()}{PINGUIN_ACCES_REFUSED}"},
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},

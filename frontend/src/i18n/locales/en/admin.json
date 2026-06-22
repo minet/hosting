@@ -60,7 +60,17 @@
     "vmNameCol": "VM Name",
     "dnsLabelCol": "DNS Label",
     "createdAtCol": "Created at",
-    "revoke": "Revoke"
+    "revoke": "Revoke",
+    "devTitle": "DNS requests",
+    "pendingTab": "Pending",
+    "approvedTab": "Approved",
+    "emptyPending": "No pending DNS request.",
+    "emptyApproved": "No approved DNS yet.",
+    "vmShort": "VM",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approvedBadge": "Approved",
+    "revokeConfirm": "Revoke DNS {{label}}? The CNAME will be deleted."
   },
   "proxmox": {
     "title": "Proxmox VE",

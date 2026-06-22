@@ -147,7 +147,7 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On validation, Proxmox, or database errors.
         """
-        owner_ctx = AuthCtx(user_id=owner_user_id, groups=set(), is_admin=False, payload={})
+        owner_ctx = AuthCtx(user_id=owner_user_id, groups=set(), is_admin=False, is_dev=False, payload={})
         return await self.create(
             ctx=owner_ctx,
             name=name,

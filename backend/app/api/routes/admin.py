@@ -33,7 +33,7 @@ from app.api.routes.vms.schemas import (
     VMDetailResponse,
     VMTemplateResponse,
 )
-from app.auth import AuthCtx, require_admin
+from app.auth import AuthCtx, require_admin, require_dns_admin
 from app.auth.context import require_api_key
 from app.core.config import get_settings
 from app.db.core import get_db
@@ -43,7 +43,7 @@ from app.services.auth.keycloak_admin import (
     fetch_keycloak_group_members_async,
     fetch_keycloak_user_by_id_async,
 )
-from app.services.discord import notify_request_approved
+from app.services.discord import notify_request_approved, notify_request_denied
 from app.services.dns import DnsService
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
@@ -215,10 +215,13 @@ async def list_vms_group_users(
 
 @router.get("/requests", response_model=AdminRequestListResponse)
 async def list_pending_requests(
-    _: AuthCtx = Depends(require_admin),
+    ctx: AuthCtx = Depends(require_dns_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AdminRequestListResponse:
     rows = await RequestRepo(db).list_pending()
+    # Dev validators (not full admins) only ever see DNS requests.
+    if not ctx.is_admin:
+        rows = [r for r in rows if r["type"] == "dns"]
     return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
 
 
@@ -226,7 +229,7 @@ async def list_pending_requests(
 async def update_request_status(
     request_id: int,
     body: AdminRequestUpdateBody,
-    admin_ctx: AuthCtx = Depends(require_admin),
+    admin_ctx: AuthCtx = Depends(require_dns_admin),
     db: AsyncSession = Depends(get_db),
     cmd: VmCommandService = Depends(get_vm_command_service),
 ) -> AdminRequestResponse:
@@ -235,7 +238,16 @@ async def update_request_status(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Cannot set status back to pending"
         )
 
-    row = await RequestRepo(db).update_status(request_id=request_id, status=body.status)
+    repo = RequestRepo(db)
+    # Dev validators may only act on DNS requests — check before mutating.
+    if not admin_ctx.is_admin:
+        existing = await repo.get(request_id)
+        if existing is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+        if existing["type"] != "dns":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+    row = await repo.update_status(request_id=request_id, status=body.status)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
 
@@ -272,16 +284,23 @@ async def update_request_status(
         await notify_request_approved(vm_id=row["vm_id"], request_type="dns", approved_by=approved_by, dns_label=dns_label)
     else:
         await db.commit()
+        if body.status == "rejected":
+            await notify_request_denied(
+                vm_id=row["vm_id"],
+                request_type=row["type"],
+                denied_by=approved_by,
+                dns_label=row.get("dns_label"),
+            )
 
     return AdminRequestResponse.from_row(row)
 
 
 @router.get("/dns", response_model=AdminRequestListResponse)
 async def list_approved_dns(
-    _: AuthCtx = Depends(require_admin),
+    _: AuthCtx = Depends(require_dns_admin),
     db: AsyncSession = Depends(get_db),
 ) -> AdminRequestListResponse:
-    """List all approved DNS requests (admin only)."""
+    """List all approved DNS requests (admin and dev validators)."""
     rows = await RequestRepo(db).list_approved_dns()
     return AdminRequestListResponse(items=[AdminRequestResponse.from_row(r) for r in rows], count=len(rows))
 
@@ -289,10 +308,14 @@ async def list_approved_dns(
 @router.delete("/dns/{request_id}", status_code=204)
 async def revoke_dns(
     request_id: int,
-    _: AuthCtx = Depends(require_admin),
+    _: AuthCtx = Depends(require_dns_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Revoke an approved DNS record: delete the CNAME from PowerDNS and reject the request."""
+    """Revoke an approved DNS record: delete the CNAME from PowerDNS and reject the request.
+
+    Available to full admins and dev validators. The ``type != "dns"`` guard
+    below keeps dev access scoped to DNS records.
+    """
     repo = RequestRepo(db)
     row = await repo.get(request_id)
     if row is None:

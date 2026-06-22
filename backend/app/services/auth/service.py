@@ -49,6 +49,7 @@ class AuthMeResponse(TypedDict):
     departure_date: str | None
     groups: list[str]
     is_admin: bool
+    is_dev: bool
     cotise_end_ms: int | None
     date_signed_hosting: str | None
     ldap_login: str | None
@@ -162,6 +163,8 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     groups = _groups(payload, settings)
     admin_groups = csv_values(settings.auth_admin_groups)
     is_admin = bool(admin_groups and groups.intersection(admin_groups))
+    dev_groups = csv_values(settings.auth_dev_groups)
+    is_dev = bool(dev_groups and groups.intersection(dev_groups))
 
     groups_list = sorted(groups)
     if is_admin and "admin" not in groups_list:
@@ -214,6 +217,7 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
         "departure_date": departure_date,
         "groups": groups_list,
         "is_admin": is_admin,
+        "is_dev": is_dev,
         "cotise_end_ms": cotise_end,
         "date_signed_hosting": date_signed_hosting,
         "ldap_login": ldap_login,
