@@ -6,8 +6,7 @@
     "proxmox": "Proxmox",
     "orphaned": "孤立虚拟机",
     "expired": "过期会员",
-    "ip-history": "IP历史",
-    "security": "安全"
+    "ip-history": "IP历史"
   },
   "clearFilters": "清除筛选",
   "noVM": "无虚拟机",

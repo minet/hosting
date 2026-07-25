@@ -6,8 +6,7 @@
     "proxmox": "Proxmox",
     "orphaned": "Orphaned VMs",
     "expired": "Expired memberships",
-    "ip-history": "IP history",
-    "security": "Security"
+    "ip-history": "IP history"
   },
   "clearFilters": "Clear filters",
   "noVM": "No VM",
