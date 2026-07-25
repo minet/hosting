@@ -211,7 +211,7 @@ class VmCreateService:
         if template is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
-        await self._check_quota(user_id=ctx.user_id, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb, disk_gb=cmd.disk_gb)
+        await self._check_quota(ctx=ctx, user_id=ctx.user_id, cpu_cores=cmd.cpu_cores, ram_mb=ram_mb, disk_gb=cmd.disk_gb)
         vm_ipv6 = await self._allocate_ipv6()
         vm_id = await self._allocate_vm_id()
 
@@ -475,7 +475,7 @@ class VmCreateService:
                 detail="Invalid VM IPv6 configuration",
             ) from exc
 
-    async def _check_quota(self, *, user_id: str, cpu_cores: int, ram_mb: int, disk_gb: int) -> None:
+    async def _check_quota(self, *, ctx: AuthCtx, user_id: str, cpu_cores: int, ram_mb: int, disk_gb: int) -> None:
         """
         Raise HTTP 403 if adding the requested resources would exceed user quota.
 
@@ -486,6 +486,8 @@ class VmCreateService:
         :raises HTTPException: 403 when any resource dimension exceeds the
             configured maximum.
         """
+        if ctx.is_admin:
+            return
         usage = await self.query_repo.get_owned_totals(user_id)
         max_cpu = self.settings.resource_max_cpu_cores
         max_ram = self.settings.resource_max_ram_gb * 1024

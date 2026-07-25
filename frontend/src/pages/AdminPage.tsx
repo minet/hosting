@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiFetch } from '../api'
 import { useUser } from '../contexts/UserContext'
@@ -18,6 +18,7 @@ import ProxmoxTab from '../components/admin/ProxmoxTab'
 import OrphanedVMsTab from '../components/admin/OrphanedVMsTab'
 import ExpiredVMsTab from '../components/admin/ExpiredVMsTab'
 import IPHistoryTab from '../components/admin/IPHistoryTab'
+import CreateVMForUserModal from '../components/admin/CreateVMForUserModal'
 
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
 type Tab = 'vms' | 'templates' | 'proxmox' | 'orphaned' | 'expired' | 'ip-history'
@@ -72,6 +73,7 @@ export default function AdminPage() {
   }, [cotiseEnded.users])
 
   const [tab, setTab] = useState<Tab>('vms')
+  const [createVmOpen, setCreateVmOpen] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('vm_id')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
@@ -178,6 +180,7 @@ export default function AdminPage() {
   const statusOptions = [
     { label: t('statusFilter.all'), value: '' }, { label: t('statusFilter.running'), value: 'running' }, { label: t('statusFilter.stopped'), value: 'stopped' },
   ]
+  const adminCreateUsers = useMemo(() => [...vmsGroup.users, ...cotiseEnded.users], [vmsGroup.users, cotiseEnded.users])
 
   const handleNavigate = useCallback((vmId: number) => navigate(`/vm/${vmId}`), [navigate])
 
@@ -323,6 +326,13 @@ export default function AdminPage() {
       <div className="flex items-center gap-2 shrink-0 border-b border-neutral-200 dark:border-neutral-700 pb-2 min-w-0">
         {tabBar}
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => setCreateVmOpen(true)}
+            className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+          >
+            <Plus size={12} />
+            {t('createVm.button')}
+          </button>
           {hasFilters && (
             <button onClick={() => setFilters(EMPTY_FILTERS)} className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 transition-colors">
               <X size={11} /> {t('clearFilters')}
@@ -392,6 +402,14 @@ export default function AdminPage() {
       {maintenanceModal}
       {hashRequest && (
         <RequestDialog request={hashRequest} onClose={closeHashRequest} onUpdate={updateRequest} />
+      )}
+      {createVmOpen && (
+        <CreateVMForUserModal
+          onClose={() => setCreateVmOpen(false)}
+          onCreated={refreshVMs}
+          users={adminCreateUsers}
+          usersLoading={vmsGroup.loading || cotiseEnded.loading}
+        />
       )}
     </div>
   )
