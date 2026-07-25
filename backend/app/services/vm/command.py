@@ -131,6 +131,9 @@ class VmCommandService:
         """
         Create a new VM owned by an arbitrary user (admin operation).
 
+        This bypasses the usual per-user quota checks, but still enforces
+        per-request safety limits for the admin flow.
+
         Builds a synthetic :class:`~app.auth.AuthCtx` for the target user and
         delegates to :class:`~app.services.vm.create.VmCreateService`.
 
@@ -147,7 +150,14 @@ class VmCommandService:
         :rtype: dict[str, Any]
         :raises HTTPException: On validation, Proxmox, or database errors.
         """
-        owner_ctx = AuthCtx(user_id=owner_user_id, groups=set(), is_admin=False, is_dev=False, payload={})
+        if cpu_cores > self._settings.admin_create_max_cpu_cores:
+            raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="cpu_cores above admin maximum")
+        if ram_gb > self._settings.admin_create_max_ram_gb:
+            raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="ram_gb above admin maximum")
+        if disk_gb > self._settings.admin_create_max_disk_gb:
+            raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="disk_gb above admin maximum")
+
+        owner_ctx = AuthCtx(user_id=owner_user_id, groups=set(), is_admin=True, is_dev=False, payload={})
         return await self.create(
             ctx=owner_ctx,
             name=name,
