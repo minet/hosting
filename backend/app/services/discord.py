@@ -22,6 +22,8 @@ def _base_url() -> str:
 
 
 PINGUIN_ACCES_REFUSED = "/assets/pinguins/PinguinAccesRefused.png"
+PINGUIN_HEUREUX = "/assets/pinguins/PenguinHeureux.png"
+PINGUIN_CABLE = "/assets/pinguins/PinguinCable.png"
 
 _ENV_LABELS: dict[str, tuple[str, int]] = {
     "prod": ("PROD", 0x2ECC71),
@@ -87,9 +89,10 @@ async def notify_new_request(
         fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
 
     embed = {
-        "title": f"[{tag}] Nouvelle demande — {request_type.upper()}",
+        "title": f"[{tag}] Nouvelle demande : {request_type.upper()}",
         "url": deep_link,
         "color": _env_color(0x3498DB),
+        "thumbnail": {"url": f"{_base_url()}{PINGUIN_CABLE}"},
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
@@ -116,8 +119,9 @@ async def notify_request_approved(
         fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
 
     embed = {
-        "title": f"[{tag}] Demande acceptée — {request_type.upper()}",
+        "title": f"[{tag}] Demande acceptée : {request_type.upper()}",
         "color": _env_color(0x2ECC71),
+        "thumbnail": {"url": f"{_base_url()}{PINGUIN_HEUREUX}"},
         "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
@@ -144,7 +148,35 @@ async def notify_request_denied(
         fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
 
     embed = {
-        "title": f"[{tag}] Demande refusée — {request_type.upper()}",
+        "title": f"[{tag}] Demande refusée : {request_type.upper()}",
+        "color": _env_color(0xE74C3C),
+        "thumbnail": {"url": f"{_base_url()}{PINGUIN_ACCES_REFUSED}"},
+        "fields": fields,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "footer": {"text": f"Hosting MiNET • {tag}"},
+    }
+    await _send_webhook(content="", embeds=[embed])
+
+
+async def notify_dns_revoked(
+    *,
+    vm_id: int,
+    revoked_by: str,
+    dns_label: str | None = None,
+) -> None:
+    """Notify Discord that an admin revoked a DNS record."""
+    tag = _env_tag()
+    base_url = _base_url()
+    fields = [
+        {"name": "VM", "value": f"[`#{vm_id}`]({base_url}/vm/{vm_id})", "inline": True},
+        {"name": "Type", "value": "DNS", "inline": True},
+        {"name": "Révoquée par", "value": f"`{revoked_by}`", "inline": True},
+    ]
+    if dns_label:
+        fields.append({"name": "DNS Label", "value": f"`{dns_label}`", "inline": True})
+
+    embed = {
+        "title": f"[{tag}] Demande révoquée : DNS",
         "color": _env_color(0xE74C3C),
         "thumbnail": {"url": f"{_base_url()}{PINGUIN_ACCES_REFUSED}"},
         "fields": fields,
@@ -158,7 +190,7 @@ async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int
     """Notify Discord that a VM has been deleted by the purge (expired membership)."""
     tag = _env_tag()
     embed = {
-        "title": f"[{tag}] VM supprimée — cotisation expirée",
+        "title": f"[{tag}] VM supprimée : cotisation expirée",
         "description": f"La VM **{vm_name}** (`#{vm_id}`) a été supprimée automatiquement après {days_expired} jours de cotisation expirée.",
         "color": _env_color(0xE74C3C),
         "fields": [
