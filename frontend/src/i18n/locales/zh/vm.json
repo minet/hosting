@@ -97,7 +97,8 @@
   "console": {
     "notAvailable": "控制台不可用",
     "adminRestriction": "作为管理员，您无法访问其他用户虚拟机的控制台。",
-    "vmStopped": "虚拟机已关闭"
+    "vmStopped": "虚拟机已关闭",
+    "shuttingDown": "正在关机..."
   },
   "history": {
     "title": "历史记录",

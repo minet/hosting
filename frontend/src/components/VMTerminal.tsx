@@ -41,6 +41,7 @@ function decodeMuxFrames(buf: Uint8Array): { frames: { channel: number; payload:
 
 export interface VMTerminalHandle {
   sendRaw: (data: string) => void
+  disconnect: (msg?: string) => void
 }
 
 interface Props {
@@ -59,7 +60,17 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
     }
   }, [])
 
-  useImperativeHandle(ref, () => ({ sendRaw }))
+  const programmaticDisconnectRef = useRef(false)
+
+  const disconnect = useCallback((msg?: string) => {
+    programmaticDisconnectRef.current = true
+    if (msg && termRef.current) {
+      termRef.current.writeln(`\r\n\x1b[33m${msg}\x1b[0m`)
+    }
+    wsRef.current?.close()
+  }, [])
+
+  useImperativeHandle(ref, () => ({ sendRaw, disconnect }))
 
   const handleMobileKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const key = e.key
@@ -176,6 +187,9 @@ const VMTerminal = forwardRef<VMTerminalHandle, Props>(function VMTerminal({ vmI
     }
 
     ws.onclose = (e) => {
+      if (programmaticDisconnectRef.current) {
+        return
+      }
       if (e.code === 4409) {
         term.writeln('\r\n\x1b[33mCette console est déjà utilisée par un autre utilisateur.\x1b[0m')
         term.writeln('\x1b[33mVeuillez réessayer plus tard.\x1b[0m')
