@@ -136,5 +136,12 @@
   },
   "metrics": {
     "network": "网络"
+  },
+  "rename": {
+    "title": "重命名虚拟机",
+    "buttonTooltip": "重命名虚拟机",
+    "nameLabel": "新名称",
+    "nameHint": "仅允许字母、数字和连字符，必须以字母或数字开头。",
+    "success": "虚拟机已成功重命名"
   }
 }

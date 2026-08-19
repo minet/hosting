@@ -19,6 +19,8 @@ from .schemas import (
     VMListResponse,
     VMPatchBody,
     VMPatchResponse,
+    VMRenameBody,
+    VMRenameResponse,
     VMStatusResponse,
     VMTasksResponse,
 )
@@ -37,6 +39,8 @@ __all__ = [
     "VMListResponse",
     "VMPatchBody",
     "VMPatchResponse",
+    "VMRenameBody",
+    "VMRenameResponse",
     "VMStatusResponse",
     "VMTasksResponse",
     "router",

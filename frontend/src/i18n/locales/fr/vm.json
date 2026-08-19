@@ -136,5 +136,12 @@
   },
   "metrics": {
     "network": "Réseau"
+  },
+  "rename": {
+    "title": "Renommer la VM",
+    "buttonTooltip": "Renommer la VM",
+    "nameLabel": "Nouveau nom",
+    "nameHint": "Lettres, chiffres et tirets uniquement, doit commencer par un caractère alphanumérique.",
+    "success": "VM renommée avec succès"
   }
 }

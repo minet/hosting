@@ -36,6 +36,7 @@ class VMAction(StrEnum):
     STOP = "stop"
     RESTART = "restart"
     PATCH = "patch"
+    RENAME = "rename"
     GRANT_ACCESS = "grant_access"
     REVOKE_ACCESS = "revoke_access"
     DELETE = "delete"
@@ -221,6 +222,12 @@ class VMPatchResponse(VMActionResponse):
     resource: VMPatchResourceResponse | None = None
 
 
+class VMRenameResponse(VMActionResponse):
+    """Response schema for a VM rename."""
+
+    name: str | None = None
+
+
 class VMAccessMutationResponse(VMActionResponse):
     """Response schema for a VM access grant or revoke operation."""
 
@@ -300,6 +307,25 @@ class VMCreateResourceBody(BaseModel):
         return v.strip()
 
 
+def _validate_vm_name(v: str) -> str:
+    """
+    Validate that the VM name starts with an alphanumeric character and contains
+    only alphanumeric characters and hyphens, and does not exceed configured max length.
+
+    :param v: Raw VM name value provided by the client.
+    :returns: The validated name string unchanged.
+    :raises ValueError: If the name contains disallowed characters or exceeds max length.
+    """
+    from app.core.config import get_settings
+
+    max_length = get_settings().vm_name_max_length
+    if len(v) > max_length:
+        raise ValueError(f"name must be at most {max_length} characters")
+    if not _VM_NAME_RE.match(v):
+        raise ValueError("name must start with alphanumeric and contain only alphanumeric characters and hyphens")
+    return v
+
+
 class VMCreateBody(BaseModel):
     """Request body for creating a new virtual machine."""
 
@@ -313,22 +339,18 @@ class VMCreateBody(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
-        """
-        Validate that the VM name starts with an alphanumeric character and contains
-        only alphanumeric characters, dots, hyphens, or underscores.
+        return _validate_vm_name(v)
 
-        :param v: Raw VM name value provided by the client.
-        :returns: The validated name string unchanged.
-        :raises ValueError: If the name contains disallowed characters or has an invalid prefix.
-        """
-        from app.core.config import get_settings
 
-        max_length = get_settings().vm_name_max_length
-        if len(v) > max_length:
-            raise ValueError(f"name must be at most {max_length} characters")
-        if not _VM_NAME_RE.match(v):
-            raise ValueError("name must start with alphanumeric and contain only alphanumeric characters and hyphens")
-        return v
+class VMRenameBody(BaseModel):
+    """Request body for renaming a VM."""
+
+    name: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        return _validate_vm_name(v)
 
 
 class VMPatchResourceBody(BaseModel):

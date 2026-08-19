@@ -33,6 +33,8 @@ from .schemas import (
     VMOnbootResponse,
     VMPatchBody,
     VMPatchResponse,
+    VMRenameBody,
+    VMRenameResponse,
     VMRequestCreateBody,
     VMRequestResponse,
 )
@@ -136,6 +138,26 @@ async def restart_vm(
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.SHARED)
     return VMActionResponse.model_validate(await cmd.restart(vm_id=vm_id))
+
+@router.put("/{vm_id}/rename", response_model=VMRenameResponse, dependencies=[Depends(RateLimiter(max_calls=10, window_seconds=60))])
+async def rename_vm(
+    body: VMRenameBody,
+    vm_id: int,
+    ctx: AuthCtx = Depends(require_charter_signed),
+    access: VmAccessService = Depends(get_vm_access_service),
+    cmd: VmCommandService = Depends(get_vm_command_service),
+) -> VMRenameResponse:
+    """
+    Rename a virtual machine. Owner only.
+    """
+    await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
+    return VMRenameResponse.model_validate(
+        await cmd.rename(
+            vm_id=vm_id,
+            ctx=ctx,
+            new_name=body.name,
+        )
+    )
 
 
 @router.get("/{vm_id}/onboot", response_model=VMOnbootResponse)

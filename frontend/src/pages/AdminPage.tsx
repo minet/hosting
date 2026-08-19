@@ -217,6 +217,15 @@ export default function AdminPage() {
     refreshVMs()
   }, [refreshVMs])
 
+  const handleRenameVM = useCallback(async (vmId: number, newName: string) => {
+    await apiFetch(`/api/vms/${vmId}/rename`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+    refreshVMs()
+  }, [refreshVMs])
+
   async function toggleMaintenance() {
     if (!maintenance) {
       setMaintenanceConfirmOpen(true)
@@ -390,6 +399,7 @@ export default function AdminPage() {
                 onRemoveFromDB={handleRemoveFromDB}
                 onChangeOwner={handleChangeOwner}
                 onChangeTemplate={handleChangeTemplate}
+                onRenameVM={handleRenameVM}
               />
             ))}
           </tbody>

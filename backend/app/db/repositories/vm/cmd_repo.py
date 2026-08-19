@@ -127,6 +127,22 @@ class VmCmdRepo:
         self.db.add(vm)
         await self.db.flush()
 
+    async def update_vm_name(self, *, vm_id: int, name: str) -> bool:
+        """Update the name of a VM.
+
+        :param vm_id: The VM identifier.
+        :param name: The new name for the VM.
+        :returns: ``True`` if the VM was found and updated, ``False`` otherwise.
+        :rtype: bool
+        """
+        vm = await self.db.get(VM, vm_id)
+        if vm is None:
+            return False
+        vm.name = name
+        self.db.add(vm)
+        await self.db.flush()
+        return True
+
     async def update_vm_resources(self, *, vm_id: int, cpu_cores: int, ram_mb: int, disk_gb: int) -> bool:
         """Update the hardware resource allocation of a VM.
 
