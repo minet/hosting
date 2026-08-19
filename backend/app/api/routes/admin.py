@@ -43,7 +43,11 @@ from app.services.auth.keycloak_admin import (
     fetch_keycloak_group_members_async,
     fetch_keycloak_user_by_id_async,
 )
-from app.services.discord import notify_request_approved, notify_request_denied
+from app.services.discord import (
+    notify_dns_revoked,
+    notify_request_approved,
+    notify_request_denied,
+)
 from app.services.dns import DnsService
 from app.services.proxmox.errors import ProxmoxError
 from app.services.proxmox.gateway import get_proxmox_gateway
@@ -308,7 +312,7 @@ async def list_approved_dns(
 @router.delete("/dns/{request_id}", status_code=204)
 async def revoke_dns(
     request_id: int,
-    _: AuthCtx = Depends(require_dns_admin),
+    admin_ctx: AuthCtx = Depends(require_dns_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Revoke an approved DNS record: delete the CNAME from PowerDNS and reject the request.
@@ -339,6 +343,8 @@ async def revoke_dns(
 
     await repo.update_status(request_id=request_id, status="rejected")
     await db.commit()
+    revoked_by = admin_ctx.payload.get("preferred_username") or admin_ctx.user_id
+    await notify_dns_revoked(vm_id=row["vm_id"], revoked_by=revoked_by, dns_label=dns_label)
 
 
 @router.get("/cluster/resources")
@@ -452,7 +458,7 @@ async def remove_vm_ipv4(
 @router.delete("/vms/{vm_id}/dns", status_code=204)
 async def remove_vm_dns(
     vm_id: int,
-    _: AuthCtx = Depends(require_admin),
+    admin_ctx: AuthCtx = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Remove the CNAME record for a VM: delete from PowerDNS and reject the request (admin only)."""
@@ -478,6 +484,9 @@ async def remove_vm_dns(
                     ) from exc
             await repo.update_status(request_id=row["id"], status="rejected")
     await db.commit()
+    revoked_by = admin_ctx.payload.get("preferred_username") or admin_ctx.user_id
+    for row in matching:
+        await notify_dns_revoked(vm_id=vm_id, revoked_by=revoked_by, dns_label=row.get("dns_label"))
 
 
 @router.get("/admin/templates", response_model=TemplateListResponse)
