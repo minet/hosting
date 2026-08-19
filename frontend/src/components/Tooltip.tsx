@@ -20,7 +20,7 @@ export default function Tooltip({ tip, align = 'center', className, children }: 
     if (!ref.current) return
     const r = ref.current.getBoundingClientRect()
     const left = align === 'right' ? r.right : r.left + r.width / 2
-    setPos({ top: r.top + window.scrollY, left: left + window.scrollX })
+    setPos({ top: r.top, left })
   }
 
   function hide() {
@@ -28,14 +28,14 @@ export default function Tooltip({ tip, align = 'center', className, children }: 
   }
 
   return (
-    <span ref={ref} className={`relative${className ? ` ${className}` : ''}`} onMouseEnter={show} onMouseLeave={hide}>
+    <span ref={ref} className={`relative inline-flex items-center${className ? ` ${className}` : ''}`} onMouseEnter={show} onMouseLeave={hide}>
       {children}
       {pos && createPortal(
         <span
-          className={`pointer-events-none fixed z-[9999] px-2 py-1 rounded bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 text-[10px] whitespace-nowrap -translate-y-full -translate-x-1/2 mb-1.5`}
+          className="pointer-events-none fixed z-[9999] px-2 py-1 rounded bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 text-[10px] whitespace-nowrap shadow-sm"
           style={{
             top: pos.top - 6,
-            left: align === 'right' ? pos.left : pos.left,
+            left: pos.left,
             transform: align === 'right'
               ? 'translateY(-100%) translateX(-100%)'
               : 'translateY(-100%) translateX(-50%)',

@@ -1,4 +1,4 @@
-import { Crown, Pencil, Share2 } from 'lucide-react'
+import { Crown, Pencil, Share2, SquarePen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import Tooltip from './Tooltip'
@@ -28,9 +28,10 @@ interface Props {
   uptime: number | null
   onOpenDnsRequest: () => void
   onOpenIpRequest: () => void
+  onOpenRenameModal?: () => void
 }
 
-export default function VMInfoCard({ vm, status, loadingAction, running, isOwner, uptime, onOpenDnsRequest, onOpenIpRequest }: Props) {
+export default function VMInfoCard({ vm, status, loadingAction, running, isOwner, uptime, onOpenDnsRequest, onOpenIpRequest, onOpenRenameModal }: Props) {
   const { t } = useTranslation('vm')
   const is2xl = useMediaQuery('(min-width: 2200px)')
   return (
@@ -42,6 +43,17 @@ export default function VMInfoCard({ vm, status, loadingAction, running, isOwner
           <span className={`w-2.5 h-2.5 2xl:w-3.5 2xl:h-3.5 rounded-full shrink-0 ${running ? 'bg-emerald-400' : 'bg-red-400'}`} />
         )}
         <h1 className="text-sm font-bold text-neutral-800 dark:text-neutral-200 tracking-tight truncate">{vm.name}</h1>
+        {isOwner && onOpenRenameModal && (
+          <Tooltip tip={t('rename.buttonTooltip')} className="shrink-0">
+            <button
+              onClick={onOpenRenameModal}
+              className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 transition-colors cursor-pointer p-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50"
+              aria-label={t('rename.title')}
+            >
+              <SquarePen size={is2xl ? 24 : 12} />
+            </button>
+          </Tooltip>
+        )}
         <span className="text-xs text-neutral-400 dark:text-neutral-500 font-medium shrink-0">#{vm.vm_id}</span>
         {isOwner ? (
           <Crown size={is2xl ? 26 : 13} className="text-amber-400 shrink-0" fill="currentColor" strokeWidth={0} />

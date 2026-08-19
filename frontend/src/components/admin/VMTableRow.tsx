@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Cpu, MemoryStick, HardDrive, X, Loader, Trash2, UserPen, FileStack } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, X, Loader, Trash2, UserPen, FileStack, SquarePen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AdminVM } from '../../hooks/useAdminVMs'
 import type { AdminRequest } from '../../hooks/useAdminRequests'
@@ -9,6 +9,8 @@ import RevealOwner from './RevealOwner'
 import ConfirmModal from '../ConfirmModal'
 import ChangeOwnerModal from './ChangeOwnerModal'
 import ChangeTemplateModal from './ChangeTemplateModal'
+import RenameModal from '../RenameModal'
+import { validateVmName } from '../../validation'
 
 interface Props {
   vm: AdminVM
@@ -23,9 +25,10 @@ interface Props {
   onRemoveFromDB: (vmId: number) => Promise<void>
   onChangeOwner: (vmId: number, newOwnerId: string) => Promise<void>
   onChangeTemplate: (vmId: number, templateId: number) => Promise<void>
+  onRenameVM: (vmId: number, newName: string) => Promise<void>
 }
 
-function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns, onRemoveFromDB, onChangeOwner, onChangeTemplate }: Props) {
+function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onUpdateRequest, onRemoveIpv4, onRemoveDns, onRemoveFromDB, onChangeOwner, onChangeTemplate, onRenameVM }: Props) {
   const { t } = useTranslation('admin')
   const tc = useTranslation().t
   const ipv4Req = pendingRequests?.find(r => r.type === 'ipv4')
@@ -36,6 +39,29 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [changeOwnerOpen, setChangeOwnerOpen] = useState(false)
   const [changeTemplateOpen, setChangeTemplateOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [newName, setNewName] = useState(vm.name)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [renameSaving, setRenameSaving] = useState(false)
+
+  async function handleSaveRename() {
+    const err = validateVmName(newName)
+    if (err) {
+      setRenameError(err)
+      return
+    }
+    setRenameSaving(true)
+    setRenameError(null)
+    try {
+      await onRenameVM(vm.vm_id, newName.trim())
+      setRenameOpen(false)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Échec du renommage'
+      setRenameError(msg)
+    } finally {
+      setRenameSaving(false)
+    }
+  }
 
   return (
     <tr id={`vm-${vm.vm_id}`} onClick={() => onNavigate(vm.vm_id)} className="hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors cursor-pointer">
@@ -43,8 +69,17 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
       <td className="px-3 py-2 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
         <StatusCell vmId={vm.vm_id} />
       </td>
-      <td className="px-3 py-2 font-medium text-neutral-800 dark:text-neutral-200 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden">
-        <span className="block truncate">{vm.name}</span>
+      <td className="px-3 py-2 font-medium text-neutral-800 dark:text-neutral-200 border-r border-neutral-100 dark:border-neutral-800 overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-1 group/name">
+          <span className="block truncate">{vm.name}</span>
+          <button
+            onClick={() => { setNewName(vm.name); setRenameError(null); setRenameOpen(true) }}
+            title="Renommer la VM"
+            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer"
+          >
+            <SquarePen size={12} />
+          </button>
+        </div>
       </td>
       <td className="px-3 py-2 text-neutral-500 dark:text-neutral-400 text-xs border-r border-neutral-100 dark:border-neutral-800 overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-1 group/tpl">
@@ -52,7 +87,7 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
           <button
             onClick={() => setChangeTemplateOpen(true)}
             title="Changer le template"
-            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer opacity-0 group-hover/tpl:opacity-100"
+            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer"
           >
             <FileStack size={12} />
           </button>
@@ -133,7 +168,7 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
           <button
             onClick={() => setChangeOwnerOpen(true)}
             title={t('changeOwner.title')}
-            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer opacity-0 group-hover/owner:opacity-100"
+            className="shrink-0 text-neutral-300 dark:text-neutral-600 hover:text-blue-500 transition-colors cursor-pointer"
           >
             <UserPen size={12} />
           </button>
@@ -193,6 +228,17 @@ function VMTableRow({ vm, pendingRequests, owner, expired, node, onNavigate, onU
           currentTemplateId={vm.template_id}
           onConfirm={templateId => onChangeTemplate(vm.vm_id, templateId)}
           onClose={() => setChangeTemplateOpen(false)}
+        />
+      )}
+      {renameOpen && (
+        <RenameModal
+          currentName={vm.name}
+          newName={newName}
+          setNewName={setNewName}
+          error={renameError}
+          saving={renameSaving}
+          onClose={() => setRenameOpen(false)}
+          onSave={handleSaveRename}
         />
       )}
     </tr>

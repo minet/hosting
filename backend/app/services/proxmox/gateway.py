@@ -736,6 +736,19 @@ class ProxmoxGateway:
         config = self._get_config(node=node, vm_id=vm_id)
         return bool(config.get("onboot", 0))
 
+    def rename_vm(self, *, vm_id: int, name: str) -> None:
+        """Update the name of a VM.
+
+        :param vm_id: VM identifier.
+        :param name: New name for the VM.
+        :raises ProxmoxError.
+        """
+        self._guard(lambda: self._rename_vm(vm_id=vm_id, name=name))
+
+    def _rename_vm(self, *, vm_id: int, name: str) -> None:
+        node = node_for_vm(client=self._client, vm_id=vm_id)
+        self._client.nodes(node).qemu(vm_id).config.post(name=name)
+
     @property
     def _uses_api_token(self) -> bool:
         return bool(self._settings.proxmox_token_id and self._settings.proxmox_token_secret)
