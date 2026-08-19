@@ -286,6 +286,32 @@ class VmCommandService:
             raise_proxmox_as_http(exc, unavailable="Unable to fetch VM metrics from Proxmox")
         return {"vm_id": vm_id, "timeframe": timeframe, "cf": cf, "items": items, "count": len(items)}
 
+    async def rename(
+        self,
+        *,
+        vm_id: int,
+        ctx: AuthCtx,
+        new_name: str,
+    ) -> dict[str, Any]:
+        """
+        Rename a virtual machine.
+        """
+        from app.services.vm.rename import VmRenameService
+
+        service = VmRenameService(
+            db=self._db,
+            cmd_repo=self._cmd_repo,
+            query_repo=self._query_repo,
+            gateway=self._gateway,
+            settings=self._settings,
+        )
+        return await service.rename(
+            vm_id=vm_id,
+            user_id=ctx.user_id,
+            is_admin=ctx.is_admin,
+            new_name=new_name,
+        )
+
     async def patch(
         self,
         *,

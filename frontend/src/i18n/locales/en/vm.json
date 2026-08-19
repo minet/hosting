@@ -135,5 +135,12 @@
   },
   "metrics": {
     "network": "Network"
+  },
+  "rename": {
+    "title": "Rename VM",
+    "buttonTooltip": "Rename VM",
+    "nameLabel": "New name",
+    "nameHint": "Letters, digits, and hyphens only, must start with an alphanumeric character.",
+    "success": "VM renamed successfully"
   }
 }

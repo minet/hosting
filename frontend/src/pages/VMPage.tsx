@@ -14,11 +14,13 @@ import { useVMCredentials } from '../hooks/useVMCredentials'
 import { useVMShare } from '../hooks/useVMShare'
 import { useVMRequests } from '../hooks/useVMRequests'
 import { useVMResources } from '../hooks/useVMResources'
+import { useVMRename } from '../hooks/useVMRename'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import DestroyModal from '../components/DestroyModal'
 import ShareModal from '../components/ShareModal'
 import RequestModal from '../components/RequestModal'
 import ResourcesModal from '../components/ResourcesModal'
+import RenameModal from '../components/RenameModal'
 import VMInfoCard from '../components/VMInfoCard'
 import VMActionsCard from '../components/VMActionsCard'
 import VMResourcesCard from '../components/VMResourcesCard'
@@ -56,6 +58,7 @@ export default function VMPage() {
   const share = useVMShare(vmId, setLoadingAction)
   const req = useVMRequests(vmId)
   const res = useVMResources(vmId, vm, resources, (updated) => setVm(v => v ? { ...v, ...updated } : v))
+  const rename = useVMRename(vmId, vm, (newName) => setVm(v => v ? { ...v, name: newName } : v))
 
   // Fetch VM detail + onboot in parallel on mount
   useEffect(() => {
@@ -172,6 +175,17 @@ export default function VMPage() {
         onSave={res.doSaveResources}
       />
     )}
+    {rename.renameModalOpen && vm && (
+      <RenameModal
+        currentName={vm.name}
+        newName={rename.newName}
+        setNewName={rename.setNewName}
+        error={rename.renameError}
+        saving={rename.renameSaving}
+        onClose={() => rename.setRenameModalOpen(false)}
+        onSave={rename.doRename}
+      />
+    )}
 
     {me.is_admin && (
       <button
@@ -195,6 +209,7 @@ export default function VMPage() {
           uptime={uptime}
           onOpenDnsRequest={() => { req.setReqType('dns'); req.loadRequests(); req.setReqModalOpen(true) }}
           onOpenIpRequest={() => { req.setReqType('ipv4'); req.loadRequests(); req.setReqModalOpen(true) }}
+          onOpenRenameModal={() => rename.setRenameModalOpen(true)}
         />
       ) : (
         <CardSkeleton className="md:col-span-2 xl:col-span-2 min-h-[10rem]" />
