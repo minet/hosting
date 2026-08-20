@@ -208,29 +208,6 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         return []
 
 
-def check_user_in_group(user_id: str, group_path: str) -> bool:
-    """Check whether a Keycloak user belongs to a group identified by group_path."""
-    settings = get_settings()
-    if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
-        return False
-    try:
-        admin = _make_admin()
-        groups = admin.get_user_groups(user_id=user_id)
-        if not isinstance(groups, list):
-            return False
-
-        def _matches(g: dict) -> bool:
-            if g.get("path", "").endswith(group_path):
-                return True
-            for sub in g.get("subGroups", []):
-                if isinstance(sub, dict) and _matches(sub):
-                    return True
-            return False
-
-        return any(_matches(g) for g in groups if isinstance(g, dict))
-    except (KeycloakError, OSError) as exc:
-        logger.warning("check_user_in_group failed for user_id=%s, group_path=%s: %s", user_id, group_path, exc)
-        return False
 
 
 def set_date_signed_hosting(user_id: str, date_iso: str) -> bool:
@@ -315,8 +292,7 @@ async def fetch_keycloak_username_async(user_id: str) -> str | None:
     return await asyncio.to_thread(fetch_keycloak_username, user_id)
 
 
-async def check_user_in_group_async(user_id: str, group_path: str) -> bool:
-    return await asyncio.to_thread(check_user_in_group, user_id, group_path)
+
 
 
 async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
