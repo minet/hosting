@@ -18,7 +18,11 @@ from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
 from app.db.repositories.vm import VmAccessRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async
+from app.services.auth.keycloak_admin import (
+    check_user_in_group_async,
+    fetch_keycloak_group_members_async,
+    fetch_keycloak_user_profile_async,
+)
 from app.services.discord import notify_new_request
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
@@ -277,17 +281,28 @@ async def grant_access(
     Grant shared access to a virtual machine for another user.
 
     The caller must be the owner of the VM. ``user_id`` is the 5-digit MiNET
-    member number (Keycloak username). If the member does not exist, the
-    response is still ``ok`` but no access entry is persisted.
+    member number (Keycloak username).
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
 
-    members = await fetch_keycloak_group_members_async("/hosting/charte")
-    member = next((m for m in members if isinstance(m, dict) and str(m.get("id", "")).endswith(f":{user_id}")), None)
-    if not member:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found or has not signed the hosting charter")
+    profile = await fetch_keycloak_user_profile_async(user_id)
+    if not profile:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="User not found or has not signed the hosting charter",
+        )
 
-    resolved_id = member["id"]
+    has_signed = bool(profile.get("dateSignedHosting"))
+    if not has_signed and profile.get("id"):
+        has_signed = await check_user_in_group_async(profile["id"], "/hosting/charte")
+
+    if not has_signed:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="User not found or has not signed the hosting charter",
+        )
+
+    resolved_id = profile["id"]
     return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=resolved_id))
 
 

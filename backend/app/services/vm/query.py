@@ -154,18 +154,17 @@ class VmQueryService:
         """
         rows = await self._db_call(self.repo.list_vm_access(vm_id))
 
-        users = []
-        for row in rows:
+        async def _resolve(row: dict) -> dict[str, Any]:
             is_owner = bool(row["role_owner"])
             # The frontend drops the owner, so only shared users need a name.
             display_name = None if is_owner else await self._resolve_username(row["user_id"])
-            users.append(
-                {
-                    "user_id": row["user_id"],
-                    "role": "owner" if is_owner else "shared",
-                    "display_name": display_name,
-                }
-            )
+            return {
+                "user_id": row["user_id"],
+                "role": "owner" if is_owner else "shared",
+                "display_name": display_name,
+            }
+
+        users = list(await asyncio.gather(*[_resolve(row) for row in rows]))
         return {
             "vm_id": vm_id,
             "users": users,
