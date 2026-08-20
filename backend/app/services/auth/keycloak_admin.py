@@ -14,7 +14,6 @@ in async endpoints.
 from __future__ import annotations
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
 from typing import Any
@@ -154,54 +153,20 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         if not valid_members:
             return []
 
-        cotise_key = settings.auth_cotise_end_claim.strip()
-
-        def _resolve_member(m: dict[str, Any]) -> dict[str, Any]:
+        results = []
+        for m in valid_members:
             keycloak_id = m.get("id")
-            fed_id = keycloak_id
-            attributes: dict[str, Any] = {}
-            if keycloak_id:
-                try:
-                    full_user = admin.get_user(keycloak_id)
-                    if isinstance(full_user, dict):
-                        attributes = full_user.get("attributes") or {}
-                        federations = full_user.get("federatedIdentities", [])
-                        if isinstance(federations, list) and federations:
-                            fi = federations[0]
-                            if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
-                                fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
-                except (KeycloakError, OSError):
-                    pass  # federation lookup is best-effort
-
-            flat_attrs = {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in attributes.items()}
-            cotise_end_ms = _extract_cotise_end_ms(attributes, cotise_key)
-            if cotise_end_ms is None and "cotise_end_ms" in flat_attrs:
-                try:
-                    cotise_end_ms = int(flat_attrs["cotise_end_ms"])
-                except (ValueError, TypeError):
-                    pass
-
-            date_signed = flat_attrs.get("dateSignedHosting")
-            if not date_signed and isinstance(attributes.get("dateSignedHosting"), list) and attributes["dateSignedHosting"]:
-                date_signed = str(attributes["dateSignedHosting"][0])
-
-            return {
-                "id": fed_id,
-                "keycloak_id": keycloak_id,
-                "username": m.get("username"),
-                "first_name": m.get("firstName"),
-                "last_name": m.get("lastName"),
-                "email": m.get("email"),
-                "attributes": attributes,
-                "cotise_end_ms": cotise_end_ms,
-                "dateSignedHosting": date_signed,
-                **flat_attrs,
-            }
-
-        # Resolve member details concurrently with a worker pool
-        workers = min(16, max(len(valid_members), 1))
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            return list(executor.map(_resolve_member, valid_members))
+            results.append(
+                {
+                    "id": keycloak_id,
+                    "keycloak_id": keycloak_id,
+                    "username": m.get("username"),
+                    "first_name": m.get("firstName"),
+                    "last_name": m.get("lastName"),
+                    "email": m.get("email"),
+                }
+            )
+        return results
 
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_group_members failed for group_path=%s: %s", group_path, exc)
