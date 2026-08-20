@@ -16,12 +16,41 @@ export const DEFAULT_WIDTHS: Record<ColId, number> = {
 export interface ThProps {
   col: ColId; label: string; width: number
   sortKey: SortKey; sortDir: SortDir; onSort: (col: SortKey) => void
-  onResizeStart: (e: React.MouseEvent, col: ColId) => void
+  onResize?: (col: ColId, width: number) => void
   filter?: ColFilterProps
 }
 
-export default function Th({ col, label, width, sortKey, sortDir, onSort, onResizeStart, filter }: ThProps) {
+export default function Th({ col, label, width, sortKey, sortDir, onSort, onResize, filter }: ThProps) {
   const sorted = (col as string) === sortKey
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!onResize) return
+    e.preventDefault()
+    e.stopPropagation()
+    const target = e.currentTarget
+    target.setPointerCapture(e.pointerId)
+    const startX = e.clientX
+    const startWidth = width
+
+    const onPointerMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX
+      onResize(col, Math.max(60, startWidth + delta))
+    }
+
+    const onPointerUp = (ev: PointerEvent) => {
+      try {
+        target.releasePointerCapture(ev.pointerId)
+      } catch {}
+      target.removeEventListener('pointermove', onPointerMove)
+      target.removeEventListener('pointerup', onPointerUp)
+      target.removeEventListener('pointercancel', onPointerUp)
+    }
+
+    target.addEventListener('pointermove', onPointerMove)
+    target.addEventListener('pointerup', onPointerUp)
+    target.addEventListener('pointercancel', onPointerUp)
+  }
+
   return (
     <th
       className="group relative px-3 py-2 text-left text-xs font-semibold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider whitespace-nowrap bg-neutral-50 dark:bg-neutral-800 border-r border-neutral-200 dark:border-neutral-700 last:border-r-0 select-none overflow-hidden"
@@ -38,10 +67,12 @@ export default function Th({ col, label, width, sortKey, sortDir, onSort, onResi
         {filter && <ColFilter {...filter} />}
       </div>
       {/* Resize handle */}
-      <div
-        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors opacity-0 group-hover:opacity-100"
-        onMouseDown={e => onResizeStart(e, col)}
-      />
+      {onResize && (
+        <div
+          className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-blue-400 transition-colors opacity-0 group-hover:opacity-100 touch-none select-none"
+          onPointerDown={handlePointerDown}
+        />
+      )}
     </th>
   )
 }

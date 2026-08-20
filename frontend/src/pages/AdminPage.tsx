@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -79,29 +79,9 @@ export default function AdminPage() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const debouncedFilters = useDebounce(filters, 250)
   const [colWidths, setColWidths] = useState<Record<ColId, number>>({ ...DEFAULT_WIDTHS })
-  const dragRef = useRef<{ col: ColId; startX: number; startWidth: number } | null>(null)
 
-  // Fixed drag: attach/detach listeners via useEffect to avoid leaks on unmount
-  const onResizeStart = useCallback((e: React.MouseEvent, col: ColId) => {
-    e.preventDefault()
-    dragRef.current = { col, startX: e.clientX, startWidth: colWidths[col] }
-  }, [colWidths])
-
-  useEffect(() => {
-    function onMove(ev: MouseEvent) {
-      if (!dragRef.current) return
-      const delta = ev.clientX - dragRef.current.startX
-      setColWidths(prev => ({ ...prev, [dragRef.current!.col]: Math.max(60, dragRef.current!.startWidth + delta) }))
-    }
-    function onUp() {
-      dragRef.current = null
-    }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
+  const handleResize = useCallback((col: ColId, width: number) => {
+    setColWidths(prev => ({ ...prev, [col]: width }))
   }, [])
 
   // Open the validation modal when arriving from a Discord deep-link. Re-runs
@@ -176,7 +156,7 @@ export default function AdminPage() {
   }), [filtered, sortKey, sortDir, statuses])
 
   const hasFilters = Object.values(filters).some(Boolean)
-  const thProps = { sortKey, sortDir, onSort: handleSort, onResizeStart }
+  const thProps = { sortKey, sortDir, onSort: handleSort, onResize: handleResize }
   const statusOptions = [
     { label: t('statusFilter.all'), value: '' }, { label: t('statusFilter.running'), value: 'running' }, { label: t('statusFilter.stopped'), value: 'stopped' },
   ]
