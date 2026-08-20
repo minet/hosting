@@ -14,6 +14,7 @@ in async endpoints.
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import logging
 import time
 from typing import Any
@@ -148,37 +149,88 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         members = admin.get_group_members(group["id"])
         if not isinstance(members, list):
             return []
-        results = []
-        for m in members:
-            if not isinstance(m, dict):
-                continue
+
+        valid_members = [m for m in members if isinstance(m, dict)]
+        if not valid_members:
+            return []
+
+        cotise_key = settings.auth_cotise_end_claim.strip()
+
+        def _resolve_member(m: dict[str, Any]) -> dict[str, Any]:
             keycloak_id = m.get("id")
-            # Try to resolve federated user_id: f:{providerId}:{userId}
             fed_id = keycloak_id
-            try:
-                full_user = admin.get_user(keycloak_id)
-                if isinstance(full_user, dict):
-                    federations = full_user.get("federatedIdentities", [])
-                    if isinstance(federations, list) and federations:
-                        fi = federations[0]
-                        if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
-                            fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
-            except (KeycloakError, OSError):
-                pass  # federation lookup is best-effort
-            results.append(
-                {
-                    "id": fed_id,
-                    "keycloak_id": keycloak_id,
-                    "username": m.get("username"),
-                    "first_name": m.get("firstName"),
-                    "last_name": m.get("lastName"),
-                    "email": m.get("email"),
-                }
-            )
-        return results
+            attributes: dict[str, Any] = {}
+            if keycloak_id:
+                try:
+                    full_user = admin.get_user(keycloak_id)
+                    if isinstance(full_user, dict):
+                        attributes = full_user.get("attributes") or {}
+                        federations = full_user.get("federatedIdentities", [])
+                        if isinstance(federations, list) and federations:
+                            fi = federations[0]
+                            if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
+                                fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
+                except (KeycloakError, OSError):
+                    pass  # federation lookup is best-effort
+
+            flat_attrs = {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in attributes.items()}
+            cotise_end_ms = _extract_cotise_end_ms(attributes, cotise_key)
+            if cotise_end_ms is None and "cotise_end_ms" in flat_attrs:
+                try:
+                    cotise_end_ms = int(flat_attrs["cotise_end_ms"])
+                except (ValueError, TypeError):
+                    pass
+
+            date_signed = flat_attrs.get("dateSignedHosting")
+            if not date_signed and isinstance(attributes.get("dateSignedHosting"), list) and attributes["dateSignedHosting"]:
+                date_signed = str(attributes["dateSignedHosting"][0])
+
+            return {
+                "id": fed_id,
+                "keycloak_id": keycloak_id,
+                "username": m.get("username"),
+                "first_name": m.get("firstName"),
+                "last_name": m.get("lastName"),
+                "email": m.get("email"),
+                "attributes": attributes,
+                "cotise_end_ms": cotise_end_ms,
+                "dateSignedHosting": date_signed,
+                **flat_attrs,
+            }
+
+        # Resolve member details concurrently with a worker pool
+        workers = min(16, max(len(valid_members), 1))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            return list(executor.map(_resolve_member, valid_members))
+
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_group_members failed for group_path=%s: %s", group_path, exc)
         return []
+
+
+def check_user_in_group(user_id: str, group_path: str) -> bool:
+    """Check whether a Keycloak user belongs to a group identified by group_path."""
+    settings = get_settings()
+    if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
+        return False
+    try:
+        admin = _make_admin()
+        groups = admin.get_user_groups(user_id=user_id)
+        if not isinstance(groups, list):
+            return False
+
+        def _matches(g: dict) -> bool:
+            if g.get("path", "").endswith(group_path):
+                return True
+            for sub in g.get("subGroups", []):
+                if isinstance(sub, dict) and _matches(sub):
+                    return True
+            return False
+
+        return any(_matches(g) for g in groups if isinstance(g, dict))
+    except (KeycloakError, OSError) as exc:
+        logger.warning("check_user_in_group failed for user_id=%s, group_path=%s: %s", user_id, group_path, exc)
+        return False
 
 
 def set_date_signed_hosting(user_id: str, date_iso: str) -> bool:
@@ -234,12 +286,17 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
                     cotise_end_ms = int(raw[0] if isinstance(raw, list) else raw)
                 except (ValueError, TypeError):
                     pass
+        date_signed = flat_attrs.get("dateSignedHosting")
+        if not date_signed and isinstance(attributes.get("dateSignedHosting"), list) and attributes["dateSignedHosting"]:
+            date_signed = str(attributes["dateSignedHosting"][0])
+
         keycloak_id = user.get("id")
         return {
             **{k: v for k, v in user.items() if k != "attributes"},
             **flat_attrs,
             "id": keycloak_id,  # never let LDAP attributes overwrite the Keycloak federation ID
             "cotise_end_ms": cotise_end_ms,
+            "dateSignedHosting": date_signed,
         }
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_user_profile failed for username=%s: %s", username, exc)
@@ -256,6 +313,10 @@ async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, 
 
 async def fetch_keycloak_username_async(user_id: str) -> str | None:
     return await asyncio.to_thread(fetch_keycloak_username, user_id)
+
+
+async def check_user_in_group_async(user_id: str, group_path: str) -> bool:
+    return await asyncio.to_thread(check_user_in_group, user_id, group_path)
 
 
 async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
