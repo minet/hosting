@@ -89,15 +89,30 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         user = admin.get_user(user_id)
         if not isinstance(user, dict):
             return None
+        attributes: dict[str, Any] = user.get("attributes") or {}
+        date_signed = user.get("dateSignedHosting") or attributes.get("dateSignedHosting")
+        if isinstance(date_signed, list):
+            date_signed = date_signed[0] if date_signed else None
         return {
+            "id": user.get("id"),
             "username": user.get("username"),
             "first_name": user.get("firstName"),
             "last_name": user.get("lastName"),
             "email": user.get("email"),
+            "dateSignedHosting": date_signed,
         }
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_user_by_id failed for user_id=%s: %s", user_id, exc)
         return None
+
+
+def fetch_keycloak_federated_user(member_number: str, reference_user_id: str) -> dict[str, Any] | None:
+    """Fetch a member from the same Keycloak federation as ``reference_user_id``"""
+    federation_prefix, separator, _ = reference_user_id.rpartition(":")
+    if not separator or not federation_prefix.startswith("f:"):
+        logger.warning("Cannot derive user federation from reference_user_id=%s", reference_user_id)
+        return None
+    return fetch_keycloak_user_by_id(f"{federation_prefix}:{member_number}")
 
 
 def fetch_keycloak_username(user_id: str) -> str | None:
@@ -113,16 +128,10 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         return []
     try:
         admin = _make_admin()
-        search_term = group_path.lstrip("/").split("/")[-1]
+        search_term = group_path.lstrip("/").split("/")[0]
         groups = admin.get_groups(query={"search": search_term})
         if not groups:
-            # Fallback: list all groups to help debug
-            all_top = admin.get_groups()
-            logger.warning(
-                "fetch_keycloak_group_members: search '%s' returned nothing. All top-level groups: %s",
-                search_term,
-                [g.get("name") for g in (all_top if isinstance(all_top, list) else [])],
-            )
+            groups = admin.get_groups()
         if not isinstance(groups, list):
             logger.warning("fetch_keycloak_group_members: get_groups returned non-list for search=%s", search_term)
             return []
@@ -148,26 +157,17 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         members = admin.get_group_members(group["id"])
         if not isinstance(members, list):
             return []
+
+        valid_members = [m for m in members if isinstance(m, dict)]
+        if not valid_members:
+            return []
+
         results = []
-        for m in members:
-            if not isinstance(m, dict):
-                continue
+        for m in valid_members:
             keycloak_id = m.get("id")
-            # Try to resolve federated user_id: f:{providerId}:{userId}
-            fed_id = keycloak_id
-            try:
-                full_user = admin.get_user(keycloak_id)
-                if isinstance(full_user, dict):
-                    federations = full_user.get("federatedIdentities", [])
-                    if isinstance(federations, list) and federations:
-                        fi = federations[0]
-                        if isinstance(fi, dict) and fi.get("identityProvider") and fi.get("userId"):
-                            fed_id = f"f:{fi['identityProvider']}:{fi['userId']}"
-            except (KeycloakError, OSError):
-                pass  # federation lookup is best-effort
             results.append(
                 {
-                    "id": fed_id,
+                    "id": keycloak_id,
                     "keycloak_id": keycloak_id,
                     "username": m.get("username"),
                     "first_name": m.get("firstName"),
@@ -176,9 +176,12 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
                 }
             )
         return results
+
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_group_members failed for group_path=%s: %s", group_path, exc)
         return []
+
+
 
 
 def set_date_signed_hosting(user_id: str, date_iso: str) -> bool:
@@ -234,12 +237,17 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
                     cotise_end_ms = int(raw[0] if isinstance(raw, list) else raw)
                 except (ValueError, TypeError):
                     pass
+        date_signed = flat_attrs.get("dateSignedHosting")
+        if not date_signed and isinstance(attributes.get("dateSignedHosting"), list) and attributes["dateSignedHosting"]:
+            date_signed = str(attributes["dateSignedHosting"][0])
+
         keycloak_id = user.get("id")
         return {
             **{k: v for k, v in user.items() if k != "attributes"},
             **flat_attrs,
             "id": keycloak_id,  # never let LDAP attributes overwrite the Keycloak federation ID
             "cotise_end_ms": cotise_end_ms,
+            "dateSignedHosting": date_signed,
         }
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_user_profile failed for username=%s: %s", username, exc)
@@ -250,12 +258,21 @@ async def fetch_keycloak_user_by_id_async(user_id: str) -> dict[str, Any] | None
     return await asyncio.to_thread(fetch_keycloak_user_by_id, user_id)
 
 
+async def fetch_keycloak_federated_user_async(
+    member_number: str, reference_user_id: str
+) -> dict[str, Any] | None:
+    return await asyncio.to_thread(fetch_keycloak_federated_user, member_number, reference_user_id)
+
+
 async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, Any]]:
     return await asyncio.to_thread(fetch_keycloak_group_members, group_path)
 
 
 async def fetch_keycloak_username_async(user_id: str) -> str | None:
     return await asyncio.to_thread(fetch_keycloak_username, user_id)
+
+
+
 
 
 async def fetch_members_to_check_for_expiration() -> list[dict[str, Any]]:
