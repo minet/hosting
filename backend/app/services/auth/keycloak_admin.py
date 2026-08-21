@@ -89,15 +89,30 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         user = admin.get_user(user_id)
         if not isinstance(user, dict):
             return None
+        attributes: dict[str, Any] = user.get("attributes") or {}
+        date_signed = user.get("dateSignedHosting") or attributes.get("dateSignedHosting")
+        if isinstance(date_signed, list):
+            date_signed = date_signed[0] if date_signed else None
         return {
+            "id": user.get("id"),
             "username": user.get("username"),
             "first_name": user.get("firstName"),
             "last_name": user.get("lastName"),
             "email": user.get("email"),
+            "dateSignedHosting": date_signed,
         }
     except (KeycloakError, OSError) as exc:
         logger.warning("fetch_keycloak_user_by_id failed for user_id=%s: %s", user_id, exc)
         return None
+
+
+def fetch_keycloak_federated_user(member_number: str, reference_user_id: str) -> dict[str, Any] | None:
+    """Fetch a member from the same Keycloak federation as ``reference_user_id``"""
+    federation_prefix, separator, _ = reference_user_id.rpartition(":")
+    if not separator or not federation_prefix.startswith("f:"):
+        logger.warning("Cannot derive user federation from reference_user_id=%s", reference_user_id)
+        return None
+    return fetch_keycloak_user_by_id(f"{federation_prefix}:{member_number}")
 
 
 def fetch_keycloak_username(user_id: str) -> str | None:
@@ -113,16 +128,10 @@ def fetch_keycloak_group_members(group_path: str) -> list[dict[str, Any]]:
         return []
     try:
         admin = _make_admin()
-        search_term = group_path.lstrip("/").split("/")[-1]
+        search_term = group_path.lstrip("/").split("/")[0]
         groups = admin.get_groups(query={"search": search_term})
         if not groups:
-            # Fallback: list all groups to help debug
-            all_top = admin.get_groups()
-            logger.warning(
-                "fetch_keycloak_group_members: search '%s' returned nothing. All top-level groups: %s",
-                search_term,
-                [g.get("name") for g in (all_top if isinstance(all_top, list) else [])],
-            )
+            groups = admin.get_groups()
         if not isinstance(groups, list):
             logger.warning("fetch_keycloak_group_members: get_groups returned non-list for search=%s", search_term)
             return []
@@ -247,6 +256,12 @@ def fetch_keycloak_user_profile(username: str) -> dict[str, Any] | None:
 
 async def fetch_keycloak_user_by_id_async(user_id: str) -> dict[str, Any] | None:
     return await asyncio.to_thread(fetch_keycloak_user_by_id, user_id)
+
+
+async def fetch_keycloak_federated_user_async(
+    member_number: str, reference_user_id: str
+) -> dict[str, Any] | None:
+    return await asyncio.to_thread(fetch_keycloak_federated_user, member_number, reference_user_id)
 
 
 async def fetch_keycloak_group_members_async(group_path: str) -> list[dict[str, Any]]:
