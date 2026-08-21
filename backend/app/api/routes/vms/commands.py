@@ -18,7 +18,7 @@ from app.core.rate_limit import RateLimiter
 from app.db.core import get_db
 from app.db.repositories.request import RequestRepo
 from app.db.repositories.vm import VmAccessRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async
+from app.services.auth.keycloak_admin import fetch_keycloak_federated_user_async
 from app.services.discord import notify_new_request
 from app.services.vm import AccessLevel, VmAccessService
 from app.services.vm.command import VmCommandService
@@ -277,17 +277,18 @@ async def grant_access(
     Grant shared access to a virtual machine for another user.
 
     The caller must be the owner of the VM. ``user_id`` is the 5-digit MiNET
-    member number (Keycloak username). If the member does not exist, the
-    response is still ``ok`` but no access entry is persisted.
+    member number stored in the user's federated Keycloak ID.
     """
     await access.ensure(vm_id=vm_id, ctx=ctx, min_level=AccessLevel.OWNER)
 
-    members = await fetch_keycloak_group_members_async("/hosting/charte")
-    member = next((m for m in members if isinstance(m, dict) and str(m.get("id", "")).endswith(f":{user_id}")), None)
-    if not member:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found or has not signed the hosting charter")
+    member = await fetch_keycloak_federated_user_async(user_id, ctx.user_id)
+    resolved_id = member.get("id") if member else None
+    if not isinstance(resolved_id, str) or not member.get("dateSignedHosting"):
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="User not found or has not signed the hosting charter",
+        )
 
-    resolved_id = member["id"]
     return VMAccessMutationResponse.model_validate(await share.grant_access(vm_id=vm_id, user_id=resolved_id))
 
 
