@@ -22,6 +22,12 @@ from app.services.proxmox.gateway import ensure_proxmox_gateway, get_proxmox_gat
 from app.services.vm.purge import run_purge
 from app.services.vm.status_cache import get_status_cache
 
+# Without this, logs below WARNING are silently dropped.
+logging.basicConfig(
+    level=get_settings().log_level.upper(),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+
 logger = logging.getLogger(__name__)
 
 

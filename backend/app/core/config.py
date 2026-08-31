@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     app_name: str = Field(default="hosting-api", alias="APP_NAME")
     app_env: str = Field(default="dev", alias="APP_ENV")
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     database_url: str = Field(alias="DATABASE_URL")
     session_secret: str = Field(alias="SESSION_SECRET")
 
