@@ -21,8 +21,8 @@ from app.core.config import Settings
 from app.core.templates import jinja_env
 from app.db.models.vm_purge_mail import VMPurgeMail
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
-from app.services.discord import notify_vm_purge_deleted
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_by_id_async
+from app.services.discord import notify_purge_summary
 from app.services.dns import DnsService
 from app.services.email import send_email_async
 from app.services.proxmox.errors import ProxmoxError
@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 _SIX_MONTHS_S = (6 * 30 - 1) * 24 * 3600
 # Minimum interval between warning emails
 _WARN_INTERVAL = timedelta(days=30)
+# Minimum delay between the 24h deletion notice and the actual deletion
+_DELETION_NOTICE_DELAY = timedelta(hours=24)
 
 
 def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str, departure_claim_key: str = "departureDate") -> int | None:
@@ -112,9 +114,13 @@ async def _last_warning_sent_at(db: AsyncSession, vm_id: int) -> datetime | None
     return result.scalar_one_or_none()
 
 
-async def _record_mail(db: AsyncSession, vm_id: int, mail_type: str) -> None:
-    """Insert a VMPurgeMail row and flush (caller commits)."""
-    db.add(VMPurgeMail(vm_id=vm_id, mail_type=mail_type))
+async def _record_mail(db: AsyncSession, vm_id: int, mail_type: str, *, vm_name: str, owner_id: str) -> None:
+    """Insert a VMPurgeMail row and flush (caller commits).
+
+    ``vm_name``/``owner_id`` are captured now because the row must stay
+    meaningful even after the VM is deleted (vm_id is set to NULL then).
+    """
+    db.add(VMPurgeMail(vm_id=vm_id, mail_type=mail_type, vm_name=vm_name, owner_id=owner_id))
     await db.flush()
 
 
@@ -147,9 +153,12 @@ async def run_purge(
 
     # Get only VMs owned by expired users
     all_vms = await query_repo.list_vms_by_owners(expired_ids)
+    logger.info("purge: %d expired members, %d VMs to evaluate", len(expired_members), len(all_vms))
 
     warned = 0
     deleted = 0
+    mails_sent: list[tuple[str, str]] = []
+    deleted_vms: list[tuple[int, int]] = []
 
     for vm in all_vms:
         owner_id = vm.get("owner_id")
@@ -164,8 +173,11 @@ async def run_purge(
         if not member:
             continue
 
-        username = member.get("username")
-        profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
+        # Resolve by Keycloak id (already known via owner_id), not by username: the
+        # federated user storage's username search is a substring match that ignores
+        # Keycloak's `exact` flag, and can silently return an unrelated account whose
+        # login merely contains the search string (see fetch_keycloak_user_by_id).
+        profile = await fetch_keycloak_user_by_id_async(owner_id)
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         if cotise_end_ms is None:
@@ -180,6 +192,11 @@ async def run_purge(
         days_expired = max(0, int(elapsed_seconds / 86400))
         days_remaining = max(0, int((_SIX_MONTHS_S - elapsed_seconds) / 86400))
 
+        logger.info(
+            "purge: vm %s (owner=%s) cotise_end=%s days_expired=%d days_remaining=%d",
+            vm_id, owner_id, cotise_end.date(), days_expired, days_remaining,
+        )
+
         email = member.get("email")
         prenom = member.get("first_name") or "Utilisateur"
         nom = member.get("last_name") or ""
@@ -187,8 +204,11 @@ async def run_purge(
         if elapsed_seconds >= _SIX_MONTHS_S:
             last_sent = await _last_warning_sent_at(db, vm_id)
 
-            # Never received any mail — send a 24h notice and skip deletion
-            if last_sent is None:
+            # No prior warning, or the 24h notice hasn't been out long enough yet —
+            # (re-)send the notice and skip deletion this cycle. Without this check,
+            # deletion could follow the notice by less than 24h if the purge loop
+            # runs sooner than expected (restart, redeploy, drift).
+            if last_sent is None or (now - last_sent.replace(tzinfo=UTC)) < _DELETION_NOTICE_DELAY:
                 if email:
                     subject = f"Hosting MiNET — Votre VM « {vm_name} » sera supprimée dans 24h"
                     plain = (
@@ -207,12 +227,13 @@ async def run_purge(
                     )
                     await send_email_async(to_email=email, subject=subject, plain=plain, html=html_notice, settings=settings)
                     try:
-                        await _record_mail(db, vm_id, "warning")
+                        await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
                         await db.commit()
                     except SQLAlchemyError:
                         await db.rollback()
                         logger.warning("purge: failed to record 24h notice for vm %s", vm_id)
                     warned += 1
+                    mails_sent.append((owner_id, "préavis 24h avant suppression"))
                     logger.info("purge: sent 24h notice for vm %s (owner=%s, never warned before)", vm_id, owner_id)
                 continue
 
@@ -239,7 +260,7 @@ async def run_purge(
                 )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
                 try:
-                    await _record_mail(db, vm_id, "deletion")
+                    await _record_mail(db, vm_id, "deletion", vm_name=vm_name, owner_id=owner_id)
                     await db.commit()
                 except SQLAlchemyError:
                     await db.rollback()
@@ -274,8 +295,9 @@ async def run_purge(
                 continue
 
             await dns.delete_records(vm_id=vm_id)
-            await notify_vm_purge_deleted(vm_id=vm_id, vm_name=vm_name, days_expired=days_expired)
             deleted += 1
+            deleted_vms.append((vm_id, days_expired))
+            logger.info("purge: vm %s deleted (owner=%s, expired %d days)", vm_id, owner_id, days_expired)
 
         else:
             # Not yet 6 months — send warning email at most once per 30 days
@@ -300,12 +322,13 @@ async def run_purge(
                 )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
                 try:
-                    await _record_mail(db, vm_id, "warning")
+                    await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
                     await db.commit()
                 except SQLAlchemyError:
                     await db.rollback()
                     logger.warning("purge: failed to record warning mail for vm %s", vm_id)
                 warned += 1
+                mails_sent.append((owner_id, "avertissement"))
                 logger.info(
                     "purge: warned user %s for vm %s (expired %d days, %d remaining)",
                     owner_id,
@@ -315,6 +338,7 @@ async def run_purge(
                 )
 
     await dns.close()
+    await notify_purge_summary(mails_sent=mails_sent, deleted_vms=deleted_vms)
     result = {"warned": warned, "deleted": deleted}
     logger.info("purge: done — %s", result)
     return result

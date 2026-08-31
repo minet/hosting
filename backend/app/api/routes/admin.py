@@ -944,7 +944,6 @@ async def list_expired_vms(
     """Return VMs belonging to users with an expired membership, enriched with
     purge statistics (mails sent, last warning date, deletion estimate).
     """
-    from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
     from app.services.vm.purge import _SIX_MONTHS_S, _cotise_end_from_profile
 
     settings = get_settings()

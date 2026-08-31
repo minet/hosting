@@ -80,7 +80,12 @@ def _extract_cotise_end_ms(attributes: dict[str, Any], claim_key: str) -> int | 
 
 
 def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
-    """Fetch a user's profile from Keycloak by their UUID (sub)."""
+    """Fetch a user's profile from Keycloak by their UUID (sub).
+
+    Prefer this over :func:`fetch_keycloak_user_profile` when the id is
+    already known: the username search is a substring match that can
+    return the wrong account.
+    """
     settings = get_settings()
     if not settings.keycloak_client_secret and not settings.keycloak_admin_password:
         return None
@@ -90,15 +95,28 @@ def fetch_keycloak_user_by_id(user_id: str) -> dict[str, Any] | None:
         if not isinstance(user, dict):
             return None
         attributes: dict[str, Any] = user.get("attributes") or {}
+        flat_attrs = {k: v[0] if isinstance(v, list) and len(v) == 1 else v for k, v in attributes.items()}
         date_signed = user.get("dateSignedHosting") or attributes.get("dateSignedHosting")
         if isinstance(date_signed, list):
             date_signed = date_signed[0] if date_signed else None
+
+        cotise_key = settings.auth_cotise_end_claim.strip()
+        cotise_end_ms = _extract_cotise_end_ms(attributes, cotise_key)
+        if cotise_end_ms is None:
+            raw = user.get(cotise_key) or flat_attrs.get(cotise_key)
+            if raw is not None:
+                try:
+                    cotise_end_ms = int(raw[0] if isinstance(raw, list) else raw)
+                except (ValueError, TypeError):
+                    pass
+
         return {
-            "id": user.get("id"),
-            "username": user.get("username"),
+            **{k: v for k, v in user.items() if k != "attributes"},
+            **flat_attrs,
+            "id": user.get("id"),  # never let attributes overwrite the Keycloak federation ID
+            "cotise_end_ms": cotise_end_ms,
             "first_name": user.get("firstName"),
             "last_name": user.get("lastName"),
-            "email": user.get("email"),
             "dateSignedHosting": date_signed,
         }
     except (KeycloakError, OSError) as exc:
