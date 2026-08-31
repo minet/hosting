@@ -149,6 +149,7 @@ async def run_purge(
 
     # Get only VMs owned by expired users
     all_vms = await query_repo.list_vms_by_owners(expired_ids)
+    logger.info("purge: %d expired members, %d VMs to evaluate", len(expired_members), len(all_vms))
 
     warned = 0
     deleted = 0
@@ -184,6 +185,11 @@ async def run_purge(
         elapsed_seconds = (now - cotise_end).total_seconds()
         days_expired = max(0, int(elapsed_seconds / 86400))
         days_remaining = max(0, int((_SIX_MONTHS_S - elapsed_seconds) / 86400))
+
+        logger.info(
+            "purge: vm %s (owner=%s) cotise_end=%s days_expired=%d days_remaining=%d",
+            vm_id, owner_id, cotise_end.date(), days_expired, days_remaining,
+        )
 
         email = member.get("email")
         prenom = member.get("first_name") or "Utilisateur"
@@ -284,6 +290,7 @@ async def run_purge(
             await dns.delete_records(vm_id=vm_id)
             await notify_vm_purge_deleted(vm_id=vm_id, vm_name=vm_name, days_expired=days_expired)
             deleted += 1
+            logger.info("purge: vm %s deleted (owner=%s, expired %d days)", vm_id, owner_id, days_expired)
 
         else:
             # Not yet 6 months — send warning email at most once per 30 days
