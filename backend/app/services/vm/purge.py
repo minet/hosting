@@ -114,9 +114,13 @@ async def _last_warning_sent_at(db: AsyncSession, vm_id: int) -> datetime | None
     return result.scalar_one_or_none()
 
 
-async def _record_mail(db: AsyncSession, vm_id: int, mail_type: str) -> None:
-    """Insert a VMPurgeMail row and flush (caller commits)."""
-    db.add(VMPurgeMail(vm_id=vm_id, mail_type=mail_type))
+async def _record_mail(db: AsyncSession, vm_id: int, mail_type: str, *, vm_name: str, owner_id: str) -> None:
+    """Insert a VMPurgeMail row and flush (caller commits).
+
+    ``vm_name``/``owner_id`` are captured now because the row must stay
+    meaningful even after the VM is deleted (vm_id is set to NULL then).
+    """
+    db.add(VMPurgeMail(vm_id=vm_id, mail_type=mail_type, vm_name=vm_name, owner_id=owner_id))
     await db.flush()
 
 
@@ -221,7 +225,7 @@ async def run_purge(
                     )
                     await send_email_async(to_email=email, subject=subject, plain=plain, html=html_notice, settings=settings)
                     try:
-                        await _record_mail(db, vm_id, "warning")
+                        await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
                         await db.commit()
                     except SQLAlchemyError:
                         await db.rollback()
@@ -253,7 +257,7 @@ async def run_purge(
                 )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
                 try:
-                    await _record_mail(db, vm_id, "deletion")
+                    await _record_mail(db, vm_id, "deletion", vm_name=vm_name, owner_id=owner_id)
                     await db.commit()
                 except SQLAlchemyError:
                     await db.rollback()
@@ -315,7 +319,7 @@ async def run_purge(
                 )
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
                 try:
-                    await _record_mail(db, vm_id, "warning")
+                    await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
                     await db.commit()
                 except SQLAlchemyError:
                     await db.rollback()
