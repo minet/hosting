@@ -22,7 +22,7 @@ from app.core.templates import jinja_env
 from app.db.models.vm_purge_mail import VMPurgeMail
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_by_id_async
-from app.services.discord import notify_vm_purge_deleted
+from app.services.discord import notify_purge_summary
 from app.services.dns import DnsService
 from app.services.email import send_email_async
 from app.services.proxmox.errors import ProxmoxError
@@ -157,6 +157,8 @@ async def run_purge(
 
     warned = 0
     deleted = 0
+    mails_sent: list[tuple[str, str]] = []
+    deleted_vms: list[tuple[int, int]] = []
 
     for vm in all_vms:
         owner_id = vm.get("owner_id")
@@ -231,6 +233,7 @@ async def run_purge(
                         await db.rollback()
                         logger.warning("purge: failed to record 24h notice for vm %s", vm_id)
                     warned += 1
+                    mails_sent.append((owner_id, "préavis 24h avant suppression"))
                     logger.info("purge: sent 24h notice for vm %s (owner=%s, never warned before)", vm_id, owner_id)
                 continue
 
@@ -292,8 +295,8 @@ async def run_purge(
                 continue
 
             await dns.delete_records(vm_id=vm_id)
-            await notify_vm_purge_deleted(vm_id=vm_id, vm_name=vm_name, days_expired=days_expired)
             deleted += 1
+            deleted_vms.append((vm_id, days_expired))
             logger.info("purge: vm %s deleted (owner=%s, expired %d days)", vm_id, owner_id, days_expired)
 
         else:
@@ -325,6 +328,7 @@ async def run_purge(
                     await db.rollback()
                     logger.warning("purge: failed to record warning mail for vm %s", vm_id)
                 warned += 1
+                mails_sent.append((owner_id, "avertissement"))
                 logger.info(
                     "purge: warned user %s for vm %s (expired %d days, %d remaining)",
                     owner_id,
@@ -334,6 +338,7 @@ async def run_purge(
                 )
 
     await dns.close()
+    await notify_purge_summary(mails_sent=mails_sent, deleted_vms=deleted_vms)
     result = {"warned": warned, "deleted": deleted}
     logger.info("purge: done — %s", result)
     return result

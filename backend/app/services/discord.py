@@ -186,17 +186,45 @@ async def notify_dns_revoked(
     await _send_webhook(content="", embeds=[embed])
 
 
-async def notify_vm_purge_deleted(*, vm_id: int, vm_name: str, days_expired: int) -> None:
-    """Notify Discord that a VM has been deleted by the purge (expired membership)."""
+async def notify_purge_summary(
+    *,
+    mails_sent: list[tuple[str, str]],
+    deleted_vms: list[tuple[int, int]],
+) -> None:
+    """Notify Discord with a single recap of one purge cycle.
+
+    Sends nothing if the cycle did nothing (no mail, no deletion).
+
+    :param mails_sent: ``(owner_id, label)`` pairs, one per mail sent this cycle.
+    :param deleted_vms: ``(vm_id, days_expired)`` pairs, one per VM deleted this cycle.
+    """
+    if not mails_sent and not deleted_vms:
+        return
+
     tag = _env_tag()
+
+    def short_id(owner_id: str) -> str:
+        return owner_id.rsplit(":", 1)[-1]
+
+    fields = []
+    if mails_sent:
+        lines = "\n".join(
+            f"`{i}.` #{short_id(owner_id)}, {label}"
+            for i, (owner_id, label) in enumerate(mails_sent, start=1)
+        )
+        fields.append({"name": f"📧 Mails envoyés ({len(mails_sent)})", "value": lines, "inline": False})
+    if deleted_vms:
+        lines = "\n".join(
+            f"`{i}.` VM #{vm_id}, expiré depuis {days_expired} jours"
+            for i, (vm_id, days_expired) in enumerate(deleted_vms, start=1)
+        )
+        fields.append({"name": f"🗑️ Suppressions ({len(deleted_vms)})", "value": lines, "inline": False})
+
     embed = {
-        "title": f"[{tag}] VM supprimée : cotisation expirée",
-        "description": f"La VM **{vm_name}** (`#{vm_id}`) a été supprimée automatiquement après {days_expired} jours de cotisation expirée.",
-        "color": _env_color(0xE74C3C),
-        "fields": [
-            {"name": "VM", "value": f"`{vm_name}` (#{vm_id})", "inline": True},
-            {"name": "Expiré depuis", "value": f"{days_expired} jours", "inline": True},
-        ],
+        "title": f"🧹 [{tag}] Purge des cotisations expirées",
+        "description": f"Cycle terminé : {len(mails_sent)} mails envoyés, {len(deleted_vms)} VM supprimée(s).",
+        "color": _env_color(0x5865F2),
+        "fields": fields,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "footer": {"text": f"Hosting MiNET • {tag}"},
     }
