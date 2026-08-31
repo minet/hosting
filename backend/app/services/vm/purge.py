@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 _SIX_MONTHS_S = (6 * 30 - 1) * 24 * 3600
 # Minimum interval between warning emails
 _WARN_INTERVAL = timedelta(days=30)
+# Minimum delay between the 24h deletion notice and the actual deletion
+_DELETION_NOTICE_DELAY = timedelta(hours=24)
 
 
 def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str, departure_claim_key: str = "departureDate") -> int | None:
@@ -187,8 +189,11 @@ async def run_purge(
         if elapsed_seconds >= _SIX_MONTHS_S:
             last_sent = await _last_warning_sent_at(db, vm_id)
 
-            # Never received any mail — send a 24h notice and skip deletion
-            if last_sent is None:
+            # No prior warning, or the 24h notice hasn't been out long enough yet —
+            # (re-)send the notice and skip deletion this cycle. Without this check,
+            # deletion could follow the notice by less than 24h if the purge loop
+            # runs sooner than expected (restart, redeploy, drift).
+            if last_sent is None or (now - last_sent.replace(tzinfo=UTC)) < _DELETION_NOTICE_DELAY:
                 if email:
                     subject = f"Hosting MiNET — Votre VM « {vm_name} » sera supprimée dans 24h"
                     plain = (
