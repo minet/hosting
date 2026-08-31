@@ -982,8 +982,10 @@ async def list_expired_vms(
         if not member:
             continue
 
-        username = member.get("username")
-        profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
+        # Resolve by Keycloak id (already known via owner_id), not by username: the
+        # federated user storage's username search is a substring match that ignores
+        # Keycloak's `exact` flag, and can silently return an unrelated account.
+        profile = await fetch_keycloak_user_by_id_async(owner_id)
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         days_expired: int | None = None
