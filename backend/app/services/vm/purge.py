@@ -21,7 +21,7 @@ from app.core.config import Settings
 from app.core.templates import jinja_env
 from app.db.models.vm_purge_mail import VMPurgeMail
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
-from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_profile_async
+from app.services.auth.keycloak_admin import fetch_keycloak_group_members_async, fetch_keycloak_user_by_id_async
 from app.services.discord import notify_vm_purge_deleted
 from app.services.dns import DnsService
 from app.services.email import send_email_async
@@ -166,8 +166,11 @@ async def run_purge(
         if not member:
             continue
 
-        username = member.get("username")
-        profile = await fetch_keycloak_user_profile_async(username) if isinstance(username, str) else None
+        # Resolve by Keycloak id (already known via owner_id), not by username: the
+        # federated user storage's username search is a substring match that ignores
+        # Keycloak's `exact` flag, and can silently return an unrelated account whose
+        # login merely contains the search string (see fetch_keycloak_user_by_id).
+        profile = await fetch_keycloak_user_by_id_async(owner_id)
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         if cotise_end_ms is None:
