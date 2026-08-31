@@ -34,7 +34,7 @@ from app.services.auth.helpers import (
     keycloak_realm_browser_base,
     safe_frontend_redirect,
 )
-from app.services.auth.keycloak_admin import fetch_keycloak_user_profile_async
+from app.services.auth.keycloak_admin import fetch_keycloak_user_by_id_async
 
 
 class AuthMeResponse(TypedDict):
@@ -191,7 +191,10 @@ async def current_user_claims(payload: TokenPayload) -> AuthMeResponse:
     wifi_only = _bool_attr("wifiOnly")
 
     if not nom or not prenom or cotise_end is None or date_signed_hosting is None:
-        profile = await fetch_keycloak_user_profile_async(username) if username else None
+        # Resolve by Keycloak id, not by username: the federated user storage's
+        # username search is a substring match that ignores Keycloak's `exact`
+        # flag, and can silently return an unrelated account.
+        profile = await fetch_keycloak_user_by_id_async(user_id) if user_id else None
         if profile:
             nom = nom or profile.get("nom") or profile.get("lastName") or profile.get("last_name")
             prenom = prenom or profile.get("prenom") or profile.get("firstName") or profile.get("first_name")
