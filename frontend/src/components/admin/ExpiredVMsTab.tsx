@@ -28,8 +28,8 @@ function useExpiredVMs() {
 
 function urgencyColor(daysUntil: number | null): string {
   if (daysUntil === null) return 'text-neutral-400 dark:text-neutral-500'
-  if (daysUntil <= 30) return 'text-red-500 dark:text-red-400 font-semibold'
-  if (daysUntil <= 60) return 'text-amber-500 dark:text-amber-400'
+  if (daysUntil <= 7) return 'text-red-500 dark:text-red-400 font-semibold'
+  if (daysUntil <= 15) return 'text-amber-500 dark:text-amber-400'
   return 'text-neutral-600 dark:text-neutral-400'
 }
 

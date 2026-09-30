@@ -18,8 +18,14 @@
           <td style="padding:40px;">
             <p style="font-size:15px;color:#374151;">Bonjour <strong>{{ prenom }} {{ nom }}</strong>,</p>
             <p style="font-size:15px;color:#374151;">
-              Votre VM <strong>{{ vm_name }}</strong> (#{{ vm_id }}) a été supprimée après 6 mois de cotisation expirée.
+              {{ 'Vos VM suivantes ont été supprimées' if vms|length > 1 else 'Votre VM suivante a été supprimée' }}
+              car votre cotisation était expirée depuis plus d'un mois et que vous ne l'avez pas supprimée vous-même :
             </p>
+            <ul style="font-size:15px;color:#111827;font-weight:bold;">
+              {% for vm in vms %}
+              <li>{{ vm.name }} (ID : {{ vm.vm_id }})</li>
+              {% endfor %}
+            </ul>
           </td>
         </tr>
 

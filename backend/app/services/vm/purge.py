@@ -2,14 +2,16 @@
 Expired-membership VM purge service.
 
 Checks all VMs whose owner's membership (cotisation) has expired.
-- Sends a monthly warning email to the owner (at most once per 30 days).
-- After 6 months of expired membership, deletes the VM from Proxmox and DB.
+- Sends three emails per expiry: one when the membership expires, one halfway
+  to the deletion, and a final notice at least 24h before the deletion.
+- After 1 month of expired membership, deletes the VM from Proxmox and DB.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -30,12 +32,18 @@ from app.services.proxmox.gateway import ProxmoxGateway
 
 logger = logging.getLogger(__name__)
 
-# 6 months minus 1 day in seconds (deletion threshold)
-_SIX_MONTHS_S = (6 * 30 - 1) * 24 * 3600
-# Minimum interval between warning emails
-_WARN_INTERVAL = timedelta(days=30)
-# Minimum delay between the 24h deletion notice and the actual deletion
+# Deletion threshold: 1 month (30 days) after the membership expired
+DELETION_DELAY_S = 30 * 24 * 3600
+# Halfway reminder threshold
+_MIDWAY_S = DELETION_DELAY_S // 2
+# Minimum delay between the final notice and the actual deletion
 _DELETION_NOTICE_DELAY = timedelta(hours=24)
+
+# Mail types stored in vm_purge_mails (mail_type)
+MAIL_EXPIRY = "expiry"
+MAIL_MIDWAY = "midway"
+MAIL_FINAL = "final"
+MAIL_DELETION = "deletion"
 
 
 def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str, departure_claim_key: str = "departureDate") -> int | None:
@@ -67,26 +75,53 @@ def _cotise_end_from_profile(profile: dict[str, Any] | None, claim_key: str, dep
     return None
 
 
+def _vms_subject(vms: list[dict[str, Any]]) -> str:
+    """Return 'VM « name »' for one VM, or 'N VM' for several."""
+    return f"VM « {vms[0]['name']} »" if len(vms) == 1 else f"{len(vms)} VM"
+
+
+def _vms_lines(vms: list[dict[str, Any]]) -> str:
+    return "\n".join(f"- {vm['name']} (ID {vm['vm_id']})" for vm in vms)
+
+
 def _build_warning_email(
     *,
     prenom: str,
     nom: str,
-    vm_name: str,
-    vm_id: int,
+    vms: list[dict[str, Any]],
     days_expired: int,
     days_remaining: int,
+    midway: bool,
     settings: Settings,
 ) -> tuple[str, str, str]:
-    """Return (subject, plain, html) for a warning email."""
+    """Return (subject, plain, html) for an expiry/midway email covering all of a user's VMs."""
+    many = len(vms) > 1
     base_url = settings.backend_url.rstrip("/")
-    subject = f"Hosting MiNET — Votre VM « {vm_name} » sera supprimée"
+    subject = f"Hosting MiNET — Votre cotisation a expiré : supprimez {'vos' if many else 'votre'} {_vms_subject(vms)}"
 
+    followup = (
+        "Il s'agit du rappel de mi-parcours. Un dernier préavis vous sera envoyé 24h avant la suppression."
+        if midway
+        else "Vous recevrez un rappel à mi-parcours, puis un dernier préavis 24h avant la suppression."
+    )
     plain = (
         f"Bonjour {prenom} {nom},\n\n"
-        f"Votre cotisation MiNET a expiré il y a {days_expired} jours.\n"
-        f"Votre machine virtuelle « {vm_name} » (ID {vm_id}) sera automatiquement "
-        f"supprimée dans {days_remaining} jours si vous ne renouvelez pas votre cotisation.\n\n"
-        "Rendez-vous sur https://adh6.minet.net pour renouveler.\n\n"
+        f"Votre cotisation MiNET a expiré il y a {days_expired} jours.\n\n"
+        f"{'Machines virtuelles concernées' if many else 'Machine virtuelle concernée'} :\n{_vms_lines(vms)}\n\n"
+        f"Sans cotisation à jour, {'vos VM ne peuvent plus être hébergées' if many else 'votre VM ne peut plus être hébergée'} "
+        f"par MiNET. C'est à vous de {'les' if many else 'la'} supprimer, après avoir récupéré vos données "
+        "(fichiers, bases de données, configurations, sauvegardes). "
+        f"Vous avez {days_remaining} jours pour le faire.\n\n"
+        "Vous avez deux options :\n"
+        f"1. Conserver {'vos VM' if many else 'la VM'} : renouvelez votre cotisation sur https://adh6.minet.net.\n"
+        "2. Ne pas renouveler : récupérez vos données, puis supprimez vous-même "
+        f"{'vos VM' if many else 'votre VM'} depuis l'interface Hosting.\n\n"
+        f"Si vous ne faites rien, MiNET supprimera {'les VM' if many else 'la VM'} à l'échéance, "
+        f"avec {'toutes leurs' if many else 'toutes ses'} données. "
+        "Cette suppression est définitive et MiNET ne conserve aucune copie.\n\n"
+        f"{followup}\n"
+        "Si votre cotisation a déjà été renouvelée récemment, vous pouvez ignorer ce message.\n"
+        "Une question ou besoin d'aide pour récupérer vos données ? Contactez MiNET via les canaux habituels.\n\n"
         "— L'équipe MiNET"
     )
 
@@ -95,33 +130,117 @@ def _build_warning_email(
         prenom=prenom,
         nom=nom,
         days_expired=days_expired,
-        vm_name=vm_name,
-        vm_id=vm_id,
+        vms=vms,
         days_remaining=days_remaining,
+        midway=midway,
     )
 
     return subject, plain, html
 
 
-async def _last_warning_sent_at(db: AsyncSession, vm_id: int) -> datetime | None:
-    """Return the timestamp of the most recent warning email for this VM, or None."""
+def _build_final_notice_email(
+    *, prenom: str, nom: str, vms: list[dict[str, Any]], days_expired: int
+) -> tuple[str, str, str]:
+    """Return (subject, plain, html) for the 24h deletion notice."""
+    many = len(vms) > 1
+    subject = f"Hosting MiNET — {'Vos' if many else 'Votre'} {_vms_subject(vms)} {'seront supprimées' if many else 'sera supprimée'} dans 24h"
+    plain = (
+        f"Bonjour {prenom} {nom},\n\n"
+        f"Votre cotisation MiNET a expiré il y a {days_expired} jours.\n"
+        f"{'Vos machines virtuelles suivantes seront supprimées' if many else 'Votre machine virtuelle suivante sera supprimée'} "
+        f"automatiquement dans 24h, avec {'toutes leurs' if many else 'toutes ses'} données :\n{_vms_lines(vms)}\n\n"
+        "Cette suppression est définitive et MiNET ne conserve aucune copie.\n\n"
+        f"Dernière chance : récupérez dès maintenant vos données et supprimez vous-même {'vos VM' if many else 'votre VM'}, "
+        f"ou renouvelez votre cotisation sur https://adh6.minet.net pour {'les' if many else 'la'} conserver.\n\n"
+        "— L'équipe MiNET"
+    )
+    html = jinja_env.get_template("emails/vm_deletion_notice.html").render(
+        prenom=prenom, nom=nom, vms=vms, days_expired=days_expired
+    )
+    return subject, plain, html
+
+
+def _build_deleted_email(*, prenom: str, nom: str, vms: list[dict[str, Any]], days_expired: int) -> tuple[str, str, str]:
+    """Return (subject, plain, html) for the post-deletion email."""
+    many = len(vms) > 1
+    subject = f"Hosting MiNET — {'Vos' if many else 'Votre'} {_vms_subject(vms)} {'ont été supprimées' if many else 'a été supprimée'}"
+    plain = (
+        f"Bonjour {prenom} {nom},\n\n"
+        f"Votre cotisation MiNET a expiré il y a {days_expired} jours (plus d'un mois).\n"
+        f"{'Vos machines virtuelles suivantes ont été supprimées' if many else 'Votre machine virtuelle suivante a été supprimée'} "
+        f"automatiquement :\n{_vms_lines(vms)}\n\n"
+        "— L'équipe MiNET"
+    )
+    html = jinja_env.get_template("emails/vm_deleted.html").render(prenom=prenom, nom=nom, vms=vms)
+    return subject, plain, html
+
+
+async def _last_mail_sent_at(db: AsyncSession, vm_id: int, mail_type: str, since: datetime) -> datetime | None:
+    """Return when a mail of ``mail_type`` was last sent for this VM since ``since``, or None.
+
+    ``since`` is the membership expiry date: mails from an earlier expiry
+    (owner renewed, then expired again) must not count for the current one.
+    """
     result = await db.execute(
         select(func.max(VMPurgeMail.sent_at)).where(
             VMPurgeMail.vm_id == vm_id,
-            VMPurgeMail.mail_type == "warning",
+            VMPurgeMail.mail_type == mail_type,
+            VMPurgeMail.sent_at >= since,
         )
     )
     return result.scalar_one_or_none()
 
 
-async def _record_mail(db: AsyncSession, vm_id: int, mail_type: str, *, vm_name: str, owner_id: str) -> None:
+async def _record_mail(db: AsyncSession, vm_id: int | None, mail_type: str, *, vm_name: str, owner_id: str) -> None:
     """Insert a VMPurgeMail row and flush (caller commits).
 
     ``vm_name``/``owner_id`` are captured now because the row must stay
-    meaningful even after the VM is deleted (vm_id is set to NULL then).
+    meaningful even after the VM is deleted (vm_id is set to NULL then, or
+    passed as None for mails recorded once the VM is already gone).
     """
     db.add(VMPurgeMail(vm_id=vm_id, mail_type=mail_type, vm_name=vm_name, owner_id=owner_id))
     await db.flush()
+
+
+async def _delete_vm(
+    vm_id: int,
+    *,
+    gateway: ProxmoxGateway,
+    cmd_repo: VmCmdRepo,
+    dns: DnsService,
+    db: AsyncSession,
+) -> bool:
+    """Stop and delete one VM from Proxmox, DB and DNS. Return True if it is gone."""
+    try:
+        status_payload = await asyncio.to_thread(gateway.get_vm_status, vm_id=vm_id)
+    except ProxmoxError:
+        logger.exception("purge: failed to get status for vm %s, skipping", vm_id)
+        return False
+
+    if str(status_payload.get("status", "")).lower() != "stopped":
+        try:
+            await asyncio.to_thread(gateway.stop_vm, vm_id=vm_id)
+        except ProxmoxError:
+            logger.exception("purge: failed to stop vm %s before deletion, skipping", vm_id)
+            return False
+
+    try:
+        await asyncio.to_thread(gateway.delete_vm, vm_id=vm_id)
+    except ProxmoxError:
+        logger.exception("purge: failed to delete vm %s from Proxmox", vm_id)
+        return False
+
+    try:
+        await cmd_repo.release_ip_history(vm_id)
+        await cmd_repo.delete_vm_with_related(vm_id)
+        await db.commit()
+    except (SQLAlchemyError, OSError):
+        await db.rollback()
+        logger.exception("purge: failed to delete vm %s from DB (Proxmox already deleted)", vm_id)
+        return False
+
+    await dns.delete_records(vm_id=vm_id)
+    return True
 
 
 async def run_purge(
@@ -133,9 +252,10 @@ async def run_purge(
     """Run one purge cycle.
 
     - Fetches members of the hosting/ended group (expired memberships).
-    - For each, checks how long ago their membership expired.
-    - Sends a warning email at most once per 30 days.
-    - Deletes the VM if 6 months have passed (only when Proxmox is configured).
+    - Groups their VMs by owner and checks how long ago the membership expired.
+    - Sends each owner one expiry mail, one halfway mail and one final 24h notice
+      (per expiry), each listing all of their VMs.
+    - Deletes the VMs if 1 month has passed and the final notice is 24h old (only when Proxmox is configured).
 
     Returns a summary dict.
     """
@@ -160,16 +280,14 @@ async def run_purge(
     mails_sent: list[tuple[str, str]] = []
     deleted_vms: list[tuple[int, int]] = []
 
+    members_by_id = {m["id"]: m for m in expired_members if m.get("id")}
+    vms_by_owner: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for vm in all_vms:
-        owner_id = vm.get("owner_id")
-        if not owner_id:
-            continue
+        if vm.get("owner_id"):
+            vms_by_owner[vm["owner_id"]].append(vm)
 
-        vm_id = vm["vm_id"]
-        vm_name = vm["name"]
-
-        # Find the member info
-        member = next((m for m in expired_members if m.get("id") == owner_id), None)
+    for owner_id, vms in vms_by_owner.items():
+        member = members_by_id.get(owner_id)
         if not member:
             continue
 
@@ -181,161 +299,111 @@ async def run_purge(
         cotise_end_ms = _cotise_end_from_profile(profile, settings.auth_cotise_end_claim.strip(), settings.auth_departure_date_claim.strip())
 
         if cotise_end_ms is None:
-            logger.warning(
-                "purge: cannot determine cotise_end for user %s, skipping vm %s",
-                owner_id, vm_id,
-            )
+            logger.warning("purge: cannot determine cotise_end for user %s, skipping %d vm(s)", owner_id, len(vms))
+            continue
+
+        email = member.get("email")
+        if not email:
+            logger.error("purge: user %s has no email, skipping %d vm(s)", owner_id, len(vms))
             continue
 
         cotise_end = datetime.fromtimestamp(cotise_end_ms / 1000, tz=UTC)
         elapsed_seconds = (now - cotise_end).total_seconds()
         days_expired = max(0, int(elapsed_seconds / 86400))
-        days_remaining = max(0, int((_SIX_MONTHS_S - elapsed_seconds) / 86400))
-
-        logger.info(
-            "purge: vm %s (owner=%s) cotise_end=%s days_expired=%d days_remaining=%d",
-            vm_id, owner_id, cotise_end.date(), days_expired, days_remaining,
-        )
-
-        email = member.get("email")
+        days_remaining = max(0, int((DELETION_DELAY_S - elapsed_seconds) / 86400))
         prenom = member.get("first_name") or "Utilisateur"
         nom = member.get("last_name") or ""
 
-        if elapsed_seconds >= _SIX_MONTHS_S:
-            last_sent = await _last_warning_sent_at(db, vm_id)
+        logger.info(
+            "purge: user %s (%d vm) cotise_end=%s days_expired=%d days_remaining=%d",
+            owner_id, len(vms), cotise_end.date(), days_expired, days_remaining,
+        )
 
-            # No prior warning, or the 24h notice hasn't been out long enough yet —
-            # (re-)send the notice and skip deletion this cycle. Without this check,
-            # deletion could follow the notice by less than 24h if the purge loop
-            # runs sooner than expected (restart, redeploy, drift).
-            if last_sent is None or (now - last_sent.replace(tzinfo=UTC)) < _DELETION_NOTICE_DELAY:
-                if email:
-                    subject = f"Hosting MiNET — Votre VM « {vm_name} » sera supprimée dans 24h"
-                    plain = (
-                        f"Bonjour {prenom} {nom},\n\n"
-                        f"Votre cotisation MiNET a expiré il y a {days_expired} jours.\n"
-                        f"Votre machine virtuelle « {vm_name} » (ID {vm_id}) sera supprimée automatiquement dans 24h.\n\n"
-                        "Si vous souhaitez conserver votre VM, renouvelez votre cotisation sur https://adh6.minet.net\n\n"
-                        "— L'équipe MiNET"
-                    )
-                    html_notice = jinja_env.get_template("emails/vm_deletion_notice.html").render(
-                        prenom=prenom,
-                        nom=nom,
-                        vm_name=vm_name,
-                        vm_id=vm_id,
-                        days_expired=days_expired,
-                    )
-                    await send_email_async(to_email=email, subject=subject, plain=plain, html=html_notice, settings=settings)
-                    try:
-                        await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
-                        await db.commit()
-                    except SQLAlchemyError:
-                        await db.rollback()
-                        logger.warning("purge: failed to record 24h notice for vm %s", vm_id)
-                    warned += 1
-                    mails_sent.append((owner_id, "préavis 24h avant suppression"))
-                    logger.info("purge: sent 24h notice for vm %s (owner=%s, never warned before)", vm_id, owner_id)
-                continue
+        if elapsed_seconds >= DELETION_DELAY_S:
+            # Final notice: one mail listing all of the user's VMs, recorded per VM.
+            # A VM is only deleted once its notice is at least 24h old, so deletion
+            # can never follow the notice too closely (restart, redeploy, drift).
+            last_final = {vm["vm_id"]: await _last_mail_sent_at(db, vm["vm_id"], MAIL_FINAL, cotise_end) for vm in vms}
+            unnotified = [vm for vm in vms if last_final[vm["vm_id"]] is None]
 
-            # Already warned at least once — proceed with deletion
-            if gateway is None or not settings.proxmox_configured:
-                logger.info(
-                    "purge: vm %s eligible for deletion (owner=%s, expired %d days) but Proxmox not configured — skipping",
-                    vm_id, owner_id, days_expired,
-                )
-                continue
-
-            logger.info("purge: deleting vm %s (owner=%s, expired %d days ago)", vm_id, owner_id, days_expired)
-
-            if email:
-                subject = f"Hosting MiNET — Votre VM « {vm_name} » a été supprimée"
-                plain = (
-                    f"Bonjour {prenom} {nom},\n\n"
-                    f"Votre cotisation MiNET a expiré il y a {days_expired} jours (plus de 6 mois).\n"
-                    f"Votre machine virtuelle « {vm_name} » (ID {vm_id}) a été supprimée automatiquement.\n\n"
-                    "— L'équipe MiNET"
-                )
-                html_del = jinja_env.get_template("emails/vm_deleted.html").render(
-                    prenom=prenom, nom=nom, vm_name=vm_name, vm_id=vm_id,
-                )
-                await send_email_async(to_email=email, subject=subject, plain=plain, html=html_del, settings=settings)
-                try:
-                    await _record_mail(db, vm_id, "deletion", vm_name=vm_name, owner_id=owner_id)
-                    await db.commit()
-                except SQLAlchemyError:
-                    await db.rollback()
-                    logger.warning("purge: failed to record deletion mail for vm %s", vm_id)
-
-            try:
-                status_payload = await asyncio.to_thread(gateway.get_vm_status, vm_id=vm_id)
-            except ProxmoxError:
-                logger.exception("purge: failed to get status for vm %s, skipping", vm_id)
-                continue
-
-            if str(status_payload.get("status", "")).lower() != "stopped":
-                try:
-                    await asyncio.to_thread(gateway.stop_vm, vm_id=vm_id)
-                except ProxmoxError:
-                    logger.exception("purge: failed to stop vm %s before deletion, skipping", vm_id)
-                    continue
-
-            try:
-                await asyncio.to_thread(gateway.delete_vm, vm_id=vm_id)
-            except ProxmoxError:
-                logger.exception("purge: failed to delete vm %s from Proxmox", vm_id)
-                continue
-
-            try:
-                await cmd_repo.release_ip_history(vm_id)
-                await cmd_repo.delete_vm_with_related(vm_id)
-                await db.commit()
-            except (SQLAlchemyError, OSError):
-                await db.rollback()
-                logger.exception("purge: failed to delete vm %s from DB (Proxmox already deleted)", vm_id)
-                continue
-
-            await dns.delete_records(vm_id=vm_id)
-            deleted += 1
-            deleted_vms.append((vm_id, days_expired))
-            logger.info("purge: vm %s deleted (owner=%s, expired %d days)", vm_id, owner_id, days_expired)
-
-        else:
-            # Not yet 6 months — send warning email at most once per 30 days
-            last_sent = await _last_warning_sent_at(db, vm_id)
-            if last_sent is not None and (now - last_sent.replace(tzinfo=UTC)) < _WARN_INTERVAL:
-                logger.debug(
-                    "purge: skipping warning for vm %s — last sent %s days ago",
-                    vm_id,
-                    (now - last_sent.replace(tzinfo=UTC)).days,
-                )
-                continue
-
-            if email:
-                subject, plain, html = _build_warning_email(
-                    prenom=prenom,
-                    nom=nom,
-                    vm_name=vm_name,
-                    vm_id=vm_id,
-                    days_expired=days_expired,
-                    days_remaining=days_remaining,
-                    settings=settings,
-                )
+            if unnotified:
+                subject, plain, html = _build_final_notice_email(prenom=prenom, nom=nom, vms=vms, days_expired=days_expired)
                 await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
                 try:
-                    await _record_mail(db, vm_id, "warning", vm_name=vm_name, owner_id=owner_id)
+                    for vm in unnotified:
+                        await _record_mail(db, vm["vm_id"], MAIL_FINAL, vm_name=vm["name"], owner_id=owner_id)
                     await db.commit()
                 except SQLAlchemyError:
                     await db.rollback()
-                    logger.warning("purge: failed to record warning mail for vm %s", vm_id)
+                    logger.warning("purge: failed to record final notice for user %s", owner_id)
                 warned += 1
-                mails_sent.append((owner_id, "avertissement"))
+                mails_sent.append((owner_id, f"préavis 24h avant suppression ({len(vms)} VM)"))
+                logger.info("purge: sent final notice to user %s for %d vm(s)", owner_id, len(vms))
+
+            deletable = [
+                vm for vm in vms
+                if last_final[vm["vm_id"]] is not None and (now - last_final[vm["vm_id"]]) >= _DELETION_NOTICE_DELAY
+            ]
+            if not deletable:
+                continue
+
+            if gateway is None or not settings.proxmox_configured:
                 logger.info(
-                    "purge: warned user %s for vm %s (expired %d days, %d remaining)",
-                    owner_id,
-                    vm_id,
-                    days_expired,
-                    days_remaining,
+                    "purge: %d vm(s) of user %s eligible for deletion (expired %d days) but Proxmox not configured — skipping",
+                    len(deletable), owner_id, days_expired,
                 )
+                continue
+
+            deleted_here = [vm for vm in deletable if await _delete_vm(vm["vm_id"], gateway=gateway, cmd_repo=cmd_repo, dns=dns, db=db)]
+            for vm in deleted_here:
+                deleted += 1
+                deleted_vms.append((vm["vm_id"], days_expired))
+                logger.info("purge: vm %s deleted (owner=%s, expired %d days)", vm["vm_id"], owner_id, days_expired)
+
+            # Mail only once the VMs are really gone, and only for those that were.
+            if deleted_here:
+                subject, plain, html = _build_deleted_email(prenom=prenom, nom=nom, vms=deleted_here, days_expired=days_expired)
+                await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
+                try:
+                    for vm in deleted_here:
+                        # vm_id=None: the VM row is already deleted, so the FK would fail.
+                        await _record_mail(db, None, MAIL_DELETION, vm_name=vm["name"], owner_id=owner_id)
+                    await db.commit()
+                except SQLAlchemyError:
+                    await db.rollback()
+                    logger.warning("purge: failed to record deletion mail for user %s", owner_id)
+
+        else:
+            # Not yet 1 month — one mail when the membership expired, one halfway.
+            mail_type = MAIL_MIDWAY if elapsed_seconds >= _MIDWAY_S else MAIL_EXPIRY
+            unnotified = [vm for vm in vms if await _last_mail_sent_at(db, vm["vm_id"], mail_type, cotise_end) is None]
+            if not unnotified:
+                logger.debug("purge: %s mail already sent to user %s, skipping", mail_type, owner_id)
+                continue
+
+            subject, plain, html = _build_warning_email(
+                prenom=prenom,
+                nom=nom,
+                vms=vms,
+                days_expired=days_expired,
+                days_remaining=days_remaining,
+                midway=mail_type == MAIL_MIDWAY,
+                settings=settings,
+            )
+            await send_email_async(to_email=email, subject=subject, plain=plain, html=html, settings=settings)
+            try:
+                for vm in unnotified:
+                    await _record_mail(db, vm["vm_id"], mail_type, vm_name=vm["name"], owner_id=owner_id)
+                await db.commit()
+            except SQLAlchemyError:
+                await db.rollback()
+                logger.warning("purge: failed to record %s mail for user %s", mail_type, owner_id)
+            warned += 1
+            mails_sent.append((owner_id, f"{'rappel à mi-parcours' if mail_type == MAIL_MIDWAY else 'avertissement'} ({len(vms)} VM)"))
+            logger.info(
+                "purge: sent %s mail to user %s for %d vm(s) (expired %d days, %d remaining)",
+                mail_type, owner_id, len(vms), days_expired, days_remaining,
+            )
 
     await dns.close()
     await notify_purge_summary(mails_sent=mails_sent, deleted_vms=deleted_vms)
