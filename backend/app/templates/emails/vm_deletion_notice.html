@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head><meta charset="UTF-8"></head>
+{% set many = vms|length > 1 %}
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;">
     <tr><td align="center">
@@ -9,7 +10,7 @@
         <!-- Header -->
         <tr>
           <td style="background:#dc2626;padding:28px 40px;text-align:center;color:#fff;font-size:20px;font-weight:bold;">
-            Suppression de votre VM dans 24h
+            Suppression de {{ 'vos VM' if many else 'votre VM' }} dans 24h
           </td>
         </tr>
 
@@ -21,7 +22,22 @@
               Votre cotisation MiNET a expiré il y a <strong>{{ days_expired }} jour{{ 's' if days_expired > 1 else '' }}</strong>.
             </p>
             <p style="font-size:15px;color:#374151;">
-              Votre machine virtuelle <strong>{{ vm_name }}</strong> (#{{ vm_id }}) sera supprimée automatiquement dans <strong>24h</strong>.
+              {{ 'Vos machines virtuelles suivantes seront supprimées' if many else 'Votre machine virtuelle suivante sera supprimée' }}
+              automatiquement dans <strong>24h</strong>, avec toutes {{ 'leurs' if many else 'ses' }} données :
+            </p>
+            <ul style="font-size:15px;color:#111827;font-weight:bold;">
+              {% for vm in vms %}
+              <li>{{ vm.name }} (ID : {{ vm.vm_id }})</li>
+              {% endfor %}
+            </ul>
+            <p style="font-size:15px;color:#374151;">
+              Cette suppression est définitive et MiNET ne conserve aucune copie.
+            </p>
+            <p style="font-size:15px;color:#374151;">
+              <strong>Dernière chance :</strong> récupérez dès maintenant vos données et supprimez {{ 'vous-même vos VM' if many else 'vous-même votre VM' }},
+              ou renouvelez votre cotisation sur
+              <a href="https://adh6.minet.net" style="color:#1a56db;font-weight:bold;">https://adh6.minet.net</a>
+              pour {{ 'les' if many else 'la' }} conserver.
             </p>
             <p style="font-size:13px;color:#6b7280;">— L'équipe MiNET</p>
           </td>

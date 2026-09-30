@@ -944,7 +944,7 @@ async def list_expired_vms(
     """Return VMs belonging to users with an expired membership, enriched with
     purge statistics (mails sent, last warning date, deletion estimate).
     """
-    from app.services.vm.purge import _SIX_MONTHS_S, _cotise_end_from_profile
+    from app.services.vm.purge import DELETION_DELAY_S, _cotise_end_from_profile
 
     settings = get_settings()
     now = datetime.now(tz=UTC)
@@ -964,7 +964,7 @@ async def list_expired_vms(
             func.count(VMPurgeMail.id).label("total_mails"),
             func.max(VMPurgeMail.sent_at).label("last_sent_at"),
         )
-        .where(VMPurgeMail.mail_type == "warning")
+        .where(VMPurgeMail.mail_type != "deletion")
         .group_by(VMPurgeMail.vm_id)
     )
     mail_stats: dict[int, dict] = {
@@ -995,7 +995,7 @@ async def list_expired_vms(
             elapsed_s = (now - cotise_end).total_seconds()
             if elapsed_s > 0:
                 days_expired = int(elapsed_s / 86400)
-                days_until_deletion = max(0, int((_SIX_MONTHS_S - elapsed_s) / 86400))
+                days_until_deletion = max(0, int((DELETION_DELAY_S - elapsed_s) / 86400))
 
         vm_id = vm["vm_id"]
         stats = mail_stats.get(vm_id, {"total_mails": 0, "last_sent_at": None})

@@ -23,13 +23,14 @@ class VMPurgeMail(Base):
     :param vm_name: Name of the VM at the time the email was sent.
     :param owner_id: Keycloak user id of the VM owner at the time the email was sent.
     :param sent_at: Timestamp when the email was sent.
-    :param mail_type: Either ``'warning'`` or ``'deletion'``.
+    :param mail_type: ``'expiry'``, ``'midway'``, ``'final'`` (24h notice) or ``'deletion'``;
+        ``'warning'`` is the legacy monthly warning, kept for history.
     :param vm: Relationship to the associated :class:`~app.db.models.vm.VM`.
     """
 
     __tablename__ = "vm_purge_mails"
     __table_args__ = (
-        CheckConstraint("mail_type IN ('warning', 'deletion')", name="ck_vm_purge_mails_mail_type"),
+        CheckConstraint("mail_type IN ('warning', 'expiry', 'midway', 'final', 'deletion')", name="ck_vm_purge_mails_mail_type"),
         Index("ix_vm_purge_mails_vm_id", "vm_id"),
     )
 
