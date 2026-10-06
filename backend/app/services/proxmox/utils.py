@@ -9,7 +9,7 @@ from typing import Any
 from proxmoxer import ProxmoxAPI
 
 from app.core.config import get_settings
-from app.services.proxmox.errors import ProxmoxError
+from app.services.proxmox.errors import ProxmoxError, ProxmoxVMNotFound
 
 # TTL cache for VM → node mapping to avoid repeated cluster/resources calls.
 _vm_node_cache: dict[int, tuple[str, float]] = {}
@@ -153,7 +153,7 @@ def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
     :param vm_id: The VMID of the virtual machine.
     :returns: The node name to use for VM operations.
     :rtype: str
-    :raises ProxmoxError: If no node can be resolved.
+    :raises ProxmoxVMNotFound: If the VM is not in the cluster resources.
     """
     now = time.monotonic()
     cached = _vm_node_cache.get(vm_id)
@@ -172,7 +172,7 @@ def node_for_vm(*, client: ProxmoxAPI, vm_id: int) -> str:
         node, _ = cached
         return node
 
-    raise ProxmoxError(f"Cannot resolve node for VM {vm_id}: VM not found in cluster resources")
+    raise ProxmoxVMNotFound(f"Cannot resolve node for VM {vm_id}: VM not found in cluster resources")
 
 
 def least_loaded_node(*, client: ProxmoxAPI) -> str | None:
