@@ -15,10 +15,7 @@ ROLE_REQUEST = "1089829786651730010"
 ROLE_ERROR = "1029835701803569152"
 
 def _base_url() -> str:
-    env = get_settings().app_env.lower()
-    if env in {"preprod", "pre-prod"}:
-        return "https://hosting-dev.minet.net"
-    return "https://hosting.minet.net"
+    return get_settings().backend_url.rstrip("/")
 
 
 PINGUIN_ACCES_REFUSED = "/assets/pinguins/PinguinAccesRefused.png"

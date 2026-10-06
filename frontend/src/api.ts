@@ -1,6 +1,7 @@
 import type { ZodType } from 'zod'
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? `http://${window.location.hostname}:8000`
+export const API_BASE = import.meta.env.VITE_API_URL
+  || (import.meta.env.PROD ? window.location.origin : `http://${window.location.hostname}:8000`)
 
 async function tryRefresh(): Promise<boolean> {
   try {
