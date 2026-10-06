@@ -54,7 +54,6 @@ docker_frontend_prod:
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
       --destination "$IMAGE_REGISTRY_BASE/frontend:main"
       --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
-      --build-arg "VITE_API_URL=https://hosting.minet.net"
       --build-arg "VITE_DNS_ZONE=h.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
       --build-arg "VITE_VM_NAME_MAX_LENGTH=60"
@@ -67,6 +66,7 @@ docker_frontend_prod:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - frontend/**/*
+        - .gitlab-ci.yml
 
 docker_frontend_preprod:
   stage: docker
@@ -80,7 +80,6 @@ docker_frontend_preprod:
       --dockerfile "$CI_PROJECT_DIR/frontend/Dockerfile"
       --destination "$IMAGE_REGISTRY_BASE/frontend:pre-prod"
       --destination "$IMAGE_REGISTRY_BASE/frontend:$CI_COMMIT_SHORT_SHA"
-      --build-arg "VITE_API_URL=https://hosting-dev.minet.net"
       --build-arg "VITE_DNS_ZONE=hdev.minet.net"
       --build-arg "VITE_RESTRICTED_ROLES=/adh6_admin,/cluster-dev"
       --build-arg "VITE_APP_ENV=preprod"
@@ -94,6 +93,7 @@ docker_frontend_preprod:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
       changes:
         - frontend/**/*
+        - .gitlab-ci.yml
 
 docker_pdns:
   stage: docker
@@ -137,10 +137,10 @@ deploy_preprod:
   stage: deploy
   trigger:
     project: minet/configurations/push/swarm-prod
-    branch: main
+    branch: preprod
     strategy: depend
     inputs:
-      folder_name: hosting-dev.minet.net
+      folder_name: hosting.minet.net
       image_registry: $CI_REGISTRY_IMAGE
   rules:
     - if: '$CI_COMMIT_BRANCH == "pre-prod"'
