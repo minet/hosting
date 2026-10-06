@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.repositories.vm import VmCmdRepo, VmQueryRepo
 from app.services.dns import DnsService
-from app.services.proxmox.errors import ProxmoxError
+from app.services.proxmox.errors import ProxmoxError, ProxmoxVMNotFound
 from app.services.proxmox.gateway import ProxmoxGateway
 from app.services.vm.errors import raise_proxmox_as_http
 
@@ -49,7 +49,9 @@ class VmDeleteService:
 
         Proxmox deletion is attempted first. If it succeeds but the database
         removal fails, a critical log entry is emitted and HTTP 503 is raised
-        to signal that manual cleanup is required.
+        to signal that manual cleanup is required. A VM already missing from
+        Proxmox (deleted by hand, failed creation) only has its database
+        record removed.
 
         :param vm_id: Identifier of the VM to delete.
         :returns: Deletion result dictionary with keys ``vm_id``, ``action``
@@ -63,6 +65,8 @@ class VmDeleteService:
 
         try:
             await asyncio.to_thread(self.gateway.delete_vm, vm_id=vm_id)
+        except ProxmoxVMNotFound:
+            logger.warning("vm_delete_missing_on_proxmox vm_id=%s — removing database record only", vm_id)
         except ProxmoxError as exc:
             raise_proxmox_as_http(exc, unavailable="Unable to delete VM on Proxmox")
 
