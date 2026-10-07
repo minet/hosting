@@ -1,4 +1,4 @@
-FROM powerdns/pdns-auth-49
+FROM powerdns/pdns-auth-51
 
 # Install psql client to check schema readiness
 USER root
