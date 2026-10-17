@@ -8,6 +8,15 @@
     "expired": "过期会员",
     "ip-history": "IP历史"
   },
+  "ipPool": {
+    "title": "IPv4 地址池",
+    "free": "{{n}} 可用",
+    "soon": "+{{n}} 即将释放",
+    "soonTotal": "最终 {{n}} 可用",
+    "used": "{{n}} 已使用",
+    "total": "共 {{n}}",
+    "error": "IP 统计不可用"
+  },
   "clearFilters": "清除筛选",
   "noVM": "无虚拟机",
   "columns": {
