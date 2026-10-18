@@ -29,6 +29,9 @@ export function useAdminVMs() {
 
   const refresh = useCallback(() => {
     qc.invalidateQueries({ queryKey: ['vms'] })
+    // Keep the IPv4 pool gauge in sync: VM creation/deletion and IPv4 removal
+    // all go through this refresh.
+    qc.invalidateQueries({ queryKey: ['admin-ip-stats'] })
   }, [qc])
 
   return { vms: (data?.items ?? []) as AdminVM[], loading: isLoading, refresh }

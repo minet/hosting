@@ -8,6 +8,15 @@
     "expired": "Expired memberships",
     "ip-history": "IP history"
   },
+  "ipPool": {
+    "title": "IPv4 pool",
+    "free": "{{n}} free",
+    "soon": "+{{n}} freeing soon",
+    "soonTotal": "{{n}} free eventually",
+    "used": "{{n}} in use",
+    "total": "of {{n}}",
+    "error": "IP stats unavailable"
+  },
   "clearFilters": "Clear filters",
   "noVM": "No VM",
   "columns": {
