@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     vm_ipv4_subnets: str | None = Field(default=None, alias="VM_IPV4_SUBNETS")
     vm_ipv4_gateway_hosts: str = Field(default="1", alias="VM_IPV4_GATEWAY_HOSTS")
     vm_ipv4_netmasks: str = Field(default="", alias="VM_IPV4_NETMASKS")
+    vm_ipv4_pool_size: int = Field(default=247, alias="VM_IPV4_POOL_SIZE")
     vm_ipv6_subnet: str = Field(default="2001:660:3203:40a::/64", alias="VM_IPV6_SUBNET")
     vm_ipv6_gateway_host: str = Field(default="1", alias="VM_IPV6_GATEWAY_HOST")
     vm_name_max_length: int = Field(default=10, alias="VM_NAME_MAX_LENGTH")

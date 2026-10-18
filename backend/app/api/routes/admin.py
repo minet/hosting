@@ -1062,3 +1062,45 @@ async def list_ip_history(
         }
         for r in rows
     ]
+
+
+@router.get("/admin/ip-stats")
+async def ip_stats(
+    _: AuthCtx = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return IPv4 pool capacity statistics for the admin dashboard.
+
+    ``freeing_soon`` counts the addresses still held by VMs whose owner's
+    membership has expired: the purge will release them within
+    ``DELETION_DELAY_S``.
+
+    :param _: Authenticated admin context (injected).
+    :param db: Database session (injected).
+    :returns: A dict with ``total``, ``used``, ``free``, ``freeing_soon`` and
+        ``free_soon`` counts.
+    :rtype: dict
+    """
+    total = get_settings().vm_ipv4_pool_size
+    query_repo = VmQueryRepo(db)
+    used = len(await query_repo.list_used_ipv4())
+
+    # A Keycloak outage must not blank out the whole gauge: fall back to 0.
+    freeing_soon = 0
+    try:
+        expired_members = await fetch_keycloak_group_members_async("/hosting/ended")
+        expired_ids = {m["id"] for m in expired_members if m.get("id")}
+        if expired_ids:
+            expired_vms = await query_repo.list_vms_by_owners(expired_ids)
+            freeing_soon = len({vm["vm_id"] for vm in expired_vms if vm.get("ipv4")})
+    except Exception:
+        logger.warning("ip-stats: could not fetch expired members from Keycloak", exc_info=True)
+
+    free = max(0, total - used)
+    return {
+        "total": total,
+        "used": used,
+        "free": free,
+        "freeing_soon": freeing_soon,
+        "free_soon": min(total, free + freeing_soon),
+    }
