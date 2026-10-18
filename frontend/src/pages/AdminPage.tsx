@@ -18,6 +18,7 @@ import ProxmoxTab from '../components/admin/ProxmoxTab'
 import OrphanedVMsTab from '../components/admin/OrphanedVMsTab'
 import ExpiredVMsTab from '../components/admin/ExpiredVMsTab'
 import IPHistoryTab from '../components/admin/IPHistoryTab'
+import IPPoolStats from '../components/admin/IPPoolStats'
 import CreateVMForUserModal from '../components/admin/CreateVMForUserModal'
 
 type StatusMap = Map<number, { status: string; uptime: number | null; node: string | null }>
@@ -332,6 +333,8 @@ export default function AdminPage() {
           </span>
         </div>
       </div>
+
+      <IPPoolStats />
 
       <div className="flex-1 min-h-0 overflow-auto rounded-sm border border-neutral-200 dark:border-neutral-700 shadow-sm">
         <table className="text-sm border-collapse w-full" style={{ tableLayout: 'fixed', minWidth: Object.values(colWidths).reduce((a, b) => a + b, 0) }}>
