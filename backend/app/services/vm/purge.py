@@ -33,7 +33,7 @@ from app.services.proxmox.gateway import ProxmoxGateway
 logger = logging.getLogger(__name__)
 
 # Deletion threshold: 1 month (30 days) after the membership expired
-DELETION_DELAY_S = 30 * 24 * 3600
+DELETION_DELAY_S = 30 * 24 * 3600 #WARNING: also modify the frontend value in hosting.minet.net/frontend/src/components/WelcomeCard.tsx:line 79
 # Halfway reminder threshold
 _MIDWAY_S = DELETION_DELAY_S // 2
 # Minimum delay between the final notice and the actual deletion
