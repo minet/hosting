@@ -76,7 +76,7 @@ export default function WelcomeCard() {
           const days = Math.floor(diff / (1000 * 60 * 60 * 24))
           if (days < 0) {
             const expiredDays = Math.abs(days)
-            const daysLeft = Math.max(0, 180 - expiredDays)
+            const daysLeft = Math.max(0, 30 - expiredDays)
             return (
               <div className="flex items-start gap-2 bg-red-50 dark:bg-red-950/50 border border-red-300 dark:border-red-800 rounded-lg p-3">
                 <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
